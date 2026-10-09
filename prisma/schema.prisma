@@ -1,0 +1,127 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// role: ADMIN | MANAGER | TEACHER
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String   @unique
+  password  String
+  role      String   @default("MANAGER")
+  createdAt DateTime @default(now())
+  groups    Group[]
+}
+
+model Course {
+  id          Int      @id @default(autoincrement())
+  name        String
+  price       Int // oylik narx, so'm
+  durationMon Int      @default(6)
+  lessonMin   Int      @default(90)
+  description String?
+  createdAt   DateTime @default(now())
+  groups      Group[]
+  leads       Lead[]
+}
+
+model Room {
+  id       Int     @id @default(autoincrement())
+  name     String
+  capacity Int     @default(15)
+  groups   Group[]
+}
+
+model Group {
+  id        Int               @id @default(autoincrement())
+  name      String
+  courseId  Int
+  course    Course            @relation(fields: [courseId], references: [id])
+  teacherId Int?
+  teacher   User?             @relation(fields: [teacherId], references: [id])
+  roomId    Int?
+  room      Room?             @relation(fields: [roomId], references: [id])
+  days      String // "ODD" (Du-Chor-Ju) | "EVEN" (Se-Pay-Sha) | "DAILY"
+  time      String // "14:00"
+  startDate DateTime
+  status    String            @default("ACTIVE") // ACTIVE | FINISHED
+  createdAt DateTime          @default(now())
+  students  GroupStudent[]
+  attendance Attendance[]
+  payments  Payment[]
+}
+
+model Student {
+  id        Int            @id @default(autoincrement())
+  name      String
+  phone     String
+  parentPhone String?
+  birthDate DateTime?
+  note      String?
+  createdAt DateTime       @default(now())
+  groups    GroupStudent[]
+  attendance Attendance[]
+  payments  Payment[]
+}
+
+model GroupStudent {
+  id        Int       @id @default(autoincrement())
+  groupId   Int
+  group     Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  studentId Int
+  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  joinedAt  DateTime  @default(now())
+  leftAt    DateTime?
+
+  @@unique([groupId, studentId])
+}
+
+model Attendance {
+  id        Int      @id @default(autoincrement())
+  groupId   Int
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  studentId Int
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date      DateTime
+  present   Boolean
+
+  @@unique([groupId, studentId, date])
+}
+
+model Payment {
+  id        Int      @id @default(autoincrement())
+  studentId Int
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  groupId   Int?
+  group     Group?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  amount    Int
+  method    String   @default("CASH") // CASH | CARD | TRANSFER
+  note      String?
+  date      DateTime @default(now())
+}
+
+model Expense {
+  id       Int      @id @default(autoincrement())
+  title    String
+  category String   @default("OTHER") // SALARY | RENT | MARKETING | OTHER
+  amount   Int
+  date     DateTime @default(now())
+}
+
+// status: NEW | CONTACTED | TRIAL | WON | LOST
+model Lead {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String
+  source    String? // Instagram, Telegram, Tanish, ...
+  courseId  Int?
+  course    Course?  @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  status    String   @default("NEW")
+  note      String?
+  createdAt DateTime @default(now())
+}

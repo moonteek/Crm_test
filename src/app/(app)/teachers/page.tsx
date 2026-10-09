@@ -1,0 +1,59 @@
+import Link from "next/link";
+import { Phone, Plus } from "lucide-react";
+import { db } from "@/lib/db";
+import { getSession } from "@/lib/auth";
+import { Modal } from "@/components/Modal";
+import { Empty, Field, PageHeader, SubmitRow } from "@/components/ui";
+import { createUser } from "../actions";
+
+export default async function TeachersPage() {
+  const [teachers, session] = await Promise.all([
+    db.user.findMany({
+      where: { role: "TEACHER" },
+      include: { groups: { where: { status: "ACTIVE" }, include: { _count: { select: { students: { where: { leftAt: null } } } } } } },
+      orderBy: { name: "asc" },
+    }),
+    getSession(),
+  ]);
+
+  return (
+    <>
+      <PageHeader title="O'qituvchilar" subtitle={`${teachers.length} ta o'qituvchi`}>
+        {session?.role === "ADMIN" && (
+          <Modal title="Yangi o'qituvchi" trigger={<><Plus className="h-4 w-4" /> O&apos;qituvchi qo&apos;shish</>}>
+            <form action={createUser} className="space-y-3">
+              <input type="hidden" name="role" value="TEACHER" />
+              <Field label="Ism familiya"><input name="name" className="input" required /></Field>
+              <Field label="Telefon (login)"><input name="phone" className="input" required /></Field>
+              <Field label="Parol"><input name="password" type="password" className="input" required minLength={6} /></Field>
+              <SubmitRow />
+            </form>
+          </Modal>
+        )}
+      </PageHeader>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {teachers.map((t) => (
+          <div key={t.id} className="card p-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-lg font-bold text-brand-700">{t.name.charAt(0)}</div>
+              <div className="min-w-0">
+                <p className="truncate font-semibold">{t.name}</p>
+                <a href={`tel:${t.phone}`} className="flex items-center gap-1 text-sm text-slate-500 hover:text-brand-600"><Phone className="h-3.5 w-3.5" />{t.phone}</a>
+              </div>
+            </div>
+            <div className="mt-4 flex gap-4 text-sm">
+              <p><span className="font-bold">{t.groups.length}</span> <span className="text-slate-500">guruh</span></p>
+              <p><span className="font-bold">{t.groups.reduce((s, g) => s + g._count.students, 0)}</span> <span className="text-slate-500">o&apos;quvchi</span></p>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1">
+              {t.groups.map((g) => (
+                <Link key={g.id} href={`/groups/${g.id}`} className="badge bg-brand-50 text-brand-700 hover:bg-brand-100">{g.name} · {g.time}</Link>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      {teachers.length === 0 && <div className="card"><Empty text="O'qituvchilar yo'q" /></div>}
+    </>
+  );
+}
