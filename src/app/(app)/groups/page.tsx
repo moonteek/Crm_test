@@ -15,7 +15,7 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
   const [groups, courses, teachers, rooms] = await Promise.all([
     db.group.findMany({
       where: { status, ...groupScope(user) },
-      include: { course: true, teacher: true, room: true, _count: { select: { students: { where: { leftAt: null } } } } },
+      include: { course: true, teacher: true, assistant: true, room: true, _count: { select: { students: { where: { leftAt: null } } } } },
       orderBy: [{ days: "asc" }, { time: "asc" }],
     }),
     db.course.findMany({ orderBy: { name: "asc" } }),
@@ -57,7 +57,7 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
             </div>
             <div className="mt-4 space-y-1.5 text-sm text-slate-600">
               <p className="flex items-center gap-2"><Clock className="h-4 w-4 text-slate-400" />{GROUP_DAYS[g.days]} · {g.time}</p>
-              <p className="flex items-center gap-2"><User className="h-4 w-4 text-slate-400" />{g.teacher?.name ?? "O'qituvchi biriktirilmagan"}</p>
+              <p className="flex items-center gap-2"><User className="h-4 w-4 text-slate-400" />{g.teacher?.name ?? "O'qituvchi biriktirilmagan"}{g.assistant && <span className="text-slate-400"> · yordamchi: {g.assistant.name}</span>}</p>
               <p className="flex items-center gap-2"><DoorOpen className="h-4 w-4 text-slate-400" />{g.room?.name ?? "Xona yo'q"}</p>
             </div>
             <div className="mt-4 flex justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">

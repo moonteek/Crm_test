@@ -33,7 +33,7 @@ export default async function GroupPage({
   const group = await db.group.findFirst({
     where: { id, ...groupScope(user) },
     include: {
-      course: true, teacher: true, room: true,
+      course: true, teacher: true, assistant: true, room: true,
       students: {
         where: { leftAt: null },
         include: { student: { include: { payments: { select: { amount: true } }, groups: { include: { group: { include: { course: true } } } } } } },
@@ -87,8 +87,9 @@ export default async function GroupPage({
             )}
           </div>
         </div>
-        <div className="mt-4 grid gap-3 text-sm sm:grid-cols-4">
+        <div className={`mt-4 grid gap-3 text-sm ${group.assistant ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
           <Info k="O'qituvchi" v={group.teacher?.name ?? "—"} />
+          {group.assistant && <Info k="Yordamchi o'qituvchi" v={group.assistant.name} />}
           <Info k="Jadval" v={`${GROUP_DAYS[group.days]} · ${group.time}`} />
           <Info k="Xona" v={group.room?.name ?? "—"} />
           <Info k="Boshlangan" v={date(group.startDate)} />

@@ -22,9 +22,23 @@ O'quv markazi uchun CRM tizimi: lidlar, o'quvchilar, guruhlar, davomat, to'lovla
 
 ## Rollar va ruxsatlar
 
-Standart rollar: **Administrator** (hamma narsa, o'zgartirib bo'lmaydi), **Menejer**, **Kassir**, **O'qituvchi**.
+Standart rollar:
+
+| Rol | Vazifasi |
+|---|---|
+| **Administrator** | Hamma narsa (o'zgartirib bo'lmaydi) |
+| **Nazoratchi** | Hammasini ko'radi (analitika, moliya, ish haqi, jurnal), hech narsani o'zgartira olmaydi |
+| **Menejer** | Lidlar, o'quvchilar, guruhlar, to'lov qabul qilish |
+| **O'quv bo'limi boshlig'i** | Guruhlar, o'quvchilar, davomat, baholar, kurslar, o'qituvchilar analitikasi — pulsiz |
+| **Kassir** | To'lovlar va qarzdorlar |
+| **Qabulxona operatori** | Lidlar va o'quvchilarni ro'yxatga olish |
+| **O'qituvchi** | Faqat o'z guruhlari: davomat va baholar |
+| **Yordamchi o'qituvchi** | Faqat yordamchi sifatida biriktirilgan guruhlari: davomat va baholar |
+
+Har bir guruhga asosiy o'qituvchi va ixtiyoriy **yordamchi o'qituvchi** biriktiriladi.
+Mavjud bazaga yangi standart rollarni qo'shish uchun `npm run db:seed` (mavjud ma'lumotlar va rollar o'zgarmaydi).
 Sozlamalar → Rollar va ruxsatlar bo'limida yangi rol qo'shish yoki mavjudini o'zgartirish mumkin; o'zgarish darhol kuchga kiradi.
-Analitika, ish haqi va faoliyat jurnali uchun alohida ruxsatlar bor (standart bo'yicha faqat Administrator ko'radi).
+Analitika, ish haqi va faoliyat jurnali uchun alohida ruxsatlar bor. Analitikadagi pul ko'rsatkichlari (tushum, qarz, ish haqi) faqat "Moliya hisobotlarini ko'rish" ruxsati borlarga ko'rinadi.
 
 - "Barcha guruhlarni ko'rish" ruxsati bo'lmagan xodim (masalan, o'qituvchi) faqat o'zi dars beradigan guruhlar va ularning o'quvchilarini ko'radi.
 - Balans va qarzlar faqat "To'lovlarni ko'rish" yoki "Qarzdorlarni ko'rish" ruxsati borlarga ko'rinadi.
@@ -75,6 +89,10 @@ Demo kirish (parol hammasida `admin123`, productionda darhol o'zgartiring):
 | Administrator | `901234567` |
 | Menejer | `901112233` |
 | Kassir | `901114455` |
+| Nazoratchi | `901117788` |
+| O'quv bo'limi boshlig'i | `901119900` |
+| Qabulxona operatori | `901116677` |
 | O'qituvchi | `930000000` |
+| Yordamchi o'qituvchi | `930000009` |
 
 Productionda sessiya cookie faqat HTTPS orqali yuboriladi, shuning uchun saytni HTTPS bilan joylashtiring.

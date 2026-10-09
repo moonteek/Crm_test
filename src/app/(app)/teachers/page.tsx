@@ -12,7 +12,11 @@ export default async function TeachersPage() {
   const [teachers, teacherRole] = await Promise.all([
     db.user.findMany({
       where: { isTeacher: true, active: true },
-      include: { groups: { where: { status: "ACTIVE" }, include: { _count: { select: { students: { where: { leftAt: null } } } } } } },
+      include: {
+        role: true,
+        groups: { where: { status: "ACTIVE" }, include: { _count: { select: { students: { where: { leftAt: null } } } } } },
+        assistedGroups: { where: { status: "ACTIVE" } },
+      },
       orderBy: { name: "asc" },
     }),
     db.role.findFirst({ where: { name: "O'qituvchi" } }),
@@ -46,6 +50,7 @@ export default async function TeachersPage() {
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-lg font-bold text-brand-700">{t.name.charAt(0)}</div>
               <div className="min-w-0">
                 <p className="truncate font-semibold">{t.name}</p>
+                <p className="text-xs text-slate-500">{t.role.name}</p>
                 <a href={`tel:${t.phone}`} className="flex items-center gap-1 text-sm text-slate-500 hover:text-brand-600"><Phone className="h-3.5 w-3.5" />{t.phone}</a>
               </div>
             </div>
@@ -54,6 +59,9 @@ export default async function TeachersPage() {
               <p><span className="font-bold">{t.groups.reduce((s, g) => s + g._count.students, 0)}</span> <span className="text-slate-500">o&apos;quvchi</span></p>
             </div>
             <div className="mt-3 flex flex-wrap gap-1">
+              {t.assistedGroups.map((g) => (
+                <Link key={`a${g.id}`} href={`/groups/${g.id}`} className="badge bg-violet-50 text-violet-700 hover:bg-violet-100">{g.name} · yordamchi</Link>
+              ))}
               {t.groups.map((g) => (
                 <Link key={g.id} href={`/groups/${g.id}`} className="badge bg-brand-50 text-brand-700 hover:bg-brand-100">{g.name} · {g.time}</Link>
               ))}

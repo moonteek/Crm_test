@@ -3,7 +3,7 @@ import { db } from "./db";
 export const SALARY_TYPES: Record<string, { label: string; unit: string }> = {
   NONE: { label: "Belgilanmagan", unit: "" },
   FIXED: { label: "Oylik (qat'iy)", unit: "so'm / oy" },
-  PERCENT: { label: "Tushumdan foiz", unit: "% o'z guruhlari to'lovlaridan" },
+  PERCENT: { label: "Tushumdan foiz", unit: "% o'zi dars beradigan yoki yordamchi bo'lgan guruhlar to'lovlaridan" },
   PER_STUDENT: { label: "Har bir o'quvchi uchun", unit: "so'm / o'quvchi" },
 };
 
@@ -50,14 +50,14 @@ export async function salariesForMonth(month: string, { allActive = false } = {}
     } else if (u.salaryType === "PERCENT") {
       const sum = await db.payment.aggregate({
         _sum: { amount: true },
-        where: { date: { gte: from, lt: to }, group: { teacherId: u.id } },
+        where: { date: { gte: from, lt: to }, group: { OR: [{ teacherId: u.id }, { assistantId: u.id }] } },
       });
       base = sum._sum.amount ?? 0;
       accrued = Math.round((base * u.salaryAmount) / 100);
     } else if (u.salaryType === "PER_STUDENT") {
       // students enrolled in this teacher's groups at any point during the month
       base = await db.groupStudent.count({
-        where: { group: { teacherId: u.id }, joinedAt: { lt: to }, OR: [{ leftAt: null }, { leftAt: { gte: from } }] },
+        where: { group: { OR: [{ teacherId: u.id }, { assistantId: u.id }] }, joinedAt: { lt: to }, OR: [{ leftAt: null }, { leftAt: { gte: from } }] },
       });
       accrued = base * u.salaryAmount;
     }

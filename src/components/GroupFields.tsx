@@ -7,7 +7,7 @@ export function GroupFields({
   courses, teachers, rooms, g,
 }: {
   courses: Opt[]; teachers: Opt[]; rooms: Opt[];
-  g?: { name: string; courseId: number; teacherId: number | null; roomId: number | null; days: string; time: string; status: string; startDate: Date };
+  g?: { name: string; courseId: number; teacherId: number | null; assistantId: number | null; roomId: number | null; days: string; time: string; status: string; startDate: Date };
 }) {
   return (
     <>
@@ -25,6 +25,12 @@ export function GroupFields({
           </select>
         </Field>
       </div>
+      <Field label="Yordamchi o'qituvchi (ixtiyoriy)">
+        <select name="assistantId" className="input" defaultValue={g?.assistantId ?? ""}>
+          <option value="">—</option>
+          {teachers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+      </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Dars kunlari">
           <select name="days" className="input" defaultValue={g?.days}>

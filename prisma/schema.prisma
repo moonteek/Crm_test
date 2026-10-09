@@ -31,7 +31,8 @@ model User {
   salaryType   String   @default("NONE")
   salaryAmount Int      @default(0)
   createdAt DateTime   @default(now())
-  groups    Group[]
+  groups    Group[]    @relation("GroupTeacher")
+  assistedGroups Group[] @relation("GroupAssistant")
   tokens    ApiToken[]
   salaryPayments SalaryPayment[]
   logs      AuditLog[]
@@ -74,7 +75,10 @@ model Group {
   courseId  Int
   course    Course            @relation(fields: [courseId], references: [id])
   teacherId Int?
-  teacher   User?             @relation(fields: [teacherId], references: [id])
+  teacher   User?             @relation("GroupTeacher", fields: [teacherId], references: [id])
+  // optional support / assistant teacher
+  assistantId Int?
+  assistant User?             @relation("GroupAssistant", fields: [assistantId], references: [id])
   roomId    Int?
   room      Room?             @relation(fields: [roomId], references: [id])
   days      String // "ODD" (Du-Chor-Ju) | "EVEN" (Se-Pay-Sha) | "DAILY"

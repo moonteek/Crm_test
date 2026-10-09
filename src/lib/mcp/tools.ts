@@ -315,6 +315,17 @@ export function buildServer(user: CurrentUser) {
   }, async ({ range, section = "overview" }) => {
     const a = await getAnalytics(resolvePeriod(range));
     const base = { period: a.period };
+    if (!can(user, "finance.view")) {
+      // academic-only roles: strip every money figure
+      if (["payments", "finance", "all"].includes(section)) throw new Error("Moliyaviy analitika uchun ruxsat yo'q");
+      const strip = <T extends object>(o: T) =>
+        Object.fromEntries(Object.entries(o).filter(([k]) => !["income", "expense", "profit", "charged", "collectionRate", "collected", "expected", "salary", "salaryShare"].includes(k)));
+      a.current = strip(a.current) as typeof a.current;
+      a.previous = strip(a.previous) as typeof a.previous;
+      a.monthly = a.monthly.map(strip) as typeof a.monthly;
+      a.groups = a.groups.map(strip) as typeof a.groups;
+      a.teachers = a.teachers.map(strip) as typeof a.teachers;
+    }
     switch (section) {
       case "overview": return { ...base, current: a.current, previous_period: a.previous, monthly: a.monthly };
       case "payments": return { ...base, payments: { ...a.payments, debtors: a.payments.debtors.slice(0, 30) } };

@@ -73,9 +73,17 @@ export function parsePermissions(role: { permissions: string; isSystem: boolean 
   return new Set(role.permissions.split(",").filter((p) => ALL_PERMISSIONS.includes(p)));
 }
 
-/** Default roles created for a fresh database. */
+/** Default roles. `npm run db:seed` adds any that are missing (matched by name) and never edits existing ones. */
 export const DEFAULT_ROLES: { name: string; isSystem?: boolean; permissions: string[] }[] = [
   { name: "Administrator", isSystem: true, permissions: [] },
+  {
+    // sees everything, changes nothing — for an owner, investor or auditor
+    name: "Nazoratchi",
+    permissions: [
+      "dashboard.view", "analytics.view", "audit.view", "leads.view", "students.view", "groups.view", "groups.all",
+      "payments.view", "debtors.view", "finance.view", "salaries.view", "teachers.view", "courses.view",
+    ],
+  },
   {
     name: "Menejer",
     permissions: [
@@ -86,11 +94,30 @@ export const DEFAULT_ROLES: { name: string; isSystem?: boolean; permissions: str
     ],
   },
   {
+    // academic side only: no payments, finance or salaries
+    name: "O'quv bo'limi boshlig'i",
+    permissions: [
+      "dashboard.view", "analytics.view", "leads.view", "students.view", "students.manage",
+      "groups.view", "groups.all", "groups.manage", "attendance.mark", "grades.manage",
+      "teachers.view", "courses.view", "courses.manage", "rooms.manage", "mcp.use",
+    ],
+  },
+  {
     name: "Kassir",
     permissions: ["dashboard.view", "students.view", "groups.view", "groups.all", "payments.view", "payments.create", "debtors.view"],
   },
   {
+    // reception / call centre: leads and sign-ups, no money
+    name: "Qabulxona operatori",
+    permissions: ["dashboard.view", "leads.view", "leads.manage", "students.view", "students.manage", "groups.view", "groups.all", "courses.view"],
+  },
+  {
     name: "O'qituvchi",
+    permissions: ["groups.view", "students.view", "attendance.mark", "grades.manage"],
+  },
+  {
+    // sees only the groups they are assigned to as assistant
+    name: "Yordamchi o'qituvchi",
     permissions: ["groups.view", "students.view", "attendance.mark", "grades.manage"],
   },
 ];

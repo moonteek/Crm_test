@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requirePage } from "@/lib/auth";
+import { can } from "@/lib/access";
 import { getAnalytics, resolvePeriod, type Analytics } from "@/lib/analytics";
 import { LineChart } from "@/components/charts/LineChart";
 import { ColumnChart } from "@/components/charts/ColumnChart";
@@ -10,18 +11,21 @@ import { Empty } from "@/components/ui";
 
 const TABS = [
   { key: "overview", label: "Umumiy" },
-  { key: "payments", label: "To'lovlar" },
+  { key: "payments", label: "To'lovlar", money: true },
   { key: "attendance", label: "Davomat" },
   { key: "grades", label: "Baholar" },
   { key: "teachers", label: "O'qituvchilar" },
   { key: "leads", label: "Lidlar" },
-  { key: "finance", label: "Moliya" },
+  { key: "finance", label: "Moliya", money: true },
 ];
 
 export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ tab?: string; range?: string }> }) {
-  await requirePage("analytics.view");
+  const user = await requirePage("analytics.view");
+  // money figures (income, debts, salaries) only for roles that may see finances
+  const money = can(user, "finance.view");
+  const tabs = TABS.filter((x) => money || !x.money);
   const { tab: t, range = "6" } = await searchParams;
-  const tab = TABS.some((x) => x.key === t) ? t! : "overview";
+  const tab = tabs.some((x) => x.key === t) ? t! : "overview";
   const period = resolvePeriod(range);
   const a = await getAnalytics(period);
   const year = new Date().getFullYear();
@@ -47,18 +51,18 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
         </div>
       </div>
       <div className="mb-6 flex gap-1 overflow-x-auto border-b border-slate-200">
-        {TABS.map((x) => (
+        {tabs.map((x) => (
           <Link key={x.key} href={`/analytics?tab=${x.key}&range=${range}`}
             className={`whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium ${tab === x.key ? "border-brand-600 text-brand-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}>
             {x.label}
           </Link>
         ))}
       </div>
-      {tab === "overview" && <Overview a={a} />}
+      {tab === "overview" && <Overview a={a} money={money} />}
       {tab === "payments" && <Payments a={a} />}
       {tab === "attendance" && <Attendance a={a} />}
       {tab === "grades" && <Grades a={a} />}
-      {tab === "teachers" && <Teachers a={a} />}
+      {tab === "teachers" && <Teachers a={a} money={money} />}
       {tab === "leads" && <Leads a={a} />}
       {tab === "finance" && <Finance a={a} />}
     </>
@@ -83,14 +87,24 @@ function Rate({ v, good = 85, ok = 70 }: { v: number | null; good?: number; ok?:
 
 const labels = (a: Analytics) => a.monthly.map((m) => m.label);
 
-function Overview({ a }: { a: Analytics }) {
+function Overview({ a, money }: { a: Analytics; money: boolean }) {
   const c = a.current, p = a.previous;
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Kpi label="Tushum" value={c.income} prev={p.income} format="money" />
-        <Kpi label="Sof foyda" value={c.profit} prev={p.profit} format="money" />
-        <Kpi label="To'lov yig'ilishi" value={c.collectionRate} prev={p.collectionRate} format="percent" hint="tushum / hisoblangan to'lov" />
+        {money ? (
+          <>
+            <Kpi label="Tushum" value={c.income} prev={p.income} format="money" />
+            <Kpi label="Sof foyda" value={c.profit} prev={p.profit} format="money" />
+            <Kpi label="To'lov yig'ilishi" value={c.collectionRate} prev={p.collectionRate} format="percent" hint="tushum / hisoblangan to'lov" />
+          </>
+        ) : (
+          <>
+            <Kpi label="Imtihonlar o'rtachasi" value={c.examAvg} prev={p.examAvg} format="percent" />
+            <Kpi label="Yangi lidlar" value={c.leads} prev={p.leads} format="number" />
+            <Kpi label="Lid konversiyasi" value={c.conversion} prev={p.conversion} format="percent" />
+          </>
+        )}
         <Kpi label="Faol o'quvchilar" value={c.activeStudents} prev={p.activeStudents} format="number" />
         <Kpi label="Yangi o'quvchilar" value={c.newStudents} prev={p.newStudents} format="number" />
         <Kpi label="Tashlab ketganlar" value={c.leftStudents} prev={p.leftStudents} format="number" upIsGood={false} hint={`bitirganlar: ${c.graduated}`} />
@@ -98,12 +112,18 @@ function Overview({ a }: { a: Analytics }) {
         <Kpi label="O'rtacha baho" value={c.avgGrade} prev={p.avgGrade} format="grade" />
       </div>
       <div className="grid gap-6 xl:grid-cols-2">
-        <Panel title="Tushum va xarajat" sub="Oylar kesimida, so'm">
-          <LineChart labels={labels(a)} format="money" series={[
-            { name: "Tushum", values: a.monthly.map((m) => m.income) },
-            { name: "Xarajat", values: a.monthly.map((m) => m.expense) },
-          ]} />
-        </Panel>
+        {money ? (
+          <Panel title="Tushum va xarajat" sub="Oylar kesimida, so'm">
+            <LineChart labels={labels(a)} format="money" series={[
+              { name: "Tushum", values: a.monthly.map((m) => m.income) },
+              { name: "Xarajat", values: a.monthly.map((m) => m.expense) },
+            ]} />
+          </Panel>
+        ) : (
+          <Panel title="O'rtacha baho" sub="5 ballik tizim">
+            <LineChart labels={labels(a)} format="grade" yMax={5} series={[{ name: "O'rtacha baho", values: a.monthly.map((m) => m.avgGrade) }]} />
+          </Panel>
+        )}
         <Panel title="O'quvchilar soni" sub="Oy oxiridagi faol o'quvchilar">
           <LineChart area labels={labels(a)} format="number" series={[{ name: "Faol o'quvchilar", values: a.monthly.map((m) => m.activeStudents) }]} />
         </Panel>
@@ -218,16 +238,16 @@ function Grades({ a }: { a: Analytics }) {
   );
 }
 
-function Teachers({ a }: { a: Analytics }) {
+function Teachers({ a, money }: { a: Analytics; money: boolean }) {
   return (
     <div className="space-y-6">
-      <Panel title="O'qituvchilar samaradorligi" sub="Tanlangan davr bo'yicha. Ish haqi ulushi = hisoblangan ish haqi / guruhlaridan tushum">
+      <Panel title="O'qituvchilar samaradorligi" sub={money ? "Tanlangan davr bo'yicha. Ish haqi ulushi = hisoblangan ish haqi / guruhlaridan tushum" : "Tanlangan davr bo'yicha"}>
         <div className="-mx-5 overflow-x-auto">
           <table className="table">
             <thead><tr>
               <th>O&apos;qituvchi</th><th className="text-right">Guruh</th><th className="text-right">O&apos;quvchi</th><th>Davomat</th>
               <th className="text-right">O&apos;rt. baho</th><th>Imtihon</th><th>Saqlab qolish</th>
-              <th className="text-right">Tushum</th><th className="text-right">Ish haqi</th><th>Ulushi</th>
+              {money && <><th className="text-right">Tushum</th><th className="text-right">Ish haqi</th><th>Ulushi</th></>}
             </tr></thead>
             <tbody>
               {a.teachers.map((t) => (
@@ -239,9 +259,11 @@ function Teachers({ a }: { a: Analytics }) {
                   <td className="text-right tabular-nums">{fmt(t.avgGrade, "grade")}</td>
                   <td><Rate v={t.examAvg} /></td>
                   <td><Rate v={t.retention} good={90} ok={75} /></td>
-                  <td className="text-right tabular-nums">{fmt(t.collected, "money")}</td>
-                  <td className="text-right tabular-nums">{fmt(t.salary, "money")}</td>
-                  <td className="tabular-nums">{fmt(t.salaryShare, "percent")}</td>
+                  {money && <>
+                    <td className="text-right tabular-nums">{fmt(t.collected, "money")}</td>
+                    <td className="text-right tabular-nums">{fmt(t.salary, "money")}</td>
+                    <td className="tabular-nums">{fmt(t.salaryShare, "percent")}</td>
+                  </>}
                 </tr>
               ))}
             </tbody>
@@ -250,7 +272,9 @@ function Teachers({ a }: { a: Analytics }) {
         </div>
       </Panel>
       <div className="grid gap-6 xl:grid-cols-2">
-        <Panel title="Tushum bo'yicha"><BarList format="money" items={a.teachers.map((t) => ({ label: t.name, value: t.collected }))} /></Panel>
+        {money
+          ? <Panel title="Tushum bo'yicha"><BarList format="money" items={a.teachers.map((t) => ({ label: t.name, value: t.collected }))} /></Panel>
+          : <Panel title="O'rtacha baho bo'yicha"><BarList format="grade" max={5} items={a.teachers.map((t) => ({ label: t.name, value: t.avgGrade ?? 0 }))} /></Panel>}
         <Panel title="Davomat bo'yicha"><BarList format="percent" max={100} items={a.teachers.map((t) => ({ label: t.name, value: t.attendanceRate ?? 0 }))} /></Panel>
       </div>
     </div>

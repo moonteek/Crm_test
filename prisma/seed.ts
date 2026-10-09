@@ -15,22 +15,31 @@ const FIRST = ["Abdulloh", "Madina", "Sardor", "Nilufar", "Bekzod", "Shahzoda", 
 const LAST = ["Yusupov", "Ergasheva", "Aliyev", "Qodirova", "Ismoilov", "Nazarova", "Mirzayev", "Xolmatova", "Sobirov", "Usmonova", "Hasanov", "Jo'rayeva", "Ortiqov", "Saidova", "Tursunov", "Rahimova", "Karimov", "Abdullayeva"];
 
 async function main() {
+  // Add any missing default roles (also safe on a database that is already in use).
+  const roles: Record<string, number> = {};
+  for (const r of DEFAULT_ROLES) {
+    const role =
+      (await db.role.findUnique({ where: { name: r.name } })) ??
+      (await db.role.create({ data: { name: r.name, isSystem: r.isSystem ?? false, permissions: r.permissions.join(",") } }));
+    roles[r.name] = role.id;
+  }
   if (await db.user.count()) {
-    console.log("Database already has data, skipping seed.");
+    console.log("Default roles checked. Database already has data, skipping demo data.");
     return;
   }
   const now = new Date();
   const monthStart = (back: number) => new Date(now.getFullYear(), now.getMonth() - back, 1);
 
-  const roles: Record<string, number> = {};
-  for (const r of DEFAULT_ROLES) {
-    const role = await db.role.create({ data: { name: r.name, isSystem: r.isSystem ?? false, permissions: r.permissions.join(",") } });
-    roles[r.name] = role.id;
-  }
   const pw = await bcrypt.hash("admin123", 10);
   const admin = await db.user.create({ data: { name: "Direktor", phone: "901234567", password: pw, roleId: roles["Administrator"] } });
   await db.user.create({ data: { name: "Menejer", phone: "901112233", password: pw, roleId: roles["Menejer"], salaryType: "FIXED", salaryAmount: 3_500_000 } });
   await db.user.create({ data: { name: "Kassir", phone: "901114455", password: pw, roleId: roles["Kassir"], salaryType: "FIXED", salaryAmount: 2_500_000 } });
+  await db.user.create({ data: { name: "Nazoratchi", phone: "901117788", password: pw, roleId: roles["Nazoratchi"] } });
+  await db.user.create({ data: { name: "O'quv bo'limi boshlig'i", phone: "901119900", password: pw, roleId: roles["O'quv bo'limi boshlig'i"], salaryType: "FIXED", salaryAmount: 4_000_000 } });
+  await db.user.create({ data: { name: "Qabulxona operatori", phone: "901116677", password: pw, roleId: roles["Qabulxona operatori"], salaryType: "FIXED", salaryAmount: 2_000_000 } });
+  const assistant = await db.user.create({
+    data: { name: "Shoxrux Aliyev", phone: "930000009", password: pw, roleId: roles["Yordamchi o'qituvchi"], isTeacher: true, salaryType: "PER_STUDENT", salaryAmount: 50_000 },
+  });
   const teacherSpecs = [
     { name: "Aziz Karimov", salaryType: "PERCENT", salaryAmount: 40 },
     { name: "Dilnoza Rahimova", salaryType: "PER_STUDENT", salaryAmount: 180_000 },
@@ -62,7 +71,7 @@ async function main() {
   for (const [name, c, t, r, days, time, ago, finished] of groupSpecs) {
     groups.push({
       group: await db.group.create({
-        data: { name, courseId: courses[c].id, teacherId: teachers[t].id, roomId: rooms[r].id, days, time, startDate: new Date(now.getFullYear(), now.getMonth() - ago, 3), status: finished ? "FINISHED" : "ACTIVE" },
+        data: { name, courseId: courses[c].id, teacherId: teachers[t].id, assistantId: name === "FE-14" || name === "PY-07" ? assistant.id : null, roomId: rooms[r].id, days, time, startDate: new Date(now.getFullYear(), now.getMonth() - ago, 3), status: finished ? "FINISHED" : "ACTIVE" },
       }),
       course: courses[c],
       ago,
@@ -190,7 +199,7 @@ async function main() {
 
   await db.auditLog.create({ data: { userId: admin.id, action: "auth.login", summary: "Direktor tizimga kirdi" } });
   console.log(`Seed done: ${await db.student.count()} o'quvchi, ${attendance.length} davomat, ${grades.length} baho.`);
-  console.log("Login: 901234567 / admin123 (menejer 901112233, kassir 901114455, o'qituvchi 930000000 — parol bir xil)");
+  console.log("Login: 901234567 / admin123 — boshqa demo xodimlar README da");
 }
 
 main().finally(() => db.$disconnect());

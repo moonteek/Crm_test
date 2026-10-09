@@ -46,14 +46,14 @@ export function assertCan(user: CurrentUser, ...perms: Permission[]) {
   if (!perms.every((p) => user.permissions.has(p))) throw new ForbiddenError();
 }
 
-/** Groups the user may see: all of them, or only the ones they teach. */
+/** Groups the user may see: all of them, or only the ones they teach or assist in. */
 export function groupScope(user: CurrentUser): Prisma.GroupWhereInput {
-  return can(user, "groups.all") ? {} : { teacherId: user.id };
+  return can(user, "groups.all") ? {} : { OR: [{ teacherId: user.id }, { assistantId: user.id }] };
 }
 
 /** Students the user may see: all, or only those in groups they teach. */
 export function studentScope(user: CurrentUser): Prisma.StudentWhereInput {
-  return can(user, "groups.all") ? {} : { groups: { some: { leftAt: null, group: { teacherId: user.id } } } };
+  return can(user, "groups.all") ? {} : { groups: { some: { leftAt: null, group: { OR: [{ teacherId: user.id }, { assistantId: user.id }] } } } };
 }
 
 export async function assertGroupAccess(user: CurrentUser, groupId: number) {
