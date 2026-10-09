@@ -1,12 +1,11 @@
 import { Sidebar } from "@/components/Sidebar";
-import { requireSession } from "@/lib/auth";
-import { ROLES } from "@/lib/format";
+import { requireUser } from "@/lib/auth";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const session = await requireSession();
+  const user = await requireUser();
   return (
     <div className="min-h-screen">
-      <Sidebar name={session.name} role={session.role} roleLabel={ROLES[session.role] ?? session.role} />
+      <Sidebar name={user.name} roleName={user.roleName} permissions={[...user.permissions]} />
       <main className="px-4 py-6 lg:ml-64 lg:px-8">{children}</main>
     </div>
   );

@@ -1,25 +1,26 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requirePage } from "@/lib/auth";
+import { can, studentScope } from "@/lib/access";
 import { date, money, MONTHS, PAYMENT_METHODS } from "@/lib/format";
 import { Empty, PageHeader } from "@/components/ui";
 import { deletePayment } from "../actions";
 
 export default async function PaymentsPage({ searchParams }: { searchParams: Promise<{ m?: string; method?: string }> }) {
+  const user = await requirePage("payments.view");
   const { m, method } = await searchParams;
   const now = new Date();
   const [year, month] = m ? [Number(m.split("-")[0]), Number(m.split("-")[1]) - 1] : [now.getFullYear(), now.getMonth()];
   const from = new Date(year, month, 1);
   const to = new Date(year, month + 1, 1);
 
-  const [payments, session] = await Promise.all([
+  const [payments] = await Promise.all([
     db.payment.findMany({
-      where: { date: { gte: from, lt: to }, ...(method ? { method } : {}) },
+      where: { date: { gte: from, lt: to }, ...(method ? { method } : {}), student: studentScope(user) },
       include: { student: true, group: true },
       orderBy: { date: "desc" },
     }),
-    getSession(),
   ]);
   const total = payments.reduce((s, p) => s + p.amount, 0);
   const byMethod = Object.keys(PAYMENT_METHODS).map((k) => ({
@@ -58,7 +59,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
 
       <div className="card overflow-x-auto">
         <table className="table">
-          <thead><tr><th>Sana</th><th>O&apos;quvchi</th><th>Guruh</th><th>Summa</th><th>Turi</th><th>Izoh</th>{session?.role === "ADMIN" && <th></th>}</tr></thead>
+          <thead><tr><th>Sana</th><th>O&apos;quvchi</th><th>Guruh</th><th>Summa</th><th>Turi</th><th>Izoh</th>{can(user, "payments.delete") && <th></th>}</tr></thead>
           <tbody>
             {payments.map((p) => (
               <tr key={p.id}>
@@ -68,7 +69,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                 <td className="font-semibold text-emerald-600">{money(p.amount)}</td>
                 <td>{PAYMENT_METHODS[p.method]}</td>
                 <td className="text-slate-500">{p.note ?? ""}</td>
-                {session?.role === "ADMIN" && (
+                {can(user, "payments.delete") && (
                   <td>
                     <form action={deletePayment.bind(null, p.id)}>
                       <button className="text-slate-400 hover:text-rose-600" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>

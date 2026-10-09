@@ -1,15 +1,15 @@
 import { DoorOpen, Plus, Trash2 } from "lucide-react";
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requirePage } from "@/lib/auth";
 import { GROUP_DAYS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { Empty, Field, PageHeader, SubmitRow } from "@/components/ui";
 import { createRoom, deleteRoom } from "../actions";
 
 export default async function RoomsPage() {
-  const [rooms, session] = await Promise.all([
+  await requirePage("rooms.manage");
+  const [rooms] = await Promise.all([
     db.room.findMany({ include: { groups: { where: { status: "ACTIVE" }, orderBy: { time: "asc" } } }, orderBy: { name: "asc" } }),
-    getSession(),
   ]);
 
   return (
@@ -32,7 +32,7 @@ export default async function RoomsPage() {
                 <h3 className="font-semibold">{r.name}</h3>
                 <span className="text-sm text-slate-500">· {r.capacity} o&apos;rin</span>
               </div>
-              {session?.role === "ADMIN" && (
+              {(
                 <form action={deleteRoom.bind(null, r.id)}>
                   <button className="text-slate-400 hover:text-rose-600" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
                 </form>

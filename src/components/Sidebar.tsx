@@ -9,24 +9,24 @@ import {
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 
-const NAV = [
-  { href: "/", label: "Bosh sahifa", icon: LayoutDashboard },
-  { href: "/leads", label: "Lidlar", icon: UserPlus },
-  { href: "/students", label: "O'quvchilar", icon: Users },
-  { href: "/groups", label: "Guruhlar", icon: UsersRound },
-  { href: "/teachers", label: "O'qituvchilar", icon: GraduationCap },
-  { href: "/courses", label: "Kurslar", icon: BookOpen },
-  { href: "/payments", label: "To'lovlar", icon: Wallet },
-  { href: "/debtors", label: "Qarzdorlar", icon: AlertCircle },
-  { href: "/finance", label: "Moliya", icon: Receipt },
-  { href: "/rooms", label: "Xonalar", icon: DoorOpen },
-  { href: "/settings", label: "Sozlamalar", icon: Settings, admin: true },
+export const NAV = [
+  { href: "/", label: "Bosh sahifa", icon: LayoutDashboard, perm: "dashboard.view" },
+  { href: "/leads", label: "Lidlar", icon: UserPlus, perm: "leads.view" },
+  { href: "/students", label: "O'quvchilar", icon: Users, perm: "students.view" },
+  { href: "/groups", label: "Guruhlar", icon: UsersRound, perm: "groups.view" },
+  { href: "/teachers", label: "O'qituvchilar", icon: GraduationCap, perm: "teachers.view" },
+  { href: "/courses", label: "Kurslar", icon: BookOpen, perm: "courses.view" },
+  { href: "/payments", label: "To'lovlar", icon: Wallet, perm: "payments.view" },
+  { href: "/debtors", label: "Qarzdorlar", icon: AlertCircle, perm: "debtors.view" },
+  { href: "/finance", label: "Moliya", icon: Receipt, perm: "finance.view" },
+  { href: "/rooms", label: "Xonalar", icon: DoorOpen, perm: "rooms.manage" },
+  { href: "/settings", label: "Sozlamalar", icon: Settings, perm: ["staff.manage", "mcp.use"] },
 ];
 
-export function Sidebar({ name, role, roleLabel }: { name: string; role: string; roleLabel: string }) {
+export function Sidebar({ name, roleName, permissions }: { name: string; roleName: string; permissions: string[] }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const items = NAV.filter((n) => !n.admin || role === "ADMIN");
+  const items = NAV.filter((n) => [n.perm].flat().some((p) => permissions.includes(p)));
 
   return (
     <>
@@ -75,7 +75,7 @@ export function Sidebar({ name, role, roleLabel }: { name: string; role: string;
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-white">{name}</p>
-              <p className="text-xs text-slate-400">{roleLabel}</p>
+              <p className="text-xs text-slate-400">{roleName}</p>
             </div>
           </div>
           <form action={logout}>

@@ -1,14 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/session";
 
+// Cheap signature check only; pages re-check the user (active, permissions) against the database.
 export async function middleware(req: NextRequest) {
   const session = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
-  const isLogin = req.nextUrl.pathname === "/login";
-  if (!session && !isLogin) return NextResponse.redirect(new URL("/login", req.url));
-  if (session && isLogin) return NextResponse.redirect(new URL("/", req.url));
+  if (!session && req.nextUrl.pathname !== "/login") return NextResponse.redirect(new URL("/login", req.url));
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // /api/mcp authenticates with bearer tokens instead of the session cookie.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|api/mcp).*)"],
 };

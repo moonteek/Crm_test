@@ -18,12 +18,6 @@ export const MONTHS = [
   "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr",
 ];
 
-export const ROLES: Record<string, string> = {
-  ADMIN: "Administrator",
-  MANAGER: "Menejer",
-  TEACHER: "O'qituvchi",
-};
-
 export const GROUP_DAYS: Record<string, string> = {
   ODD: "Du / Chor / Ju",
   EVEN: "Se / Pay / Sha",

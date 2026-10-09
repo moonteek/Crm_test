@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Pencil, Phone, Plus, Trash2, Wallet } from "lucide-react";
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requirePage } from "@/lib/auth";
+import { can, canSeeBalances, groupScope, studentScope } from "@/lib/access";
 import { balance, monthsEnrolled } from "@/lib/billing";
 import { date, GROUP_DAYS, isoDate, money, PAYMENT_METHODS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
@@ -11,25 +12,32 @@ import { Empty, Field, SubmitRow } from "@/components/ui";
 import { addStudentToGroup, deletePayment, deleteStudent, removeStudentFromGroup, updateStudent } from "../../actions";
 
 export default async function StudentPage({ params }: { params: Promise<{ id: string }> }) {
+  const user = await requirePage("students.view");
   const id = Number((await params).id);
-  const [student, allGroups, session] = await Promise.all([
-    db.student.findUnique({
-      where: { id },
+  const [student, allGroups] = await Promise.all([
+    db.student.findFirst({
+      where: { id, ...studentScope(user) },
       include: {
         groups: { include: { group: { include: { course: true, teacher: true } } }, orderBy: { joinedAt: "desc" } },
         payments: { include: { group: true }, orderBy: { date: "desc" } },
         attendance: true,
       },
     }),
-    db.group.findMany({ where: { status: "ACTIVE" }, include: { course: true }, orderBy: { name: "asc" } }),
-    getSession(),
+    db.group.findMany({ where: { status: "ACTIVE", ...groupScope(user) }, include: { course: true }, orderBy: { name: "asc" } }),
   ]);
   if (!student) notFound();
 
   const b = balance(student.groups, student.payments);
   const present = student.attendance.filter((a) => a.present).length;
   const activeGroups = student.groups.filter((g) => !g.leftAt).map((g) => g.group);
-  const isAdmin = session?.role === "ADMIN";
+  const allow = {
+    manage: can(user, "students.manage"),
+    remove: can(user, "students.delete"),
+    pay: can(user, "payments.create"),
+    payments: can(user, "payments.view"),
+    deletePayment: can(user, "payments.delete"),
+    balance: canSeeBalances(user),
+  };
 
   return (
     <>
@@ -55,13 +63,13 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
               {student.note && <Row k="Izoh">{student.note}</Row>}
             </dl>
             <div className="mt-5 flex flex-wrap gap-2">
-              <Modal title="Ma'lumotlarni tahrirlash" triggerClassName="btn-secondary" trigger={<><Pencil className="h-4 w-4" /> Tahrirlash</>}>
+              {allow.manage && <Modal title="Ma'lumotlarni tahrirlash" triggerClassName="btn-secondary" trigger={<><Pencil className="h-4 w-4" /> Tahrirlash</>}>
                 <form action={updateStudent.bind(null, student.id)} className="space-y-3">
                   <StudentFields s={student} />
                   <SubmitRow />
                 </form>
-              </Modal>
-              {isAdmin && (
+              </Modal>}
+              {allow.remove && (
                 <form action={deleteStudent.bind(null, student.id)}>
                   <button className="btn-secondary text-rose-600"><Trash2 className="h-4 w-4" /> O&apos;chirish</button>
                 </form>
@@ -69,23 +77,23 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             </div>
           </div>
 
-          <div className="card p-5">
+          {allow.balance && <div className="card p-5">
             <p className="text-sm text-slate-500">Balans</p>
             <p className={`mt-1 text-2xl font-bold ${b < 0 ? "text-rose-600" : "text-emerald-600"}`}>{money(b)}</p>
             <p className="mt-1 text-xs text-slate-500">{b < 0 ? "Qarzdorlik mavjud" : "Qarzdorlik yo'q"}</p>
-            <div className="mt-4">
+            {allow.pay && <div className="mt-4">
               <Modal title="To'lov qabul qilish" trigger={<><Wallet className="h-4 w-4" /> To&apos;lov qilish</>}>
                 <PaymentForm studentId={student.id} groups={activeGroups} />
               </Modal>
-            </div>
-          </div>
+            </div>}
+          </div>}
         </div>
 
         <div className="space-y-6 xl:col-span-2">
           <div className="card">
             <div className="flex items-center justify-between px-5 py-4">
               <h2 className="font-semibold">Guruhlar</h2>
-              <Modal title="Guruhga qo'shish" triggerClassName="btn-secondary" trigger={<><Plus className="h-4 w-4" /> Guruhga qo&apos;shish</>}>
+              {allow.manage && <Modal title="Guruhga qo'shish" triggerClassName="btn-secondary" trigger={<><Plus className="h-4 w-4" /> Guruhga qo&apos;shish</>}>
                 <form action={addStudentToGroup} className="space-y-3">
                   <input type="hidden" name="studentId" value={student.id} />
                   <Field label="Guruh">
@@ -96,7 +104,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                   <Field label="Qo'shilish sanasi"><input type="date" name="joinedAt" className="input" defaultValue={isoDate(new Date())} /></Field>
                   <SubmitRow />
                 </form>
-              </Modal>
+              </Modal>}
             </div>
             <div className="overflow-x-auto">
               <table className="table">
@@ -114,7 +122,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                           : <span className="badge bg-emerald-100 text-emerald-700">Faol · {date(gs.joinedAt)}</span>}
                       </td>
                       <td>
-                        {!gs.leftAt && (
+                        {allow.manage && !gs.leftAt && (
                           <form action={removeStudentFromGroup.bind(null, gs.groupId, student.id)}>
                             <button className="text-xs text-rose-600 hover:underline">Chiqarish</button>
                           </form>
@@ -128,11 +136,11 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             </div>
           </div>
 
-          <div className="card">
+          {allow.payments && <div className="card">
             <h2 className="px-5 py-4 font-semibold">To&apos;lovlar tarixi</h2>
             <div className="overflow-x-auto">
               <table className="table">
-                <thead><tr><th>Sana</th><th>Summa</th><th>Turi</th><th>Guruh</th><th>Izoh</th>{isAdmin && <th></th>}</tr></thead>
+                <thead><tr><th>Sana</th><th>Summa</th><th>Turi</th><th>Guruh</th><th>Izoh</th>{allow.deletePayment && <th></th>}</tr></thead>
                 <tbody>
                   {student.payments.map((p) => (
                     <tr key={p.id}>
@@ -141,7 +149,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                       <td>{PAYMENT_METHODS[p.method]}</td>
                       <td>{p.group?.name ?? "—"}</td>
                       <td className="text-slate-500">{p.note ?? ""}</td>
-                      {isAdmin && (
+                      {allow.deletePayment && (
                         <td>
                           <form action={deletePayment.bind(null, p.id)}>
                             <button className="text-slate-400 hover:text-rose-600" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
@@ -154,7 +162,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
               </table>
               {student.payments.length === 0 && <Empty text="To'lovlar yo'q" />}
             </div>
-          </div>
+          </div>}
         </div>
       </div>
     </>

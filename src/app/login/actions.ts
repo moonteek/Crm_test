@@ -15,7 +15,10 @@ export async function login(_: LoginState, form: FormData): Promise<LoginState> 
   if (!user || !(await bcrypt.compare(password, user.password))) {
     return { error: "Telefon raqam yoki parol noto'g'ri", phone };
   }
-  const token = await signSession({ userId: user.id, name: user.name, role: user.role });
+  if (!user.active) {
+    return { error: "Hisobingiz bloklangan. Administratorga murojaat qiling", phone };
+  }
+  const token = await signSession({ userId: user.id });
   (await cookies()).set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",

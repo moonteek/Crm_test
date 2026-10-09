@@ -1,28 +1,36 @@
 import Link from "next/link";
 import { Phone, Plus } from "lucide-react";
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requirePage } from "@/lib/auth";
+import { can } from "@/lib/access";
 import { Modal } from "@/components/Modal";
 import { Empty, Field, PageHeader, SubmitRow } from "@/components/ui";
 import { createUser } from "../actions";
 
 export default async function TeachersPage() {
-  const [teachers, session] = await Promise.all([
+  const user = await requirePage("teachers.view");
+  const [teachers, teacherRole] = await Promise.all([
     db.user.findMany({
-      where: { role: "TEACHER" },
+      where: { isTeacher: true, active: true },
       include: { groups: { where: { status: "ACTIVE" }, include: { _count: { select: { students: { where: { leftAt: null } } } } } } },
       orderBy: { name: "asc" },
     }),
-    getSession(),
+    db.role.findFirst({ where: { name: "O'qituvchi" } }),
   ]);
+  const roles = can(user, "staff.manage") ? await db.role.findMany({ orderBy: { name: "asc" } }) : [];
 
   return (
     <>
       <PageHeader title="O'qituvchilar" subtitle={`${teachers.length} ta o'qituvchi`}>
-        {session?.role === "ADMIN" && (
+        {can(user, "staff.manage") && (
           <Modal title="Yangi o'qituvchi" trigger={<><Plus className="h-4 w-4" /> O&apos;qituvchi qo&apos;shish</>}>
             <form action={createUser} className="space-y-3">
-              <input type="hidden" name="role" value="TEACHER" />
+              <input type="hidden" name="isTeacher" value="on" />
+              <Field label="Rol">
+                <select name="roleId" className="input" defaultValue={teacherRole?.id}>
+                  {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+              </Field>
               <Field label="Ism familiya"><input name="name" className="input" required /></Field>
               <Field label="Telefon (login)"><input name="phone" className="input" required /></Field>
               <Field label="Parol"><input name="password" type="password" className="input" required minLength={6} /></Field>

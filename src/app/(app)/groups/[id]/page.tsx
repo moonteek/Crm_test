@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requirePage } from "@/lib/auth";
+import { can, canSeeBalances, groupScope } from "@/lib/access";
 import { balance } from "@/lib/billing";
 import { date, GROUP_DAYS, isoDate, lessonDates, money, MONTHS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
@@ -13,13 +14,21 @@ import { addStudentToGroup, deleteGroup, removeStudentFromGroup, toggleAttendanc
 export default async function GroupPage({
   params, searchParams,
 }: { params: Promise<{ id: string }>; searchParams: Promise<{ m?: string }> }) {
+  const user = await requirePage("groups.view");
+  const allow = {
+    edit: can(user, "groups.manage"),
+    remove: can(user, "groups.delete"),
+    students: can(user, "students.manage"),
+    attendance: can(user, "attendance.mark"),
+    balance: canSeeBalances(user),
+  };
   const id = Number((await params).id);
   const { m } = await searchParams;
   const now = new Date();
   const [year, month] = m ? m.split("-").map(Number).map((v, i) => (i === 1 ? v - 1 : v)) : [now.getFullYear(), now.getMonth()];
 
-  const group = await db.group.findUnique({
-    where: { id },
+  const group = await db.group.findFirst({
+    where: { id, ...groupScope(user) },
     include: {
       course: true, teacher: true, room: true,
       students: {
@@ -32,13 +41,12 @@ export default async function GroupPage({
   if (!group) notFound();
 
   const days = lessonDates(group.days, year, month);
-  const [attendance, courses, teachers, rooms, others, session] = await Promise.all([
+  const [attendance, courses, teachers, rooms, others] = await Promise.all([
     db.attendance.findMany({ where: { groupId: id, date: { gte: days[0] ?? new Date(), lte: days.at(-1) ?? new Date() } } }),
     db.course.findMany({ orderBy: { name: "asc" } }),
-    db.user.findMany({ where: { role: "TEACHER" }, orderBy: { name: "asc" } }),
+    db.user.findMany({ where: { isTeacher: true, active: true }, orderBy: { name: "asc" } }),
     db.room.findMany({ orderBy: { name: "asc" } }),
     db.student.findMany({ where: { groups: { none: { groupId: id, leftAt: null } } }, orderBy: { name: "asc" } }),
-    getSession(),
   ]);
   const mark = new Map(attendance.map((a) => [`${a.studentId}:${isoDate(a.date)}`, a.present]));
   const prev = new Date(year, month - 1, 1);
@@ -59,13 +67,13 @@ export default async function GroupPage({
             <p className="text-brand-600">{group.course.name} · {money(group.course.price)} / oy</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Modal title="Guruhni tahrirlash" triggerClassName="btn-secondary" trigger={<><Pencil className="h-4 w-4" /> Tahrirlash</>}>
+            {allow.edit && <Modal title="Guruhni tahrirlash" triggerClassName="btn-secondary" trigger={<><Pencil className="h-4 w-4" /> Tahrirlash</>}>
               <form action={updateGroup.bind(null, group.id)} className="space-y-3">
                 <GroupFields courses={courses} teachers={teachers} rooms={rooms} g={group} />
                 <SubmitRow />
               </form>
-            </Modal>
-            {session?.role === "ADMIN" && (
+            </Modal>}
+            {allow.remove && (
               <form action={deleteGroup.bind(null, group.id)}>
                 <button className="btn-secondary text-rose-600"><Trash2 className="h-4 w-4" /> O&apos;chirish</button>
               </form>
@@ -87,7 +95,7 @@ export default async function GroupPage({
             <Link href={`/groups/${id}?m=${ym(prev)}`} className="btn-secondary px-2"><ChevronLeft className="h-4 w-4" /></Link>
             <span className="w-32 text-center text-sm font-medium">{MONTHS[month]} {year}</span>
             <Link href={`/groups/${id}?m=${ym(next)}`} className="btn-secondary px-2"><ChevronRight className="h-4 w-4" /></Link>
-            <Modal title="O'quvchi qo'shish" trigger={<><Plus className="h-4 w-4" /> Qo&apos;shish</>}>
+            {allow.students && <Modal title="O'quvchi qo'shish" trigger={<><Plus className="h-4 w-4" /> Qo&apos;shish</>}>
               <form action={addStudentToGroup} className="space-y-3">
                 <input type="hidden" name="groupId" value={id} />
                 <Field label="O'quvchi">
@@ -98,16 +106,16 @@ export default async function GroupPage({
                 <Field label="Qo'shilish sanasi"><input type="date" name="joinedAt" className="input" defaultValue={isoDate(new Date())} /></Field>
                 <SubmitRow />
               </form>
-            </Modal>
+            </Modal>}
           </div>
         </div>
-        <p className="px-5 pb-3 text-xs text-slate-500">Katakchani bosing: <span className="text-emerald-600">✓ keldi</span> → <span className="text-rose-600">✗ kelmadi</span> → bo&apos;sh</p>
+        {allow.attendance && <p className="px-5 pb-3 text-xs text-slate-500">Katakchani bosing: <span className="text-emerald-600">✓ keldi</span> → <span className="text-rose-600">✗ kelmadi</span> → bo&apos;sh</p>}
         <div className="overflow-x-auto">
           <table className="table">
             <thead>
               <tr>
                 <th className="sticky left-0 z-10 min-w-48 bg-slate-50">O&apos;quvchi</th>
-                <th>Balans</th>
+                {allow.balance && <th>Balans</th>}
                 {days.map((d) => (
                   <th key={d.toISOString()} className={`px-1 text-center ${isoDate(d) === today ? "text-brand-600" : ""}`}>{d.getUTCDate()}</th>
                 ))}
@@ -123,7 +131,7 @@ export default async function GroupPage({
                       <Link href={`/students/${student.id}`} className="font-medium hover:text-brand-600">{student.name}</Link>
                       <p className="text-xs text-slate-500">{student.phone}</p>
                     </td>
-                    <td><BalanceBadge value={b} label={money(b)} /></td>
+                    {allow.balance && <td><BalanceBadge value={b} label={money(b)} /></td>}
                     {days.map((d) => {
                       const key = isoDate(d);
                       const v = mark.get(`${student.id}:${key}`);
@@ -131,6 +139,7 @@ export default async function GroupPage({
                         <td key={key} className="px-1 text-center">
                           <form action={toggleAttendance.bind(null, id, student.id, key)}>
                             <button
+                              disabled={!allow.attendance}
                               className={`h-7 w-7 rounded-md border text-sm font-bold ${
                                 v === true ? "border-emerald-200 bg-emerald-100 text-emerald-700"
                                 : v === false ? "border-rose-200 bg-rose-100 text-rose-700"
@@ -144,9 +153,9 @@ export default async function GroupPage({
                       );
                     })}
                     <td>
-                      <form action={removeStudentFromGroup.bind(null, id, student.id)}>
+                      {allow.students && <form action={removeStudentFromGroup.bind(null, id, student.id)}>
                         <button className="text-xs text-rose-600 hover:underline">Chiqarish</button>
-                      </form>
+                      </form>}
                     </td>
                   </tr>
                 );

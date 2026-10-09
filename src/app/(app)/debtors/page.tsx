@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { requirePage } from "@/lib/auth";
+import { can, studentScope } from "@/lib/access";
 import { balance } from "@/lib/billing";
 import { money } from "@/lib/format";
 import { Modal } from "@/components/Modal";
@@ -7,7 +9,9 @@ import { PaymentForm } from "@/components/forms";
 import { Empty, PageHeader } from "@/components/ui";
 
 export default async function DebtorsPage() {
+  const user = await requirePage("debtors.view");
   const students = await db.student.findMany({
+    where: studentScope(user),
     include: {
       payments: { select: { amount: true } },
       groups: { include: { group: { include: { course: true } } } },
@@ -36,9 +40,9 @@ export default async function DebtorsPage() {
                   <td>{active.map((g) => g.name).join(", ") || "—"}</td>
                   <td className="font-semibold text-rose-600">{money(-s.balance)}</td>
                   <td>
-                    <Modal title={`To'lov — ${s.name}`} triggerClassName="text-sm text-brand-600 hover:underline" trigger="To'lov qilish">
+                    {can(user, "payments.create") && <Modal title={`To'lov — ${s.name}`} triggerClassName="text-sm text-brand-600 hover:underline" trigger="To'lov qilish">
                       <PaymentForm studentId={s.id} groups={active} />
-                    </Modal>
+                    </Modal>}
                   </td>
                 </tr>
               );

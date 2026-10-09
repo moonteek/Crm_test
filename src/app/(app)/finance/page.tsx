@@ -1,21 +1,23 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { db } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { requirePage } from "@/lib/auth";
+import { can } from "@/lib/access";
 import { date, EXPENSE_CATEGORIES, isoDate, money, MONTHS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { Empty, Field, PageHeader, SubmitRow } from "@/components/ui";
 import { createExpense, deleteExpense } from "../actions";
 
 export default async function FinancePage({ searchParams }: { searchParams: Promise<{ y?: string }> }) {
+  const user = await requirePage("finance.view");
+  const manage = can(user, "finance.manage");
   const year = Number((await searchParams).y) || new Date().getFullYear();
   const from = new Date(year, 0, 1);
   const to = new Date(year + 1, 0, 1);
 
-  const [payments, expenses, session] = await Promise.all([
+  const [payments, expenses] = await Promise.all([
     db.payment.findMany({ where: { date: { gte: from, lt: to } }, select: { amount: true, date: true } }),
     db.expense.findMany({ where: { date: { gte: from, lt: to } }, orderBy: { date: "desc" } }),
-    getSession(),
   ]);
 
   const rows = MONTHS.map((name, i) => {
@@ -35,7 +37,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
           <span className="w-16 text-center font-medium">{year}</span>
           <Link href={`/finance?y=${year + 1}`} className="btn-secondary px-2"><ChevronRight className="h-4 w-4" /></Link>
         </div>
-        <Modal title="Yangi xarajat" trigger={<><Plus className="h-4 w-4" /> Xarajat qo&apos;shish</>}>
+        {manage && <Modal title="Yangi xarajat" trigger={<><Plus className="h-4 w-4" /> Xarajat qo&apos;shish</>}>
           <form action={createExpense} className="space-y-3">
             <Field label="Nomi"><input name="title" className="input" required placeholder="Oktabr ijarasi" /></Field>
             <div className="grid grid-cols-2 gap-3">
@@ -49,7 +51,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
             <Field label="Sana"><input name="date" type="date" className="input" defaultValue={isoDate(new Date())} /></Field>
             <SubmitRow />
           </form>
-        </Modal>
+        </Modal>}
       </PageHeader>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
@@ -80,7 +82,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
       <div className="card overflow-x-auto">
         <h2 className="px-5 py-4 font-semibold">Xarajatlar</h2>
         <table className="table">
-          <thead><tr><th>Sana</th><th>Nomi</th><th>Turkum</th><th>Summa</th>{session?.role === "ADMIN" && <th></th>}</tr></thead>
+          <thead><tr><th>Sana</th><th>Nomi</th><th>Turkum</th><th>Summa</th>{manage && <th></th>}</tr></thead>
           <tbody>
             {expenses.map((e) => (
               <tr key={e.id}>
@@ -88,7 +90,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
                 <td className="font-medium">{e.title}</td>
                 <td><span className="badge bg-slate-100 text-slate-600">{EXPENSE_CATEGORIES[e.category]}</span></td>
                 <td className="font-semibold text-rose-600">{money(e.amount)}</td>
-                {session?.role === "ADMIN" && (
+                {manage && (
                   <td>
                     <form action={deleteExpense.bind(null, e.id)}>
                       <button className="text-slate-400 hover:text-rose-600" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>

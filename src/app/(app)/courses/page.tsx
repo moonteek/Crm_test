@@ -1,5 +1,7 @@
 import { Pencil, Plus } from "lucide-react";
 import { db } from "@/lib/db";
+import { requirePage } from "@/lib/auth";
+import { can } from "@/lib/access";
 import { money } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { Empty, Field, PageHeader, SubmitRow } from "@/components/ui";
@@ -22,6 +24,8 @@ function CourseFields({ c }: { c?: C }) {
 }
 
 export default async function CoursesPage() {
+  const user = await requirePage("courses.view");
+  const manage = can(user, "courses.manage");
   const courses = await db.course.findMany({
     include: { groups: { where: { status: "ACTIVE" }, include: { _count: { select: { students: { where: { leftAt: null } } } } } } },
     orderBy: { name: "asc" },
@@ -30,18 +34,18 @@ export default async function CoursesPage() {
   return (
     <>
       <PageHeader title="Kurslar" subtitle={`${courses.length} ta kurs`}>
-        <Modal title="Yangi kurs" trigger={<><Plus className="h-4 w-4" /> Kurs qo&apos;shish</>}>
+        {manage && <Modal title="Yangi kurs" trigger={<><Plus className="h-4 w-4" /> Kurs qo&apos;shish</>}>
           <form action={createCourse} className="space-y-3"><CourseFields /><SubmitRow /></form>
-        </Modal>
+        </Modal>}
       </PageHeader>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {courses.map((c) => (
           <div key={c.id} className="card flex flex-col p-5">
             <div className="flex items-start justify-between gap-2">
               <h3 className="text-lg font-semibold">{c.name}</h3>
-              <Modal title="Kursni tahrirlash" triggerClassName="text-slate-400 hover:text-brand-600" trigger={<Pencil className="h-4 w-4" />}>
+              {manage && <Modal title="Kursni tahrirlash" triggerClassName="text-slate-400 hover:text-brand-600" trigger={<Pencil className="h-4 w-4" />}>
                 <form action={updateCourse.bind(null, c.id)} className="space-y-3"><CourseFields c={c} /><SubmitRow /></form>
-              </Modal>
+              </Modal>}
             </div>
             <p className="mt-1 flex-1 text-sm text-slate-500">{c.description}</p>
             <p className="mt-4 text-xl font-bold text-brand-600">{money(c.price)}<span className="text-sm font-normal text-slate-500"> / oy</span></p>

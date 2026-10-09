@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { DEFAULT_ROLES } from "../src/lib/permissions";
 
 const db = new PrismaClient();
 
@@ -8,12 +9,18 @@ async function main() {
     console.log("Database already has data, skipping seed.");
     return;
   }
+  const roles: Record<string, number> = {};
+  for (const r of DEFAULT_ROLES) {
+    const role = await db.role.create({ data: { name: r.name, isSystem: r.isSystem ?? false, permissions: r.permissions.join(",") } });
+    roles[r.name] = role.id;
+  }
   const pw = await bcrypt.hash("admin123", 10);
-  await db.user.create({ data: { name: "Direktor", phone: "901234567", password: pw, role: "ADMIN" } });
-  await db.user.create({ data: { name: "Menejer", phone: "901112233", password: pw, role: "MANAGER" } });
+  await db.user.create({ data: { name: "Direktor", phone: "901234567", password: pw, roleId: roles["Administrator"] } });
+  await db.user.create({ data: { name: "Menejer", phone: "901112233", password: pw, roleId: roles["Menejer"] } });
+  await db.user.create({ data: { name: "Kassir", phone: "901114455", password: pw, roleId: roles["Kassir"] } });
   const teachers = await Promise.all(
     ["Aziz Karimov", "Dilnoza Rahimova", "Jasur Toshmatov"].map((name, i) =>
-      db.user.create({ data: { name, phone: `93000000${i}`, password: pw, role: "TEACHER" } }),
+      db.user.create({ data: { name, phone: `93000000${i}`, password: pw, roleId: roles["O'qituvchi"], isTeacher: true } }),
     ),
   );
 
@@ -82,7 +89,7 @@ async function main() {
     await db.expense.create({ data: { title: "O'qituvchilar oyligi", category: "SALARY", amount: 9000000, date: monthsAgo(m) } });
     await db.expense.create({ data: { title: "Instagram reklama", category: "MARKETING", amount: 1200000, date: monthsAgo(m) } });
   }
-  console.log("Seed done. Login: 901234567 / admin123");
+  console.log("Seed done. Admin login: 901234567 / admin123 (menejer 901112233, kassir 901114455, o'qituvchi 930000000 — parol bir xil)");
 }
 
 main().finally(() => db.$disconnect());

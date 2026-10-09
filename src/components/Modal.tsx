@@ -12,11 +12,13 @@ export function Modal({
   title,
   children,
   triggerClassName = "btn-primary",
+  wide = false,
 }: {
   trigger: React.ReactNode;
   title: string;
   children: React.ReactNode;
   triggerClassName?: string;
+  wide?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -26,7 +28,7 @@ export function Modal({
       </button>
       {open && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:items-center">
-          <div className="card w-full max-w-lg">
+          <div className={`card w-full ${wide ? "max-w-2xl" : "max-w-lg"}`}>
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
               <h3 className="font-semibold">{title}</h3>
               <button type="button" onClick={() => setOpen(false)} aria-label="Yopish">

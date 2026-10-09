@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Clock, DoorOpen, Plus, User } from "lucide-react";
 import { db } from "@/lib/db";
+import { requirePage } from "@/lib/auth";
+import { can, groupScope } from "@/lib/access";
 import { date, GROUP_DAYS, money } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { GroupFields } from "@/components/GroupFields";
@@ -8,27 +10,28 @@ import { Empty, PageHeader, SubmitRow } from "@/components/ui";
 import { createGroup } from "../actions";
 
 export default async function GroupsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
+  const user = await requirePage("groups.view");
   const { status = "ACTIVE" } = await searchParams;
   const [groups, courses, teachers, rooms] = await Promise.all([
     db.group.findMany({
-      where: { status },
+      where: { status, ...groupScope(user) },
       include: { course: true, teacher: true, room: true, _count: { select: { students: { where: { leftAt: null } } } } },
       orderBy: [{ days: "asc" }, { time: "asc" }],
     }),
     db.course.findMany({ orderBy: { name: "asc" } }),
-    db.user.findMany({ where: { role: "TEACHER" }, orderBy: { name: "asc" } }),
+    db.user.findMany({ where: { isTeacher: true, active: true }, orderBy: { name: "asc" } }),
     db.room.findMany({ orderBy: { name: "asc" } }),
   ]);
 
   return (
     <>
-      <PageHeader title="Guruhlar" subtitle={`${groups.length} ta guruh`}>
+      <PageHeader title={can(user, "groups.all") ? "Guruhlar" : "Mening guruhlarim"} subtitle={`${groups.length} ta guruh`}>
         <div className="flex gap-1 rounded-lg bg-white p-1 shadow-sm">
           {[["ACTIVE", "Faol"], ["FINISHED", "Tugagan"]].map(([k, v]) => (
             <Link key={k} href={`/groups?status=${k}`} className={`rounded-md px-3 py-1.5 text-sm ${status === k ? "bg-brand-600 text-white" : "text-slate-600"}`}>{v}</Link>
           ))}
         </div>
-        {courses.length > 0 && (
+        {can(user, "groups.manage") && courses.length > 0 && (
           <Modal title="Yangi guruh" trigger={<><Plus className="h-4 w-4" /> Guruh ochish</>}>
             <form action={createGroup} className="space-y-3">
               <GroupFields courses={courses} teachers={teachers} rooms={rooms} />
@@ -38,7 +41,7 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
         )}
       </PageHeader>
 
-      {courses.length === 0 && (
+      {can(user, "groups.manage") && courses.length === 0 && (
         <p className="card mb-4 p-4 text-sm text-amber-700">Guruh ochish uchun avval <Link href="/courses" className="underline">kurs qo&apos;shing</Link>.</p>
       )}
 

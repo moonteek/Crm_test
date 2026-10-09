@@ -7,15 +7,41 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// role: ADMIN | MANAGER | TEACHER
+model Role {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  // comma-separated permission keys, see src/lib/permissions.ts
+  permissions String   @default("")
+  // the built-in administrator role: always has every permission and can't be edited
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  users       User[]
+}
+
 model User {
-  id        Int      @id @default(autoincrement())
+  id        Int        @id @default(autoincrement())
   name      String
-  phone     String   @unique
+  phone     String     @unique
   password  String
-  role      String   @default("MANAGER")
-  createdAt DateTime @default(now())
+  roleId    Int
+  role      Role       @relation(fields: [roleId], references: [id])
+  isTeacher Boolean    @default(false)
+  active    Boolean    @default(true)
+  createdAt DateTime   @default(now())
   groups    Group[]
+  tokens    ApiToken[]
+}
+
+// Personal access tokens used by MCP clients. Only a SHA-256 hash is stored.
+model ApiToken {
+  id         Int       @id @default(autoincrement())
+  name       String
+  tokenHash  String    @unique
+  prefix     String
+  userId     Int
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
 }
 
 model Course {

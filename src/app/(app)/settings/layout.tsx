@@ -1,0 +1,20 @@
+import { requireUser } from "@/lib/auth";
+import { can } from "@/lib/access";
+import { SettingsTabs } from "./SettingsTabs";
+
+export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
+  const user = await requireUser();
+  const tabs = [
+    ...(can(user, "staff.manage")
+      ? [{ href: "/settings", label: "Xodimlar" }, { href: "/settings/roles", label: "Rollar va ruxsatlar" }]
+      : []),
+    ...(can(user, "mcp.use") ? [{ href: "/settings/mcp", label: "AI / MCP ulanish" }] : []),
+  ];
+  return (
+    <>
+      <h1 className="mb-4 text-2xl font-bold text-slate-900">Sozlamalar</h1>
+      <SettingsTabs tabs={tabs} />
+      {children}
+    </>
+  );
+}
