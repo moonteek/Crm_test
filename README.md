@@ -12,6 +12,10 @@ O'quv markazi uchun CRM tizimi: lidlar, o'quvchilar, guruhlar, davomat, to'lovla
 - **Qarzdorlar** — avtomatik hisoblanadi: har bir oy uchun kurs narxi − to'langan summa
 - **Moliya** — xarajatlar, yillik tushum/xarajat grafigi, sof foyda
 - **O'qituvchilar, kurslar, xonalar**
+- **Baholar va imtihonlar** — har bir dars uchun 1–5 baho, modul imtihonlari (ball / maksimal ball)
+- **Ish haqi** — har bir xodim uchun qoida (oylik, tushumdan foiz yoki har bir o'quvchi uchun), oylik hisob-kitob va to'lovlar (avtomatik xarajat sifatida yoziladi)
+- **Analitika** — 7 bo'lim: umumiy, to'lovlar, davomat, baholar, o'qituvchilar, lidlar, moliya; 3/6/12 oy yoki yil bo'yicha, oldingi davr bilan solishtirish
+- **Faoliyat jurnali** — kim, qachon, nima qildi (to'lovlar, o'chirishlar, rol o'zgarishlari, AI orqali amallar)
 - **Rollar va ruxsatlar** — direktor istalgancha rol yaratadi va har biriga 23 ta ruxsatdan keraklilarini belgilaydi
 - **Xodimlar** — qo'shish, rolini o'zgartirish, parolni tiklash, bloklash
 - **AI / MCP** — Claude kabi AI yordamchilarni CRM ga ulash
@@ -20,6 +24,7 @@ O'quv markazi uchun CRM tizimi: lidlar, o'quvchilar, guruhlar, davomat, to'lovla
 
 Standart rollar: **Administrator** (hamma narsa, o'zgartirib bo'lmaydi), **Menejer**, **Kassir**, **O'qituvchi**.
 Sozlamalar → Rollar va ruxsatlar bo'limida yangi rol qo'shish yoki mavjudini o'zgartirish mumkin; o'zgarish darhol kuchga kiradi.
+Analitika, ish haqi va faoliyat jurnali uchun alohida ruxsatlar bor (standart bo'yicha faqat Administrator ko'radi).
 
 - "Barcha guruhlarni ko'rish" ruxsati bo'lmagan xodim (masalan, o'qituvchi) faqat o'zi dars beradigan guruhlar va ularning o'quvchilarini ko'radi.
 - Balans va qarzlar faqat "To'lovlarni ko'rish" yoki "Qarzdorlarni ko'rish" ruxsati borlarga ko'rinadi.
@@ -38,7 +43,7 @@ CRM ichida MCP server bor: `https://<sayt>/api/mcp` (Streamable HTTP).
 AI token egasi nomidan ishlaydi va faqat uning roli ruxsat bergan vositalarni ko'radi. Vositalar:
 `get_overview`, `search_students`, `get_student`, `list_groups`, `get_group_attendance`, `mark_attendance`,
 `list_leads`, `create_lead`, `update_lead_status`, `list_debtors`, `record_payment`, `list_payments`,
-`finance_summary`, `list_courses`.
+`finance_summary`, `list_courses`, `get_analytics`, `get_salaries`, `record_grades`, `list_activity`.
 
 Tokenlar bazada faqat xesh ko'rinishida saqlanadi; xodim bloklansa, uning tokenlari o'chiriladi.
 
@@ -46,6 +51,13 @@ Tokenlar bazada faqat xesh ko'rinishida saqlanadi; xodim bloklansa, uning tokenl
 
 Next.js 15 (App Router, Server Actions), TypeScript, Tailwind CSS 4, Prisma ORM, MCP TypeScript SDK.
 Lokal ishlashda SQLite; productionda PostgreSQL ga o'tish uchun `prisma/schema.prisma` dagi `provider` ni `"postgresql"` ga o'zgartiring.
+
+## Analitika qanday hisoblanadi
+
+- **Hisoblangan to'lov** — har bir o'quvchi guruhda o'qigan har bir oy uchun kurs narxi; **yig'ilish darajasi** = tushum / hisoblangan.
+- **Tashlab ketganlar** — faol guruhdan chiqib, boshqa guruhda o'qimayotganlar. Guruh "Tugagan" deb belgilansa, o'quvchilar **bitirgan** hisoblanadi.
+- **Saqlab qolish** — davr boshida o'qiyotgan o'quvchilardan davr oxirigacha qolganlar ulushi.
+- **Ish haqi ulushi** — o'qituvchiga hisoblangan ish haqi / uning guruhlaridan tushum.
 
 ## Ishga tushirish
 

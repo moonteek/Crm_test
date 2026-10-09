@@ -8,6 +8,9 @@ import { db } from "@/lib/db";
 import { requirePermission, requireUser } from "@/lib/auth";
 import { assertGroupAccess, assertStudentAccess, can, ForbiddenError } from "@/lib/access";
 import { ALL_PERMISSIONS } from "@/lib/permissions";
+import { logAction } from "@/lib/audit";
+import { money } from "@/lib/format";
+import { SALARY_TYPES } from "@/lib/salary";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const optStr = (f: FormData, k: string) => str(f, k) || null;
@@ -25,20 +28,22 @@ export async function createLead(f: FormData) {
 }
 
 export async function setLeadStatus(id: number, status: string) {
-  await requirePermission("leads.manage");
-  await db.lead.update({ where: { id }, data: { status } });
+  const user = await requirePermission("leads.manage");
+  const lead = await db.lead.update({ where: { id }, data: { status } });
+  await logAction(user, "lead.status", `Lid "${lead.name}" holati: ${status}`);
   revalidatePath("/leads");
 }
 
 export async function deleteLead(id: number) {
-  await requirePermission("leads.manage");
-  await db.lead.delete({ where: { id } });
+  const user = await requirePermission("leads.manage");
+  const lead = await db.lead.delete({ where: { id } });
+  await logAction(user, "lead.delete", `Lid o'chirildi: ${lead.name} (${lead.phone})`);
   revalidatePath("/leads");
 }
 
 /** Turns a lead into a student (optionally adding them to a group) and marks the lead as won. */
 export async function convertLead(id: number, f: FormData) {
-  await requirePermission("leads.manage", "students.manage");
+  const user = await requirePermission("leads.manage", "students.manage");
   const lead = await db.lead.findUniqueOrThrow({ where: { id } });
   const groupId = optId(f, "groupId");
   const student = await db.student.create({
@@ -50,6 +55,7 @@ export async function convertLead(id: number, f: FormData) {
     },
   });
   await db.lead.update({ where: { id }, data: { status: "WON" } });
+  await logAction(user, "lead.convert", `Lid o'quvchiga aylantirildi: ${lead.name}`);
   revalidatePath("/leads");
   redirect(`/students/${student.id}`);
 }
@@ -69,6 +75,7 @@ export async function createStudent(f: FormData) {
       groups: groupId ? { create: { groupId } } : undefined,
     },
   });
+  await logAction(user, "student.create", `Yangi o'quvchi: ${student.name}`);
   redirect(`/students/${student.id}`);
 }
 
@@ -89,8 +96,9 @@ export async function updateStudent(id: number, f: FormData) {
 }
 
 export async function deleteStudent(id: number) {
-  await requirePermission("students.delete");
-  await db.student.delete({ where: { id } });
+  const user = await requirePermission("students.delete");
+  const student = await db.student.delete({ where: { id } });
+  await logAction(user, "student.delete", `O'quvchi o'chirildi: ${student.name} (${student.phone})`);
   redirect("/students");
 }
 
@@ -100,11 +108,13 @@ export async function addStudentToGroup(f: FormData) {
   const groupId = Number(str(f, "groupId"));
   await assertGroupAccess(user, groupId);
   const joinedAt = day(f, "joinedAt") ?? new Date();
-  await db.groupStudent.upsert({
+  const gs = await db.groupStudent.upsert({
     where: { groupId_studentId: { groupId, studentId } },
     create: { groupId, studentId, joinedAt },
     update: { joinedAt, leftAt: null },
+    include: { student: true, group: true },
   });
+  await logAction(user, "student.join", `${gs.student.name} → ${gs.group.name} guruhiga qo'shildi`);
   revalidatePath(`/students/${studentId}`);
   revalidatePath(`/groups/${groupId}`);
 }
@@ -112,17 +122,19 @@ export async function addStudentToGroup(f: FormData) {
 export async function removeStudentFromGroup(groupId: number, studentId: number) {
   const user = await requirePermission("students.manage");
   await assertGroupAccess(user, groupId);
-  await db.groupStudent.update({
+  const gs = await db.groupStudent.update({
     where: { groupId_studentId: { groupId, studentId } },
     data: { leftAt: new Date() },
+    include: { student: true, group: true },
   });
+  await logAction(user, "student.leave", `${gs.student.name} ${gs.group.name} guruhidan chiqarildi`);
   revalidatePath(`/students/${studentId}`);
   revalidatePath(`/groups/${groupId}`);
 }
 
 // ---------- Groups ----------
 export async function createGroup(f: FormData) {
-  await requirePermission("groups.manage");
+  const user = await requirePermission("groups.manage");
   const group = await db.group.create({
     data: {
       name: str(f, "name"),
@@ -134,12 +146,20 @@ export async function createGroup(f: FormData) {
       startDate: day(f, "startDate") ?? new Date(),
     },
   });
+  await logAction(user, "group.create", `Yangi guruh: ${group.name}`);
   redirect(`/groups/${group.id}`);
 }
 
 export async function updateGroup(id: number, f: FormData) {
   const user = await requirePermission("groups.manage");
   await assertGroupAccess(user, id);
+  const before = await db.group.findUniqueOrThrow({ where: { id } });
+  const status = str(f, "status") || "ACTIVE";
+  if (before.status !== "FINISHED" && status === "FINISHED") {
+    // students graduate: stop monthly charges from today
+    await db.groupStudent.updateMany({ where: { groupId: id, leftAt: null }, data: { leftAt: new Date() } });
+    await logAction(user, "group.finish", `Guruh yakunlandi: ${before.name}`);
+  }
   await db.group.update({
     where: { id },
     data: {
@@ -149,15 +169,16 @@ export async function updateGroup(id: number, f: FormData) {
       roomId: optId(f, "roomId"),
       days: str(f, "days"),
       time: str(f, "time"),
-      status: str(f, "status") || "ACTIVE",
+      status,
     },
   });
   revalidatePath(`/groups/${id}`);
 }
 
 export async function deleteGroup(id: number) {
-  await requirePermission("groups.delete");
-  await db.group.delete({ where: { id } });
+  const user = await requirePermission("groups.delete");
+  const group = await db.group.delete({ where: { id } });
+  await logAction(user, "group.delete", `Guruh o'chirildi: ${group.name}`);
   redirect("/groups");
 }
 
@@ -190,7 +211,11 @@ export async function createCourse(f: FormData) {
 }
 
 export async function updateCourse(id: number, f: FormData) {
-  await requirePermission("courses.manage");
+  const user = await requirePermission("courses.manage");
+  const before = await db.course.findUniqueOrThrow({ where: { id } });
+  if (before.price !== num(f, "price")) {
+    await logAction(user, "course.price", `${before.name} narxi: ${money(before.price)} → ${money(num(f, "price"))}`);
+  }
   await db.course.update({
     where: { id },
     data: {
@@ -219,8 +244,8 @@ export async function deleteRoom(id: number) {
 
 // ---------- Staff ----------
 export async function createUser(f: FormData) {
-  await requirePermission("staff.manage");
-  await db.user.create({
+  const me = await requirePermission("staff.manage");
+  const created = await db.user.create({
     data: {
       name: str(f, "name"),
       phone: str(f, "phone"),
@@ -228,7 +253,9 @@ export async function createUser(f: FormData) {
       isTeacher: f.get("isTeacher") === "on",
       password: await bcrypt.hash(str(f, "password"), 10),
     },
+    include: { role: true },
   });
+  await logAction(me, "staff.create", `Yangi xodim: ${created.name} (${created.role.name})`);
   revalidatePath("/teachers");
   revalidatePath("/settings");
 }
@@ -244,7 +271,8 @@ export async function updateUser(id: number, f: FormData) {
     await assertNotLastAdmin(id, roleId);
   }
   const password = str(f, "password");
-  await db.user.update({
+  const before = await db.user.findUniqueOrThrow({ where: { id }, include: { role: true } });
+  const updated = await db.user.update({
     where: { id },
     data: {
       name: str(f, "name"),
@@ -253,7 +281,12 @@ export async function updateUser(id: number, f: FormData) {
       isTeacher: f.get("isTeacher") === "on",
       ...(password ? { password: await bcrypt.hash(password, 10) } : {}),
     },
+    include: { role: true },
   });
+  if (before.roleId !== updated.roleId) {
+    await logAction(me, "staff.role", `${updated.name}: rol ${before.role.name} → ${updated.role.name}`);
+  }
+  if (password) await logAction(me, "staff.password", `${updated.name} paroli o'zgartirildi`);
   revalidatePath("/settings");
   revalidatePath("/teachers");
 }
@@ -262,7 +295,8 @@ export async function setUserActive(id: number, active: boolean) {
   const me = await requirePermission("staff.manage");
   if (id === me.id) throw new Error("O'zingizni bloklay olmaysiz");
   if (!active) await assertNotLastAdmin(id, null);
-  await db.user.update({ where: { id }, data: { active } });
+  const target = await db.user.update({ where: { id }, data: { active } });
+  await logAction(me, active ? "staff.unblock" : "staff.block", `${target.name} ${active ? "faollashtirildi" : "bloklandi"}`);
   if (!active) await db.apiToken.deleteMany({ where: { userId: id } });
   revalidatePath("/settings");
 }
@@ -282,25 +316,35 @@ function permissionsFrom(f: FormData) {
 }
 
 export async function createRole(f: FormData) {
-  await requirePermission("staff.manage");
-  await db.role.create({ data: { name: str(f, "name"), permissions: permissionsFrom(f) } });
+  const user = await requirePermission("staff.manage");
+  const role = await db.role.create({ data: { name: str(f, "name"), permissions: permissionsFrom(f) } });
+  await logAction(user, "role.create", `Yangi rol: ${role.name}`);
   revalidatePath("/settings/roles");
 }
 
 export async function updateRole(id: number, f: FormData) {
-  await requirePermission("staff.manage");
+  const user = await requirePermission("staff.manage");
   const role = await db.role.findUniqueOrThrow({ where: { id } });
   if (role.isSystem) throw new ForbiddenError();
-  await db.role.update({ where: { id }, data: { name: str(f, "name"), permissions: permissionsFrom(f) } });
+  const perms = permissionsFrom(f);
+  await db.role.update({ where: { id }, data: { name: str(f, "name"), permissions: perms } });
+  const was = new Set(role.permissions.split(",").filter(Boolean));
+  const now = new Set(perms.split(",").filter(Boolean));
+  const added = [...now].filter((p) => !was.has(p));
+  const removed = [...was].filter((p) => !now.has(p));
+  if (added.length || removed.length) {
+    await logAction(user, "role.update", `"${role.name}" roli: ${[...added.map((p) => "+" + p), ...removed.map((p) => "−" + p)].join(", ")}`);
+  }
   revalidatePath("/settings/roles");
 }
 
 export async function deleteRole(id: number) {
-  await requirePermission("staff.manage");
+  const user = await requirePermission("staff.manage");
   const role = await db.role.findUniqueOrThrow({ where: { id }, include: { _count: { select: { users: true } } } });
   if (role.isSystem) throw new ForbiddenError();
   if (role._count.users > 0) throw new Error("Bu rolda xodimlar bor. Avval ularni boshqa rolga o'tkazing");
   await db.role.delete({ where: { id } });
+  await logAction(user, "role.delete", `Rol o'chirildi: ${role.name}`);
   revalidatePath("/settings/roles");
 }
 
@@ -318,6 +362,7 @@ export async function createApiToken(_: NewTokenState, f: FormData): Promise<New
       userId: user.id,
     },
   });
+  await logAction(user, "token.create", `MCP token yaratildi: ${str(f, "name") || "AI yordamchi"}`);
   revalidatePath("/settings/mcp");
   return { token };
 }
@@ -327,6 +372,7 @@ export async function deleteApiToken(id: number) {
   const token = await db.apiToken.findUniqueOrThrow({ where: { id } });
   if (token.userId !== user.id && !can(user, "staff.manage")) throw new ForbiddenError();
   await db.apiToken.delete({ where: { id } });
+  await logAction(user, "token.delete", `MCP token bekor qilindi: ${token.name}`);
   revalidatePath("/settings/mcp");
 }
 
@@ -335,37 +381,134 @@ export async function createPayment(f: FormData) {
   const user = await requirePermission("payments.create");
   const studentId = Number(str(f, "studentId"));
   await assertStudentAccess(user, studentId);
-  await db.payment.create({
+  // Attribute the payment to the student's only active group when none was picked,
+  // so per-group revenue and teacher percentage salaries stay accurate.
+  let groupId = optId(f, "groupId");
+  if (!groupId) {
+    const active = await db.groupStudent.findMany({ where: { studentId, leftAt: null } });
+    if (active.length === 1) groupId = active[0].groupId;
+  }
+  const payment = await db.payment.create({
+    include: { student: true },
     data: {
       studentId,
-      groupId: optId(f, "groupId"),
+      groupId,
       amount: num(f, "amount"),
       method: str(f, "method") || "CASH",
       note: optStr(f, "note"),
       date: day(f, "date") ?? new Date(),
     },
   });
+  await logAction(user, "payment.create", `To'lov: ${payment.student.name} — ${money(payment.amount)}`);
   revalidatePath(`/students/${studentId}`);
   revalidatePath("/payments");
 }
 
 export async function deletePayment(id: number) {
-  await requirePermission("payments.delete");
-  const p = await db.payment.delete({ where: { id } });
+  const user = await requirePermission("payments.delete");
+  const p = await db.payment.delete({ where: { id }, include: { student: true } });
+  await logAction(user, "payment.delete", `To'lov o'chirildi: ${p.student.name} — ${money(p.amount)} (${p.date.toISOString().slice(0, 10)})`);
   revalidatePath(`/students/${p.studentId}`);
   revalidatePath("/payments");
 }
 
 export async function createExpense(f: FormData) {
-  await requirePermission("finance.manage");
-  await db.expense.create({
+  const user = await requirePermission("finance.manage");
+  const e = await db.expense.create({
     data: { title: str(f, "title"), category: str(f, "category") || "OTHER", amount: num(f, "amount"), date: day(f, "date") ?? new Date() },
   });
+  await logAction(user, "expense.create", `Xarajat: ${e.title} — ${money(e.amount)}`);
   revalidatePath("/finance");
 }
 
 export async function deleteExpense(id: number) {
-  await requirePermission("finance.manage");
+  const user = await requirePermission("finance.manage");
+  const e = await db.expense.findUniqueOrThrow({ where: { id }, include: { salaryPayment: true } });
+  if (e.salaryPayment) throw new Error("Ish haqi xarajati Ish haqi bo'limidan o'chiriladi");
   await db.expense.delete({ where: { id } });
+  await logAction(user, "expense.delete", `Xarajat o'chirildi: ${e.title} — ${money(e.amount)}`);
+  revalidatePath("/finance");
+}
+
+// ---------- Grades & exams ----------
+/** Sets (or clears, when score is empty) a student's 1–5 lesson grade for a date. */
+export async function setGrade(groupId: number, studentId: number, isoDay: string, score: number | null) {
+  const user = await requirePermission("grades.manage");
+  await assertGroupAccess(user, groupId);
+  const date = new Date(isoDay);
+  const key = { groupId_studentId_date: { groupId, studentId, date } };
+  if (score === null) {
+    await db.grade.deleteMany({ where: { groupId, studentId, date } });
+  } else {
+    if (!Number.isInteger(score) || score < 1 || score > 5) throw new Error("Baho 1 dan 5 gacha bo'lishi kerak");
+    await db.grade.upsert({ where: key, create: { groupId, studentId, date, score }, update: { score } });
+  }
+  revalidatePath(`/groups/${groupId}`);
+}
+
+export async function createExam(groupId: number, f: FormData) {
+  const user = await requirePermission("grades.manage");
+  await assertGroupAccess(user, groupId);
+  const maxScore = num(f, "maxScore") || 100;
+  const scores = [...f.entries()]
+    .filter(([k, v]) => k.startsWith("score_") && String(v).trim() !== "")
+    .map(([k, v]) => ({ studentId: Number(k.slice(6)), score: Math.min(maxScore, Math.max(0, Number(v))) }));
+  const exam = await db.exam.create({
+    data: {
+      groupId,
+      title: str(f, "title"),
+      date: day(f, "date") ?? new Date(),
+      maxScore,
+      results: { create: scores },
+    },
+    include: { group: true },
+  });
+  await logAction(user, "exam.create", `Imtihon: ${exam.group.name} — ${exam.title} (${scores.length} natija)`);
+  revalidatePath(`/groups/${groupId}`);
+}
+
+export async function deleteExam(id: number) {
+  const user = await requirePermission("grades.manage");
+  const exam = await db.exam.findUniqueOrThrow({ where: { id }, include: { group: true } });
+  await assertGroupAccess(user, exam.groupId);
+  await db.exam.delete({ where: { id } });
+  await logAction(user, "exam.delete", `Imtihon o'chirildi: ${exam.group.name} — ${exam.title}`);
+  revalidatePath(`/groups/${exam.groupId}`);
+}
+
+// ---------- Salaries ----------
+export async function updateSalaryRule(userId: number, f: FormData) {
+  const me = await requirePermission("salaries.manage");
+  const type = str(f, "salaryType");
+  if (!SALARY_TYPES[type]) throw new Error("Noto'g'ri ish haqi turi");
+  const amount = num(f, "salaryAmount");
+  if (type === "PERCENT" && (amount < 0 || amount > 100)) throw new Error("Foiz 0–100 oralig'ida bo'lishi kerak");
+  const u = await db.user.update({ where: { id: userId }, data: { salaryType: type, salaryAmount: type === "NONE" ? 0 : amount } });
+  await logAction(me, "salary.rule", `${u.name} ish haqi qoidasi: ${SALARY_TYPES[type].label}${type === "NONE" ? "" : ` — ${amount} ${SALARY_TYPES[type].unit}`}`);
+  revalidatePath("/salaries");
+}
+
+export async function paySalary(f: FormData) {
+  const me = await requirePermission("salaries.manage");
+  const userId = Number(str(f, "userId"));
+  const month = str(f, "month");
+  const amount = num(f, "amount");
+  if (!/^\d{4}-\d{2}$/.test(month) || amount <= 0) throw new Error("Oy yoki summa noto'g'ri");
+  const u = await db.user.findUniqueOrThrow({ where: { id: userId } });
+  const date = day(f, "date") ?? new Date();
+  const expense = await db.expense.create({ data: { title: `Ish haqi — ${u.name} (${month})`, category: "SALARY", amount, date } });
+  await db.salaryPayment.create({ data: { userId, month, amount, note: optStr(f, "note"), date, expenseId: expense.id } });
+  await logAction(me, "salary.pay", `Ish haqi to'landi: ${u.name} — ${money(amount)} (${month})`);
+  revalidatePath("/salaries");
+  revalidatePath("/finance");
+}
+
+export async function deleteSalaryPayment(id: number) {
+  const me = await requirePermission("salaries.manage");
+  const p = await db.salaryPayment.findUniqueOrThrow({ where: { id }, include: { user: true } });
+  await db.salaryPayment.delete({ where: { id } });
+  if (p.expenseId) await db.expense.delete({ where: { id: p.expenseId } });
+  await logAction(me, "salary.delete", `Ish haqi to'lovi bekor qilindi: ${p.user.name} — ${money(p.amount)} (${p.month})`);
+  revalidatePath("/salaries");
   revalidatePath("/finance");
 }

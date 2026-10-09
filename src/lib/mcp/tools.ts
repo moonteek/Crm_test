@@ -7,6 +7,10 @@ import {
 } from "@/lib/access";
 import { EXPENSE_CATEGORIES, GROUP_DAYS, isoDate, LEAD_STATUSES, PAYMENT_METHODS } from "@/lib/format";
 import type { Permission } from "@/lib/permissions";
+import { logAction } from "@/lib/audit";
+import { getAnalytics, resolvePeriod } from "@/lib/analytics";
+import { currentMonth, salariesForMonth, SALARY_TYPES } from "@/lib/salary";
+import { money } from "@/lib/format";
 
 const json = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
 
@@ -182,6 +186,8 @@ export function buildServer(user: CurrentUser) {
         update: { present },
       });
     }
+    const g = await db.group.findUniqueOrThrow({ where: { id: group_id } });
+    await logAction(user, "group.attendance", `Davomat (AI orqali): ${g.name}, ${date} — ${marks.length - skipped.length} ta belgi`);
     return { saved: marks.length - skipped.length, ...(skipped.length && { not_in_group: skipped }) };
   }, false);
 
@@ -203,6 +209,7 @@ export function buildServer(user: CurrentUser) {
     note: z.string().optional(),
   }, async ({ name, phone, source, course_id, note }) => {
     const lead = await db.lead.create({ data: { name, phone, source, courseId: course_id, note } });
+    await logAction(user, "lead.create", `Yangi lid (AI orqali): ${name}`);
     return { created_lead_id: lead.id };
   }, false);
 
@@ -211,7 +218,8 @@ export function buildServer(user: CurrentUser) {
     status: z.enum(["NEW", "CONTACTED", "TRIAL", "WON", "LOST"]),
     note: z.string().optional(),
   }, async ({ lead_id, status, note }) => {
-    await db.lead.update({ where: { id: lead_id }, data: { status, ...(note !== undefined && { note }) } });
+    const lead = await db.lead.update({ where: { id: lead_id }, data: { status, ...(note !== undefined && { note }) } });
+    await logAction(user, "lead.status", `Lid "${lead.name}" holati (AI orqali): ${status}`);
     return { ok: true };
   }, false);
 
@@ -236,9 +244,16 @@ export function buildServer(user: CurrentUser) {
     note: z.string().optional(),
   }, async ({ student_id, amount, method, group_id, date, note }) => {
     await assertStudentAccess(user, student_id);
+    let groupId = group_id;
+    if (!groupId) {
+      const active = await db.groupStudent.findMany({ where: { studentId: student_id, leftAt: null } });
+      if (active.length === 1) groupId = active[0].groupId;
+    }
     const p = await db.payment.create({
-      data: { studentId: student_id, amount, method, groupId: group_id, note, date: date ? new Date(date) : new Date() },
+      data: { studentId: student_id, amount, method, groupId, note, date: date ? new Date(date) : new Date() },
+      include: { student: true },
     });
+    await logAction(user, "payment.create", `To'lov (AI orqali): ${p.student.name} — ${money(amount)}`);
     return { payment_id: p.id };
   }, false);
 
@@ -291,6 +306,67 @@ export function buildServer(user: CurrentUser) {
   tool("courses.view", "list_courses", "Kurslar ro'yxati va oylik narxlari.", {}, async () => {
     const courses = await db.course.findMany({ orderBy: { name: "asc" } });
     return courses.map((c) => ({ id: c.id, name: c.name, monthly_price: c.price, duration_months: c.durationMon, description: c.description }));
+  });
+
+  tool("analytics.view", "get_analytics", "Butun markaz bo'yicha analitika: tushum, yig'ilish darajasi, o'quvchilar oqimi, davomat, baholar, o'qituvchilar samaradorligi, lidlar va moliya. Oldingi davr bilan solishtirish ham beriladi.", {
+    range: z.string().optional().describe("'3', '6', '12' (oxirgi N oy) yoki yil, masalan '2026'. Standart: 6"),
+    section: z.enum(["overview", "payments", "groups", "attendance", "grades", "teachers", "leads", "finance", "all"]).optional()
+      .describe("Kerakli bo'lim; standart: overview (umumiy ko'rsatkichlar va oylar kesimi)"),
+  }, async ({ range, section = "overview" }) => {
+    const a = await getAnalytics(resolvePeriod(range));
+    const base = { period: a.period };
+    switch (section) {
+      case "overview": return { ...base, current: a.current, previous_period: a.previous, monthly: a.monthly };
+      case "payments": return { ...base, payments: { ...a.payments, debtors: a.payments.debtors.slice(0, 30) } };
+      case "groups": return { ...base, groups: a.groups };
+      case "attendance": return { ...base, attendance: a.attendance, groups: a.groups.map((g) => ({ name: g.name, attendance_rate: g.attendanceRate })) };
+      case "grades": return { ...base, grades: a.grades, groups: a.groups.map((g) => ({ name: g.name, avg_grade: g.avgGrade, exam_avg: g.examAvg })) };
+      case "teachers": return { ...base, teachers: a.teachers };
+      case "leads": return { ...base, leads: a.leads, monthly: a.monthly.map((m) => ({ month: m.key, leads: m.leads, won: m.leadsWon })) };
+      case "finance": return { ...base, finance: a.finance, monthly: a.monthly.map((m) => ({ month: m.key, income: m.income, expense: m.expense, profit: m.profit, charged: m.charged })) };
+      default: return a;
+    }
+  });
+
+  tool("salaries.view", "get_salaries", "Xodimlarning berilgan oy uchun hisoblangan, to'langan va qolgan ish haqi.", {
+    month: z.string().regex(/^\d{4}-\d{2}$/).optional().describe("YYYY-MM, standart: joriy oy"),
+  }, async ({ month }) => {
+    const rows = await salariesForMonth(month ?? currentMonth());
+    return rows.map((r) => ({ ...r, rule: SALARY_TYPES[r.salaryType].label }));
+  });
+
+  tool("grades.manage", "record_grades", "Dars uchun o'quvchilarga 1–5 baho qo'yish.", {
+    group_id: z.number().int(),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    grades: z.array(z.object({ student_id: z.number().int(), score: z.number().int().min(1).max(5) })),
+  }, async ({ group_id, date, grades }) => {
+    await assertGroupAccess(user, group_id);
+    const members = new Set((await db.groupStudent.findMany({ where: { groupId: group_id, leftAt: null } })).map((m) => m.studentId));
+    const day = new Date(date);
+    let saved = 0;
+    for (const g of grades) {
+      if (!members.has(g.student_id)) continue;
+      await db.grade.upsert({
+        where: { groupId_studentId_date: { groupId: group_id, studentId: g.student_id, date: day } },
+        create: { groupId: group_id, studentId: g.student_id, date: day, score: g.score },
+        update: { score: g.score },
+      });
+      saved++;
+    }
+    const grp = await db.group.findUniqueOrThrow({ where: { id: group_id } });
+    await logAction(user, "grade.set", `Baholar (AI orqali): ${grp.name}, ${date} — ${saved} ta`);
+    return { saved, skipped: grades.length - saved };
+  }, false);
+
+  tool("audit.view", "list_activity", "Faoliyat jurnali: xodimlar qachon nima qilgani (to'lovlar, o'chirishlar, rol o'zgarishlari va h.k.).", {
+    limit: z.number().int().min(1).max(200).optional(),
+    search: z.string().optional().describe("Matn bo'yicha qidirish, masalan xodim yoki o'quvchi ismi"),
+  }, async ({ limit, search }) => {
+    const logs = await db.auditLog.findMany({
+      where: search ? { OR: [{ summary: { contains: search } }, { user: { name: { contains: search } } }] } : {},
+      include: { user: true }, orderBy: { createdAt: "desc" }, take: limit ?? 50,
+    });
+    return logs.map((l) => ({ at: l.createdAt.toISOString(), by: l.user?.name ?? null, action: l.action, summary: l.summary }));
   });
 
   return server;

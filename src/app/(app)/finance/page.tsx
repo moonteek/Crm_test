@@ -17,7 +17,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
 
   const [payments, expenses] = await Promise.all([
     db.payment.findMany({ where: { date: { gte: from, lt: to } }, select: { amount: true, date: true } }),
-    db.expense.findMany({ where: { date: { gte: from, lt: to } }, orderBy: { date: "desc" } }),
+    db.expense.findMany({ where: { date: { gte: from, lt: to } }, include: { salaryPayment: true }, orderBy: { date: "desc" } }),
   ]);
 
   const rows = MONTHS.map((name, i) => {
@@ -92,9 +92,9 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
                 <td className="font-semibold text-rose-600">{money(e.amount)}</td>
                 {manage && (
                   <td>
-                    <form action={deleteExpense.bind(null, e.id)}>
+                    {!e.salaryPayment && <form action={deleteExpense.bind(null, e.id)}>
                       <button className="text-slate-400 hover:text-rose-600" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
-                    </form>
+                    </form>}
                   </td>
                 )}
               </tr>

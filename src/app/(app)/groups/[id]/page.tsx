@@ -9,21 +9,24 @@ import { date, GROUP_DAYS, isoDate, lessonDates, money, MONTHS } from "@/lib/for
 import { Modal } from "@/components/Modal";
 import { GroupFields } from "@/components/GroupFields";
 import { BalanceBadge, Empty, Field, SubmitRow } from "@/components/ui";
-import { addStudentToGroup, deleteGroup, removeStudentFromGroup, toggleAttendance, updateGroup } from "../../actions";
+import { GradeCell } from "@/components/GradeCell";
+import { addStudentToGroup, createExam, deleteExam, deleteGroup, removeStudentFromGroup, toggleAttendance, updateGroup } from "../../actions";
 
 export default async function GroupPage({
   params, searchParams,
-}: { params: Promise<{ id: string }>; searchParams: Promise<{ m?: string }> }) {
+}: { params: Promise<{ id: string }>; searchParams: Promise<{ m?: string; tab?: string }> }) {
   const user = await requirePage("groups.view");
   const allow = {
     edit: can(user, "groups.manage"),
     remove: can(user, "groups.delete"),
     students: can(user, "students.manage"),
     attendance: can(user, "attendance.mark"),
+    grades: can(user, "grades.manage"),
     balance: canSeeBalances(user),
   };
   const id = Number((await params).id);
-  const { m } = await searchParams;
+  const { m, tab: tabParam } = await searchParams;
+  const tab = TABS.some((t) => t.key === tabParam) ? tabParam! : "attendance";
   const now = new Date();
   const [year, month] = m ? m.split("-").map(Number).map((v, i) => (i === 1 ? v - 1 : v)) : [now.getFullYear(), now.getMonth()];
 
@@ -41,14 +44,18 @@ export default async function GroupPage({
   if (!group) notFound();
 
   const days = lessonDates(group.days, year, month);
-  const [attendance, courses, teachers, rooms, others] = await Promise.all([
-    db.attendance.findMany({ where: { groupId: id, date: { gte: days[0] ?? new Date(), lte: days.at(-1) ?? new Date() } } }),
+  const range = { gte: days[0] ?? new Date(), lte: days.at(-1) ?? new Date() };
+  const [attendance, grades, exams, courses, teachers, rooms, others] = await Promise.all([
+    db.attendance.findMany({ where: { groupId: id, date: range } }),
+    db.grade.findMany({ where: { groupId: id, date: range } }),
+    db.exam.findMany({ where: { groupId: id }, include: { results: true }, orderBy: { date: "asc" } }),
     db.course.findMany({ orderBy: { name: "asc" } }),
     db.user.findMany({ where: { isTeacher: true, active: true }, orderBy: { name: "asc" } }),
     db.room.findMany({ orderBy: { name: "asc" } }),
     db.student.findMany({ where: { groups: { none: { groupId: id, leftAt: null } } }, orderBy: { name: "asc" } }),
   ]);
   const mark = new Map(attendance.map((a) => [`${a.studentId}:${isoDate(a.date)}`, a.present]));
+  const gradeMap = new Map(grades.map((g) => [`${g.studentId}:${isoDate(g.date)}`, g.score]));
   const prev = new Date(year, month - 1, 1);
   const next = new Date(year, month + 1, 1);
   const ym = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}`;
@@ -89,13 +96,47 @@ export default async function GroupPage({
       </div>
 
       <div className="card mt-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-          <h2 className="font-semibold">O&apos;quvchilar va davomat ({group.students.length})</h2>
-          <div className="flex items-center gap-2">
-            <Link href={`/groups/${id}?m=${ym(prev)}`} className="btn-secondary px-2"><ChevronLeft className="h-4 w-4" /></Link>
-            <span className="w-32 text-center text-sm font-medium">{MONTHS[month]} {year}</span>
-            <Link href={`/groups/${id}?m=${ym(next)}`} className="btn-secondary px-2"><ChevronRight className="h-4 w-4" /></Link>
-            {allow.students && <Modal title="O'quvchi qo'shish" trigger={<><Plus className="h-4 w-4" /> Qo&apos;shish</>}>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 pt-3">
+          <div className="flex gap-1">
+            {TABS.map((t) => (
+              <Link
+                key={t.key}
+                href={`/groups/${id}?tab=${t.key}${m ? `&m=${m}` : ""}`}
+                className={`border-b-2 px-3 py-2.5 text-sm font-medium ${tab === t.key ? "border-brand-600 text-brand-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+              >
+                {t.label}
+              </Link>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 pb-2">
+            {tab !== "exams" && (
+              <>
+                <Link href={`/groups/${id}?tab=${tab}&m=${ym(prev)}`} className="btn-secondary px-2"><ChevronLeft className="h-4 w-4" /></Link>
+                <span className="w-32 text-center text-sm font-medium">{MONTHS[month]} {year}</span>
+                <Link href={`/groups/${id}?tab=${tab}&m=${ym(next)}`} className="btn-secondary px-2"><ChevronRight className="h-4 w-4" /></Link>
+              </>
+            )}
+            {tab === "exams" && allow.grades && group.students.length > 0 && (
+              <Modal title="Imtihon natijalari" trigger={<><Plus className="h-4 w-4" /> Imtihon</>}>
+                <form action={createExam.bind(null, id)} className="space-y-3">
+                  <Field label="Imtihon nomi"><input name="title" className="input" required placeholder="1-modul yakuniy imtihoni" /></Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Sana"><input name="date" type="date" className="input" defaultValue={isoDate(new Date())} /></Field>
+                    <Field label="Maksimal ball"><input name="maxScore" type="number" min={1} className="input" defaultValue={100} /></Field>
+                  </div>
+                  <div className="max-h-[45vh] space-y-2 overflow-y-auto rounded-lg border border-slate-200 p-3">
+                    {group.students.map(({ student }) => (
+                      <label key={student.id} className="flex items-center justify-between gap-3 text-sm">
+                        <span>{student.name}</span>
+                        <input name={`score_${student.id}`} type="number" min={0} className="input w-24" placeholder="ball" />
+                      </label>
+                    ))}
+                  </div>
+                  <SubmitRow />
+                </form>
+              </Modal>
+            )}
+            {allow.students && <Modal title="O'quvchi qo'shish" trigger={<><Plus className="h-4 w-4" /> O&apos;quvchi</>}>
               <form action={addStudentToGroup} className="space-y-3">
                 <input type="hidden" name="groupId" value={id} />
                 <Field label="O'quvchi">
@@ -109,64 +150,139 @@ export default async function GroupPage({
             </Modal>}
           </div>
         </div>
-        {allow.attendance && <p className="px-5 pb-3 text-xs text-slate-500">Katakchani bosing: <span className="text-emerald-600">✓ keldi</span> → <span className="text-rose-600">✗ kelmadi</span> → bo&apos;sh</p>}
-        <div className="overflow-x-auto">
-          <table className="table">
-            <thead>
-              <tr>
-                <th className="sticky left-0 z-10 min-w-48 bg-slate-50">O&apos;quvchi</th>
-                {allow.balance && <th>Balans</th>}
-                {days.map((d) => (
-                  <th key={d.toISOString()} className={`px-1 text-center ${isoDate(d) === today ? "text-brand-600" : ""}`}>{d.getUTCDate()}</th>
-                ))}
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {group.students.map(({ student }) => {
-                const b = balance(student.groups, student.payments);
-                return (
-                  <tr key={student.id}>
-                    <td className="sticky left-0 z-10 bg-white">
-                      <Link href={`/students/${student.id}`} className="font-medium hover:text-brand-600">{student.name}</Link>
-                      <p className="text-xs text-slate-500">{student.phone}</p>
-                    </td>
-                    {allow.balance && <td><BalanceBadge value={b} label={money(b)} /></td>}
-                    {days.map((d) => {
-                      const key = isoDate(d);
-                      const v = mark.get(`${student.id}:${key}`);
-                      return (
-                        <td key={key} className="px-1 text-center">
-                          <form action={toggleAttendance.bind(null, id, student.id, key)}>
-                            <button
-                              disabled={!allow.attendance}
-                              className={`h-7 w-7 rounded-md border text-sm font-bold ${
-                                v === true ? "border-emerald-200 bg-emerald-100 text-emerald-700"
-                                : v === false ? "border-rose-200 bg-rose-100 text-rose-700"
-                                : "border-slate-200 bg-white text-slate-300 hover:border-brand-500"
-                              }`}
-                            >
-                              {v === true ? "✓" : v === false ? "✗" : "·"}
-                            </button>
+
+        {tab === "attendance" && allow.attendance && <p className="px-5 pt-3 text-xs text-slate-500">Katakchani bosing: <span className="text-emerald-600">✓ keldi</span> → <span className="text-rose-600">✗ kelmadi</span> → bo&apos;sh</p>}
+        {tab === "grades" && <p className="px-5 pt-3 text-xs text-slate-500">Har bir dars uchun 1–5 baho. {allow.grades ? "Katakchani bosib baho tanlang." : ""}</p>}
+
+        {tab !== "exams" ? (
+          <div className="overflow-x-auto pt-2">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th className="sticky left-0 z-10 min-w-48 bg-slate-50">O&apos;quvchi</th>
+                  {tab === "attendance" && allow.balance && <th>Balans</th>}
+                  <th className="text-center">{tab === "attendance" ? "Davomat" : "O'rtacha"}</th>
+                  {days.map((d) => (
+                    <th key={d.toISOString()} className={`px-1 text-center ${isoDate(d) === today ? "text-brand-600" : ""}`}>{d.getUTCDate()}</th>
+                  ))}
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {group.students.map(({ student }) => {
+                  const b = balance(student.groups, student.payments);
+                  const marks = days.map((d) => mark.get(`${student.id}:${isoDate(d)}`)).filter((v) => v !== undefined);
+                  const scores = days.map((d) => gradeMap.get(`${student.id}:${isoDate(d)}`)).filter((v): v is number => v !== undefined);
+                  return (
+                    <tr key={student.id}>
+                      <td className="sticky left-0 z-10 bg-white">
+                        <Link href={`/students/${student.id}`} className="font-medium hover:text-brand-600">{student.name}</Link>
+                        <p className="text-xs text-slate-500">{student.phone}</p>
+                      </td>
+                      {tab === "attendance" && allow.balance && <td><BalanceBadge value={b} label={money(b)} /></td>}
+                      <td className="text-center font-semibold">
+                        {tab === "attendance"
+                          ? (marks.length ? `${Math.round((marks.filter(Boolean).length / marks.length) * 100)}%` : "—")
+                          : (scores.length ? (scores.reduce((x, y) => x + y, 0) / scores.length).toFixed(1) : "—")}
+                      </td>
+                      {days.map((d) => {
+                        const key = isoDate(d);
+                        if (tab === "grades") {
+                          return (
+                            <td key={key} className="px-1 text-center">
+                              <GradeCell groupId={id} studentId={student.id} day={key} value={gradeMap.get(`${student.id}:${key}`)} editable={allow.grades} />
+                            </td>
+                          );
+                        }
+                        const v = mark.get(`${student.id}:${key}`);
+                        return (
+                          <td key={key} className="px-1 text-center">
+                            <form action={toggleAttendance.bind(null, id, student.id, key)}>
+                              <button
+                                disabled={!allow.attendance}
+                                className={`h-7 w-7 rounded-md border text-sm font-bold ${
+                                  v === true ? "border-emerald-200 bg-emerald-100 text-emerald-700"
+                                  : v === false ? "border-rose-200 bg-rose-100 text-rose-700"
+                                  : "border-slate-200 bg-white text-slate-300 hover:border-brand-500"
+                                }`}
+                              >
+                                {v === true ? "✓" : v === false ? "✗" : "·"}
+                              </button>
+                            </form>
+                          </td>
+                        );
+                      })}
+                      <td>
+                        {allow.students && <form action={removeStudentFromGroup.bind(null, id, student.id)}>
+                          <button className="text-xs text-rose-600 hover:underline">Chiqarish</button>
+                        </form>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {group.students.length === 0 && <Empty text="Guruhda o'quvchi yo'q" />}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th className="sticky left-0 z-10 min-w-48 bg-slate-50">O&apos;quvchi</th>
+                  <th className="text-center">O&apos;rtacha</th>
+                  {exams.map((e) => (
+                    <th key={e.id} className="text-center normal-case">
+                      <div className="flex items-center justify-center gap-1">
+                        <span title={e.title} className="max-w-32 truncate">{e.title}</span>
+                        {allow.grades && (
+                          <form action={deleteExam.bind(null, e.id)}>
+                            <button className="text-slate-400 hover:text-rose-600" aria-label="Imtihonni o'chirish"><Trash2 className="h-3.5 w-3.5" /></button>
                           </form>
-                        </td>
-                      );
-                    })}
-                    <td>
-                      {allow.students && <form action={removeStudentFromGroup.bind(null, id, student.id)}>
-                        <button className="text-xs text-rose-600 hover:underline">Chiqarish</button>
-                      </form>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {group.students.length === 0 && <Empty text="Guruhda o'quvchi yo'q" />}
-        </div>
+                        )}
+                      </div>
+                      <div className="font-normal text-slate-400">{date(e.date)} · {e.maxScore} ball</div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {group.students.map(({ student }) => {
+                  const pcts = exams.flatMap((e) => {
+                    const r = e.results.find((x) => x.studentId === student.id);
+                    return r ? [(r.score / e.maxScore) * 100] : [];
+                  });
+                  const avg = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : null;
+                  return (
+                    <tr key={student.id}>
+                      <td className="sticky left-0 z-10 bg-white font-medium">{student.name}</td>
+                      <td className="text-center font-semibold">{avg === null ? "—" : <ScoreBadge pct={avg} />}</td>
+                      {exams.map((e) => {
+                        const r = e.results.find((x) => x.studentId === student.id);
+                        return <td key={e.id} className="text-center">{r ? <>{r.score} <span className="text-xs text-slate-400">/ {e.maxScore}</span></> : <span className="text-slate-300">—</span>}</td>;
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {exams.length === 0 && <Empty text="Hali imtihon o'tkazilmagan" />}
+          </div>
+        )}
       </div>
     </>
   );
+}
+
+const TABS = [
+  { key: "attendance", label: "Davomat" },
+  { key: "grades", label: "Baholar" },
+  { key: "exams", label: "Imtihonlar" },
+];
+
+function ScoreBadge({ pct }: { pct: number }) {
+  const cls = pct >= 85 ? "bg-emerald-100 text-emerald-700" : pct >= 60 ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700";
+  return <span className={`badge ${cls}`}>{pct}%</span>;
 }
 
 function Info({ k, v }: { k: string; v: string }) {

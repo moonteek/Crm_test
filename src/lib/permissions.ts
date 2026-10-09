@@ -1,7 +1,11 @@
 export const PERMISSION_GROUPS: { title: string; items: { key: string; label: string }[] }[] = [
   {
     title: "Umumiy",
-    items: [{ key: "dashboard.view", label: "Bosh sahifani ko'rish" }],
+    items: [
+      { key: "dashboard.view", label: "Bosh sahifani ko'rish" },
+      { key: "analytics.view", label: "Analitika va hisobotlarni ko'rish (butun markaz bo'yicha)" },
+      { key: "audit.view", label: "Faoliyat jurnalini ko'rish (kim nima qildi)" },
+    ],
   },
   {
     title: "Lidlar",
@@ -26,6 +30,7 @@ export const PERMISSION_GROUPS: { title: string; items: { key: string; label: st
       { key: "groups.manage", label: "Guruh ochish va tahrirlash" },
       { key: "groups.delete", label: "Guruhni o'chirish" },
       { key: "attendance.mark", label: "Davomat qilish" },
+      { key: "grades.manage", label: "Baho qo'yish va imtihon natijalarini kiritish" },
     ],
   },
   {
@@ -37,6 +42,8 @@ export const PERMISSION_GROUPS: { title: string; items: { key: string; label: st
       { key: "debtors.view", label: "Qarzdorlarni ko'rish" },
       { key: "finance.view", label: "Moliya hisobotlarini ko'rish (tushum, xarajat, foyda)" },
       { key: "finance.manage", label: "Xarajat qo'shish va o'chirish" },
+      { key: "salaries.view", label: "Ish haqlarini ko'rish" },
+      { key: "salaries.manage", label: "Ish haqi qoidalarini belgilash va ish haqi to'lash" },
     ],
   },
   {
@@ -73,7 +80,7 @@ export const DEFAULT_ROLES: { name: string; isSystem?: boolean; permissions: str
     name: "Menejer",
     permissions: [
       "dashboard.view", "leads.view", "leads.manage", "students.view", "students.manage",
-      "groups.view", "groups.all", "groups.manage", "attendance.mark",
+      "groups.view", "groups.all", "groups.manage", "attendance.mark", "grades.manage",
       "payments.view", "payments.create", "debtors.view",
       "teachers.view", "courses.view", "rooms.manage", "mcp.use",
     ],
@@ -84,6 +91,6 @@ export const DEFAULT_ROLES: { name: string; isSystem?: boolean; permissions: str
   },
   {
     name: "O'qituvchi",
-    permissions: ["groups.view", "students.view", "attendance.mark"],
+    permissions: ["groups.view", "students.view", "attendance.mark", "grades.manage"],
   },
 ];

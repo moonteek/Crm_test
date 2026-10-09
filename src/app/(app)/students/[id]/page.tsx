@@ -21,6 +21,8 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
         groups: { include: { group: { include: { course: true, teacher: true } } }, orderBy: { joinedAt: "desc" } },
         payments: { include: { group: true }, orderBy: { date: "desc" } },
         attendance: true,
+        grades: { select: { score: true } },
+        examResults: { include: { exam: true } },
       },
     }),
     db.group.findMany({ where: { status: "ACTIVE", ...groupScope(user) }, include: { course: true }, orderBy: { name: "asc" } }),
@@ -29,6 +31,10 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
 
   const b = balance(student.groups, student.payments);
   const present = student.attendance.filter((a) => a.present).length;
+  const avgGrade = student.grades.length ? student.grades.reduce((s, g) => s + g.score, 0) / student.grades.length : null;
+  const examPct = student.examResults.length
+    ? Math.round(student.examResults.reduce((s, r) => s + (r.score / r.exam.maxScore) * 100, 0) / student.examResults.length)
+    : null;
   const activeGroups = student.groups.filter((g) => !g.leftAt).map((g) => g.group);
   const allow = {
     manage: can(user, "students.manage"),
@@ -60,6 +66,8 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
               <Row k="Tug'ilgan sana">{date(student.birthDate)}</Row>
               <Row k="Qo'shilgan">{date(student.createdAt)}</Row>
               <Row k="Davomat">{student.attendance.length ? `${Math.round((present / student.attendance.length) * 100)}% (${present}/${student.attendance.length})` : "—"}</Row>
+              <Row k="O'rtacha baho">{avgGrade === null ? "—" : `${avgGrade.toFixed(1)} / 5 (${student.grades.length} ta)`}</Row>
+              <Row k="Imtihonlar">{examPct === null ? "—" : `${examPct}% (${student.examResults.length} ta)`}</Row>
               {student.note && <Row k="Izoh">{student.note}</Row>}
             </dl>
             <div className="mt-5 flex flex-wrap gap-2">

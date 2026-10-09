@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { SESSION_COOKIE, signSession } from "@/lib/session";
+import { logAction } from "@/lib/audit";
 
 export type LoginState = { error: string; phone: string } | null;
 
@@ -18,6 +19,7 @@ export async function login(_: LoginState, form: FormData): Promise<LoginState> 
   if (!user.active) {
     return { error: "Hisobingiz bloklangan. Administratorga murojaat qiling", phone };
   }
+  await logAction(user, "auth.login", `${user.name} tizimga kirdi`);
   const token = await signSession({ userId: user.id });
   (await cookies()).set(SESSION_COOKIE, token, {
     httpOnly: true,

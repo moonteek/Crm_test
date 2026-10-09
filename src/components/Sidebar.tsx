@@ -5,12 +5,13 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   BookOpen, DoorOpen, LayoutDashboard, LogOut, Menu, Settings, UserPlus,
-  Users, UsersRound, Wallet, X, GraduationCap, Receipt, AlertCircle,
+  Users, UsersRound, Wallet, X, GraduationCap, Receipt, AlertCircle, BarChart3, Banknote, History,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
 
 export const NAV = [
   { href: "/", label: "Bosh sahifa", icon: LayoutDashboard, perm: "dashboard.view" },
+  { href: "/analytics", label: "Analitika", icon: BarChart3, perm: "analytics.view" },
   { href: "/leads", label: "Lidlar", icon: UserPlus, perm: "leads.view" },
   { href: "/students", label: "O'quvchilar", icon: Users, perm: "students.view" },
   { href: "/groups", label: "Guruhlar", icon: UsersRound, perm: "groups.view" },
@@ -19,7 +20,9 @@ export const NAV = [
   { href: "/payments", label: "To'lovlar", icon: Wallet, perm: "payments.view" },
   { href: "/debtors", label: "Qarzdorlar", icon: AlertCircle, perm: "debtors.view" },
   { href: "/finance", label: "Moliya", icon: Receipt, perm: "finance.view" },
+  { href: "/salaries", label: "Ish haqi", icon: Banknote, perm: "salaries.view" },
   { href: "/rooms", label: "Xonalar", icon: DoorOpen, perm: "rooms.manage" },
+  { href: "/activity", label: "Faoliyat jurnali", icon: History, perm: "audit.view" },
   { href: "/settings", label: "Sozlamalar", icon: Settings, perm: ["staff.manage", "mcp.use"] },
 ];
 

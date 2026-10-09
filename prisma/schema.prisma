@@ -27,9 +27,14 @@ model User {
   role      Role       @relation(fields: [roleId], references: [id])
   isTeacher Boolean    @default(false)
   active    Boolean    @default(true)
+  // salary rule: NONE | FIXED (so'm per month) | PERCENT (% of payments collected from own groups) | PER_STUDENT (so'm per active student)
+  salaryType   String   @default("NONE")
+  salaryAmount Int      @default(0)
   createdAt DateTime   @default(now())
   groups    Group[]
   tokens    ApiToken[]
+  salaryPayments SalaryPayment[]
+  logs      AuditLog[]
 }
 
 // Personal access tokens used by MCP clients. Only a SHA-256 hash is stored.
@@ -80,6 +85,8 @@ model Group {
   students  GroupStudent[]
   attendance Attendance[]
   payments  Payment[]
+  grades    Grade[]
+  exams     Exam[]
 }
 
 model Student {
@@ -93,6 +100,8 @@ model Student {
   groups    GroupStudent[]
   attendance Attendance[]
   payments  Payment[]
+  grades    Grade[]
+  examResults ExamResult[]
 }
 
 model GroupStudent {
@@ -134,9 +143,68 @@ model Payment {
 model Expense {
   id       Int      @id @default(autoincrement())
   title    String
-  category String   @default("OTHER") // SALARY | RENT | MARKETING | OTHER
+  category String   @default("OTHER") // SALARY | RENT | MARKETING | UTILITIES | OTHER
   amount   Int
   date     DateTime @default(now())
+  salaryPayment SalaryPayment?
+}
+
+// Lesson grade on a 5-point scale.
+model Grade {
+  id        Int      @id @default(autoincrement())
+  groupId   Int
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  studentId Int
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date      DateTime
+  score     Int
+
+  @@unique([groupId, studentId, date])
+}
+
+model Exam {
+  id       Int          @id @default(autoincrement())
+  groupId  Int
+  group    Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  title    String
+  date     DateTime
+  maxScore Int          @default(100)
+  results  ExamResult[]
+}
+
+model ExamResult {
+  id        Int     @id @default(autoincrement())
+  examId    Int
+  exam      Exam    @relation(fields: [examId], references: [id], onDelete: Cascade)
+  studentId Int
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  score     Int
+
+  @@unique([examId, studentId])
+}
+
+// A salary payout. Each one also records a SALARY expense so finance totals stay complete.
+model SalaryPayment {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month     String // YYYY-MM the payout is for
+  amount    Int
+  note      String?
+  date      DateTime @default(now())
+  expenseId Int?     @unique
+  expense   Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String // e.g. payment.create
+  summary   String // human readable, Uzbek
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 // status: NEW | CONTACTED | TRIAL | WON | LOST
