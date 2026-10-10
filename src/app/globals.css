@@ -30,6 +30,9 @@
   --hero: #161817;
   --hero-ink: #ffbe00;
   --hero-label: #9a968e;
+  --panel: #161817;
+  --panel-ink: #f4f2ee;
+  --panel-muted: #9a968e;
   color-scheme: light;
 }
 
@@ -57,6 +60,9 @@
   --hero: #ffbe00;
   --hero-ink: #161817;
   --hero-label: #5c4700;
+  --panel: #0e0e0e;
+  --panel-ink: #edebe6;
+  --panel-muted: #8a8780;
   color-scheme: dark;
 }
 
@@ -85,6 +91,9 @@
     --hero: #ffbe00;
     --hero-ink: #161817;
     --hero-label: #5c4700;
+    --panel: #0e0e0e;
+    --panel-ink: #edebe6;
+    --panel-muted: #8a8780;
     color-scheme: dark;
   }
 }
@@ -114,6 +123,9 @@
   --color-hero: var(--hero);
   --color-hero-ink: var(--hero-ink);
   --color-hero-label: var(--hero-label);
+  --color-panel: var(--panel);
+  --color-panel-ink: var(--panel-ink);
+  --color-panel-muted: var(--panel-muted);
   --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
   --font-dot: var(--font-doto), ui-monospace, monospace;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
