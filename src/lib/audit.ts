@@ -26,4 +26,5 @@ export const AUDIT_AREAS: Record<string, string> = {
   auth: "Kirish",
   sales: "Sotuv KPI",
   shop: "Do'kon",
+  reason: "Sabablar",
 };

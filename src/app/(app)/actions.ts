@@ -851,3 +851,31 @@ export async function deleteSale(id: number) {
   await logAction(user, "shop.sale_delete", `Sotuv bekor qilindi: ${sale.student?.name ?? sale.buyerName ?? "mijoz"} — ${money(sale.total)}`);
   revalidatePath("/shop");
 }
+
+// ---------- Reasons (why a student froze or left) ----------
+const reasonSchema = z.object({ name: v.text("Sabab", 80) });
+
+export async function createReason(f: FormData) {
+  const user = await requirePermission("staff.manage");
+  const { name } = parseForm(reasonSchema, f);
+  await db.reason.create({ data: { name } });
+  await logAction(user, "reason.create", `Yangi sabab: ${name}`);
+  revalidatePath("/settings/reasons");
+}
+
+export async function renameReason(id: number, f: FormData) {
+  const user = await requirePermission("staff.manage");
+  const { name } = parseForm(reasonSchema, f);
+  const before = await db.reason.update({ where: { id }, data: { name } });
+  await logAction(user, "reason.rename", `Sabab nomi o'zgardi: ${before.name}`);
+  revalidatePath("/settings/reasons");
+}
+
+/** Hidden reasons stay on old records but are no longer offered in dialogs. */
+export async function toggleReason(id: number) {
+  const user = await requirePermission("staff.manage");
+  const r = await db.reason.findUniqueOrThrow({ where: { id } });
+  await db.reason.update({ where: { id }, data: { active: !r.active } });
+  await logAction(user, "reason.toggle", `Sabab ${r.active ? "yashirildi" : "qayta yoqildi"}: ${r.name}`);
+  revalidatePath("/settings/reasons");
+}
