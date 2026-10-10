@@ -110,7 +110,7 @@ export default async function GroupPage({
               </Link>
             ))}
           </div>
-          <div className="flex items-center gap-2 pb-2">
+          <div className="flex flex-wrap items-center gap-2 pb-2">
             {tab !== "exams" && (
               <>
                 <Link href={`/groups/${id}?tab=${tab}&m=${ym(prev)}`} className="btn-secondary px-2"><ChevronLeft className="h-4 w-4" /></Link>
