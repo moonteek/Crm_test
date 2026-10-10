@@ -47,8 +47,8 @@ Two brand colours plus neutrals. Amber is the only chromatic accent in the UI ch
 | Surface (cards, sidebar) | `#FFFFFF` | `#0E0E0E` |
 | Raised surface (rows, inputs) | `#FFFFFF` | `#141414` |
 | Ink (primary text) | `#161817` | `#EDEBE6` |
-| Muted text | `#77736B` | `#8A8780` |
-| Faint text / labels | `#8A867E` | `#77736B` |
+| Muted text | `#615D56` | `#9D9A92` |
+| Faint text / labels | `#6D6961` | `#8A8780` |
 | Hairline border | `#E4E1DA` | `#262626` |
 | Accent (amber) | `#FFBE00` | `#FFBE00` |
 | Text on accent | `#161817` | `#161817` |
