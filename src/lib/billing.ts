@@ -134,6 +134,22 @@ export function billableLessonsIn(m: BillableMembership, year: number, month: nu
   return chargeLines(m, now).find((l) => l.year === year && l.month === month)?.billable ?? 0;
 }
 
+/**
+ * The lessons charged in one month (0-based) with what each is worth; the values add up exactly to the month's
+ * charge (whole so'm, any remainder going to the earliest lessons). Teacher pay is built on these.
+ */
+export function lessonValues(m: BillableMembership, year: number, month: number, now = new Date()): { day: Date; value: number }[] {
+  const nowKey = monthKey(now.getUTCFullYear(), now.getUTCMonth());
+  if (monthKey(year, month) > nowKey) return [];
+  const events = sorted(m);
+  if (!events.length) return [];
+  const { days, amount } = lineFor(m, events, year, month);
+  if (!days.length) return [];
+  const base = Math.floor(amount / days.length);
+  const extra = amount - base * days.length;
+  return days.map((day, i) => ({ day, value: base + (i < extra ? 1 : 0) }));
+}
+
 /** How many of these memberships were charged at least one lesson in the month — per-student salaries use it. */
 export function billedStudentCount(memberships: BillableMembership[], year: number, month: number, now = new Date()) {
   return memberships.filter((m) => billableLessonsIn(m, year, month, now) > 0).length;
