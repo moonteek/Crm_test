@@ -13,17 +13,17 @@ export function Kpi({
     const good = diff === 0 ? null : (diff > 0) === upIsGood;
     const Icon = diff > 0 ? ArrowUpRight : diff < 0 ? ArrowDownRight : Minus;
     delta = shown && (
-      <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${good === null ? "text-slate-500" : good ? "text-emerald-700" : "text-rose-700"}`}>
+      <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${good === null ? "text-muted" : good ? "text-success" : "text-danger"}`}>
         <Icon className="h-3.5 w-3.5" />{shown}
-        <span className="ml-1 font-normal text-slate-400">oldingi davrga nisbatan</span>
+        <span className="ml-1 font-normal text-faint">oldingi davrga nisbatan</span>
       </span>
     );
   }
   return (
     <div className="card p-4">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-slate-900">{fmt(value, format)}</p>
-      <div className="mt-1 min-h-4">{delta ?? (hint && <span className="text-xs text-slate-400">{hint}</span>)}</div>
+      <p className="label-mono">{label}</p>
+      <p className={`mt-2 truncate text-ink ${format === "money" ? "text-2xl font-semibold tracking-tight" : "font-dot text-[30px] leading-none font-black"}`}>{fmt(value, format)}</p>
+      <div className="mt-2 min-h-4">{delta ?? (hint && <span className="text-xs text-faint">{hint}</span>)}</div>
     </div>
   );
 }

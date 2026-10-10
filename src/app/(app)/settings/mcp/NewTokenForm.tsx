@@ -10,7 +10,7 @@ export function NewTokenForm({ endpoint }: { endpoint: string }) {
   if (state?.token) {
     return (
       <div className="space-y-4">
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="rounded-lg border border-warning/40 bg-warning-tint p-3 text-sm text-warning">
           Tokenni hozir nusxalab oling — u boshqa ko&apos;rsatilmaydi. Uni parol kabi saqlang.
         </div>
         <CopyBox label="Token" value={state.token} />
@@ -42,7 +42,7 @@ export function CopyBox({ label, value }: { label: string; value: string }) {
     <div>
       <span className="label">{label}</span>
       <div className="flex items-stretch gap-2">
-        <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">{value}</code>
+        <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-lg border border-line bg-ink/[.03] px-3 py-2 text-xs">{value}</code>
         <button
           type="button"
           className="btn-secondary px-3"
@@ -53,7 +53,7 @@ export function CopyBox({ label, value }: { label: string; value: string }) {
           }}
           aria-label="Nusxalash"
         >
-          {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+          {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
         </button>
       </div>
     </div>

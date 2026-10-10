@@ -12,7 +12,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
   ];
   return (
     <>
-      <h1 className="mb-4 text-2xl font-bold text-slate-900">Sozlamalar</h1>
+      <h1 className="mb-4 text-2xl font-semibold tracking-tight text-ink">Sozlamalar</h1>
       <SettingsTabs tabs={tabs} />
       {children}
     </>

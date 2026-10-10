@@ -48,7 +48,7 @@ export function ColumnChart({ labels, series, format }: { labels: string[]; seri
               const cx = PAD.left + band * i + band / 2;
               return (
                 <g key={i} onMouseEnter={() => setHover(i)}>
-                  <rect x={PAD.left + band * i} y={PAD.top} width={band} height={innerH} fill={hover === i ? "#f1f5f9" : "transparent"} />
+                  <rect x={PAD.left + band * i} y={PAD.top} width={band} height={innerH} fill={hover === i ? "var(--line)" : "transparent"} />
                   {series.map((s, si) => (
                     <path key={s.name} d={bar(cx - groupW / 2 + si * (barW + 2), s.values[i])} fill={SERIES[si]} />
                   ))}
@@ -60,14 +60,14 @@ export function ColumnChart({ labels, series, format }: { labels: string[]; seri
         )}
         {hover !== null && width > 0 && (
           <div
-            className="pointer-events-none absolute top-2 z-10 min-w-36 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg"
+            className="pointer-events-none absolute top-2 z-10 min-w-36 rounded-lg border border-line bg-surface px-3 py-2 text-xs shadow-lg"
             style={hover >= labels.length / 2 ? { right: width - (PAD.left + band * hover) + 4 } : { left: PAD.left + band * (hover + 1) + 4 }}
           >
-            <p className="mb-1 font-semibold text-slate-900">{labels[hover]}</p>
+            <p className="mb-1 font-semibold text-ink">{labels[hover]}</p>
             {series.map((s, si) => (
-              <p key={s.name} className="flex items-center justify-between gap-3 text-slate-600">
-                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm" style={{ background: SERIES[si] }} />{s.name}</span>
-                <span className="font-semibold text-slate-900 tabular-nums">{fmt(s.values[hover], format)}</span>
+              <p key={s.name} className="flex items-center justify-between gap-3 text-muted">
+                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: SERIES[si] }} />{s.name}</span>
+                <span className="font-semibold text-ink tabular-nums">{fmt(s.values[hover], format)}</span>
               </p>
             ))}
           </div>

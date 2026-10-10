@@ -72,7 +72,7 @@ export function LineChart({
               <g>
                 <line x1={x(hover)} x2={x(hover)} y1={PAD.top} y2={PAD.top + innerH} stroke={AXIS} strokeWidth={1} />
                 {series.map((s, si) => s.values[hover] !== null && (
-                  <circle key={s.name} cx={x(hover)} cy={y(s.values[hover]!)} r={4} fill={SERIES[si]} stroke="#fff" strokeWidth={2} />
+                  <circle key={s.name} cx={x(hover)} cy={y(s.values[hover]!)} r={4} fill={SERIES[si]} stroke="var(--surface)" strokeWidth={2} />
                 ))}
               </g>
             )}
@@ -80,14 +80,14 @@ export function LineChart({
         )}
         {hover !== null && width > 0 && (
           <div
-            className="pointer-events-none absolute top-2 z-10 min-w-36 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg"
+            className="pointer-events-none absolute top-2 z-10 min-w-36 rounded-lg border border-line bg-surface px-3 py-2 text-xs shadow-lg"
             style={x(hover) > width / 2 ? { right: width - x(hover) + 12 } : { left: x(hover) + 12 }}
           >
-            <p className="mb-1 font-semibold text-slate-900">{labels[hover]}</p>
+            <p className="mb-1 font-semibold text-ink">{labels[hover]}</p>
             {series.map((s, si) => (
-              <p key={s.name} className="flex items-center justify-between gap-3 text-slate-600">
+              <p key={s.name} className="flex items-center justify-between gap-3 text-muted">
                 <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: SERIES[si] }} />{s.name}</span>
-                <span className="font-semibold text-slate-900 tabular-nums">{fmt(s.values[hover], format)}</span>
+                <span className="font-semibold text-ink tabular-nums">{fmt(s.values[hover], format)}</span>
               </p>
             ))}
           </div>

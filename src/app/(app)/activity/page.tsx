@@ -41,7 +41,7 @@ export default async function ActivityPage({
     <>
       <PageHeader title="Faoliyat jurnali" subtitle="Kim, qachon, nima qildi — barcha muhim amallar" />
       <div className="card">
-        <form className="flex flex-wrap gap-3 border-b border-slate-200 p-4">
+        <form className="flex flex-wrap gap-3 border-b border-line p-4">
           <select name="user" defaultValue={user ?? ""} className="input w-auto">
             <option value="">Barcha xodimlar</option>
             {staff.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
@@ -60,9 +60,9 @@ export default async function ActivityPage({
             <tbody>
               {logs.map((l) => (
                 <tr key={l.id}>
-                  <td className="text-slate-500 tabular-nums">{stamp(l.createdAt)}</td>
+                  <td className="text-muted tabular-nums">{stamp(l.createdAt)}</td>
                   <td className="font-medium">{l.user?.name ?? "—"}</td>
-                  <td><span className="badge bg-slate-100 text-slate-600">{AUDIT_AREAS[l.action.split(".")[0]] ?? l.action}</span></td>
+                  <td><span className="badge bg-ink/5 text-muted">{AUDIT_AREAS[l.action.split(".")[0]] ?? l.action}</span></td>
                   <td className="whitespace-normal">{l.summary}</td>
                 </tr>
               ))}
@@ -72,7 +72,7 @@ export default async function ActivityPage({
         </div>
         {pages > 1 && (
           <div className="flex items-center justify-between p-4 text-sm">
-            <span className="text-slate-500">{count} ta yozuv · {page}/{pages}-sahifa</span>
+            <span className="text-muted">{count} ta yozuv · {page}/{pages}-sahifa</span>
             <div className="flex gap-2">
               {page > 1 && <Link href={link(page - 1)} className="btn-secondary">← Oldingi</Link>}
               {page < pages && <Link href={link(page + 1)} className="btn-secondary">Keyingi →</Link>}

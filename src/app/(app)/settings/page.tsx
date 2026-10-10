@@ -27,11 +27,11 @@ function StaffFields({ roles, u }: { roles: Role[]; u?: Staff }) {
         <input name="password" type="password" className="input" required={!u} minLength={6} />
       </Field>
       <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" name="isTeacher" defaultChecked={u?.isTeacher} className="h-4 w-4 accent-brand-600" />
+        <input type="checkbox" name="isTeacher" defaultChecked={u?.isTeacher} className="h-4 w-4 accent-ink" />
         Dars beradi (guruhlarga o&apos;qituvchi sifatida biriktirish mumkin)
       </label>
       <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" name="isSales" defaultChecked={u?.isSales} className="h-4 w-4 accent-brand-600" />
+        <input type="checkbox" name="isSales" defaultChecked={u?.isSales} className="h-4 w-4 accent-ink" />
         Sotuvchi (lidlar biriktiriladi, KPI belgilanadi)
       </label>
     </>
@@ -64,21 +64,21 @@ export default async function StaffPage() {
               <tr key={u.id} className={u.active ? "" : "opacity-60"}>
                 <td className="font-medium">
                   {u.name}
-                  {u.isTeacher && <span className="badge ml-2 bg-violet-50 text-violet-700">o&apos;qituvchi</span>}
-                  {u.isSales && <span className="badge ml-2 bg-amber-50 text-amber-700">sotuvchi</span>}
-                  {u.id === me.id && <span className="badge ml-2 bg-slate-100 text-slate-600">siz</span>}
+                  {u.isTeacher && <span className="badge ml-2 bg-ink/5 text-ink">o&apos;qituvchi</span>}
+                  {u.isSales && <span className="badge ml-2 bg-warning-tint text-warning">sotuvchi</span>}
+                  {u.id === me.id && <span className="badge ml-2 bg-ink/5 text-muted">siz</span>}
                 </td>
                 <td>{u.phone}</td>
-                <td><span className={`badge ${u.role.isSystem ? "bg-amber-50 text-amber-700" : "bg-brand-50 text-brand-700"}`}>{u.role.name}</span></td>
+                <td><span className={`badge ${u.role.isSystem ? "bg-warning-tint text-warning" : "bg-accent-tint text-accent-ink"}`}>{u.role.name}</span></td>
                 <td>
                   {u.active
-                    ? <span className="badge bg-emerald-100 text-emerald-700">Faol</span>
-                    : <span className="badge bg-rose-100 text-rose-700">Bloklangan</span>}
+                    ? <span className="badge bg-success-tint text-success">Faol</span>
+                    : <span className="badge bg-danger-tint text-danger">Bloklangan</span>}
                 </td>
                 <td>{date(u.createdAt)}</td>
                 <td>
                   <div className="flex items-center justify-end gap-3">
-                    <Modal title="Xodimni tahrirlash" triggerClassName="text-slate-400 hover:text-brand-600" trigger={<Pencil className="h-4 w-4" />}>
+                    <Modal title="Xodimni tahrirlash" triggerClassName="text-faint hover:underline" trigger={<Pencil className="h-4 w-4" />}>
                       <form action={updateUser.bind(null, u.id)} className="space-y-3">
                         <StaffFields roles={roles} u={u} />
                         <SubmitRow />
@@ -86,7 +86,7 @@ export default async function StaffPage() {
                     </Modal>
                     {u.id !== me.id && (
                       <form action={setUserActive.bind(null, u.id, !u.active)}>
-                        <button className={`text-xs hover:underline ${u.active ? "text-rose-600" : "text-emerald-600"}`}>
+                        <button className={`text-xs hover:underline ${u.active ? "text-danger" : "text-success"}`}>
                           {u.active ? "Bloklash" : "Faollashtirish"}
                         </button>
                       </form>

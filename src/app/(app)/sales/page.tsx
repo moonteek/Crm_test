@@ -28,7 +28,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       <PageHeader title={own ? "Mening natijalarim" : "Sotuv"} subtitle="Sotuvchilar natijalari, KPI va bonuslar">
         <div className="flex items-center gap-2">
           <Link href={`/sales?m=${shiftMonth(month, -1)}`} className="btn-secondary px-2"><ChevronLeft className="h-4 w-4" /></Link>
-          <span className="w-32 text-center text-sm font-medium">{MONTHS[mm - 1]} {y}</span>
+          <span className="w-32 text-center text-sm font-medium tabular-nums">{MONTHS[mm - 1]} {y}</span>
           <Link href={`/sales?m=${shiftMonth(month, 1)}`} className="btn-secondary px-2"><ChevronRight className="h-4 w-4" /></Link>
         </div>
         {manage && (
@@ -48,7 +48,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
 
       {!own && rows.length > 0 && (
         <div className="card mb-6 overflow-x-auto">
-          <div className="flex items-center gap-2 px-5 py-4"><Trophy className="h-5 w-5 text-amber-500" /><h2 className="font-semibold">Reyting</h2></div>
+          <div className="flex items-center gap-2 px-5 py-4"><Trophy className="h-5 w-5 text-warning" /><h2 className="font-semibold">Reyting</h2></div>
           <table className="table">
             <thead><tr>
               <th>#</th><th>Sotuvchi</th><th className="text-right">Yangi lid</th><th className="text-right">Ochiq</th><th className="text-right">Kechikkan</th>
@@ -58,17 +58,17 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             <tbody>
               {[...rows].sort((a, b) => b.won - a.won || b.revenue - a.revenue).map((r, i) => (
                 <tr key={r.userId}>
-                  <td className="text-slate-400">{i + 1}</td>
-                  <td className="font-medium"><Link href={`/leads?u=${r.userId}`} className="hover:text-brand-600">{r.name}</Link></td>
+                  <td className="text-faint">{i + 1}</td>
+                  <td className="font-medium"><Link href={`/leads?u=${r.userId}`} className="hover:underline">{r.name}</Link></td>
                   <td className="text-right tabular-nums">{r.newLeads}</td>
                   <td className="text-right tabular-nums">{r.openLeads}</td>
-                  <td className={`text-right tabular-nums ${r.overdue ? "font-semibold text-rose-600" : ""}`}>{r.overdue}</td>
+                  <td className={`text-right tabular-nums ${r.overdue ? "font-semibold text-danger" : ""}`}>{r.overdue}</td>
                   <td className="text-right tabular-nums">{r.calls}</td>
                   <td className="text-right tabular-nums">{r.trials}</td>
                   <td className="text-right font-semibold tabular-nums">{r.won}</td>
                   <td className="text-right tabular-nums">{fmt(r.conversion, "percent")}</td>
                   <td className="text-right tabular-nums">{fmt(r.revenue, "money")}</td>
-                  <td className="text-right font-semibold tabular-nums text-emerald-700">{fmt(r.bonus, "money")}</td>
+                  <td className="text-right font-semibold tabular-nums text-success">{fmt(r.bonus, "money")}</td>
                 </tr>
               ))}
             </tbody>
@@ -76,27 +76,27 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {rows.map((r) => (
           <div key={r.userId} className="card p-5">
             <div className="flex items-start justify-between gap-2">
               <div>
                 <h3 className="text-lg font-semibold">{r.name}</h3>
-                <p className="text-sm text-slate-500">Bu oy bonus: <span className="font-semibold text-emerald-700">{fmt(r.bonus, "money")}</span></p>
+                <p className="text-sm text-muted">Bu oy bonus: <span className="font-semibold text-success">{fmt(r.bonus, "money")}</span></p>
               </div>
               {manage && (
                 <Modal wide title={`KPI — ${r.name} (${MONTHS[mm - 1]} ${y})`} triggerClassName="btn-secondary" trigger={<><Target className="h-4 w-4" /> KPI</>}>
                   <form action={saveKpiTargets.bind(null, r.userId, month)} className="space-y-3">
-                    <p className="text-xs text-slate-500">Maqsad 0 bo&apos;lsa, o&apos;sha ko&apos;rsatkich o&apos;chiriladi. Bonus maqsadga yetganda beriladi; &quot;har bir ortiqcha uchun&quot; — maqsaddan oshgan har bir birlik uchun qo&apos;shimcha.</p>
+                    <p className="text-xs text-muted">Maqsad 0 bo&apos;lsa, o&apos;sha ko&apos;rsatkich o&apos;chiriladi. Bonus maqsadga yetganda beriladi; &quot;har bir ortiqcha uchun&quot; — maqsaddan oshgan har bir birlik uchun qo&apos;shimcha.</p>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
-                        <thead><tr className="text-left text-xs text-slate-500"><th className="py-1 pr-2">Ko&apos;rsatkich</th><th className="px-1">Maqsad</th><th className="px-1">Bonus (so&apos;m)</th><th className="px-1">Har bir ortiqcha uchun</th></tr></thead>
+                        <thead><tr className="text-left text-xs text-muted"><th className="py-1 pr-2">Ko&apos;rsatkich</th><th className="px-1">Maqsad</th><th className="px-1">Bonus (so&apos;m)</th><th className="px-1">Har bir ortiqcha uchun</th></tr></thead>
                         <tbody>
                           {Object.entries(KPI_METRICS).map(([k, m]) => {
                             const cur = r.kpis.find((x) => x.metric === k);
                             return (
                               <tr key={k}>
-                                <td className="py-1 pr-2">{m.label} <span className="text-xs text-slate-400">({m.unit})</span></td>
+                                <td className="py-1 pr-2">{m.label} <span className="text-xs text-faint">({m.unit})</span></td>
                                 <td className="px-1"><input name={`target_${k}`} type="number" min={0} className="input" defaultValue={cur?.target ?? 0} /></td>
                                 <td className="px-1"><input name={`bonus_${k}`} type="number" min={0} className="input" defaultValue={cur?.bonus ?? 0} /></td>
                                 <td className="px-1"><input name={`extra_${k}`} type="number" min={0} className="input" defaultValue={cur?.perExtra ?? 0} /></td>
@@ -112,7 +112,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
               )}
             </div>
             <div className="mt-4 space-y-4">
-              {r.kpis.length === 0 && <p className="text-sm text-slate-400">Bu oy uchun KPI belgilanmagan</p>}
+              {r.kpis.length === 0 && <p className="text-sm text-faint">Bu oy uchun KPI belgilanmagan</p>}
               {r.kpis.map((k) => {
                 const done = k.achieved >= k.target;
                 return (
@@ -121,20 +121,20 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                       <span>{KPI_METRICS[k.metric].label}</span>
                       <span className="tabular-nums"><b>{metricValue(k.metric, k.achieved)}</b> / {metricValue(k.metric, k.target)}</span>
                     </div>
-                    <div className="h-2 rounded-full bg-brand-100">
-                      <div className={`h-2 rounded-full ${done ? "bg-emerald-500" : "bg-brand-500"}`} style={{ width: `${Math.min(100, k.progress)}%` }} />
+                    <div className="h-2 rounded-full bg-accent-tint">
+                      <div className={`h-2 rounded-full ${done ? "bg-success" : "bg-accent"}`} style={{ width: `${Math.min(100, k.progress)}%` }} />
                     </div>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {done ? <span className="text-emerald-700">✓ Bajarildi — bonus {fmt(k.earned, "money")}</span> : <>Bonus: {fmt(k.bonus, "money")}{k.perExtra ? ` + ${fmt(k.perExtra, "money")} har bir ortiqcha uchun` : ""} · {Math.round(k.progress)}%</>}
+                    <p className="mt-1 text-xs text-muted">
+                      {done ? <span className="text-success">✓ Bajarildi — bonus {fmt(k.earned, "money")}</span> : <>Bonus: {fmt(k.bonus, "money")}{k.perExtra ? ` + ${fmt(k.perExtra, "money")} har bir ortiqcha uchun` : ""} · {Math.round(k.progress)}%</>}
                     </p>
                   </div>
                 );
               })}
             </div>
-            <div className="mt-5 grid grid-cols-3 gap-2 border-t border-slate-100 pt-4 text-center text-sm">
-              <div><p className="text-lg font-semibold">{r.won}</p><p className="text-xs text-slate-500">yozildi</p></div>
-              <div><p className="text-lg font-semibold">{r.calls}</p><p className="text-xs text-slate-500">qo&apos;ng&apos;iroq</p></div>
-              <div><p className={`text-lg font-semibold ${r.overdue ? "text-rose-600" : ""}`}>{r.overdue}</p><p className="text-xs text-slate-500">kechikkan</p></div>
+            <div className="mt-5 grid grid-cols-3 gap-2 border-t border-line pt-4 text-center text-sm">
+              <div><p className="text-lg font-semibold">{r.won}</p><p className="label-mono">yozildi</p></div>
+              <div><p className="text-lg font-semibold">{r.calls}</p><p className="label-mono">qo&apos;ng&apos;iroq</p></div>
+              <div><p className={`text-lg font-semibold ${r.overdue ? "text-danger" : ""}`}>{r.overdue}</p><p className="label-mono">kechikkan</p></div>
             </div>
           </div>
         ))}
@@ -143,7 +143,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         <div className="card"><Empty text="Sotuvchilar yo'q. Sozlamalar → Xodimlar bo'limida xodimga “Sotuvchi” belgisini qo'ying." /></div>
       )}
       {!own && rows.length > 1 && (
-        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="card p-5"><h2 className="mb-3 font-semibold">O&apos;qishga yozganlar</h2><BarList format="number" items={rows.map((r) => ({ label: r.name, value: r.won }))} /></div>
           <div className="card p-5"><h2 className="mb-3 font-semibold">Birinchi to&apos;lovlar</h2><BarList format="money" items={rows.map((r) => ({ label: r.name, value: r.revenue }))} /></div>
         </div>
@@ -155,7 +155,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
 function Tile({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="card p-4">
-      <p className="text-sm text-slate-500">{label}</p>
+      <p className="text-sm text-muted">{label}</p>
       <p className="mt-1 text-xl font-semibold">{value}</p>
     </div>
   );

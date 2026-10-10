@@ -29,7 +29,8 @@ export function niceTicks(max: number, count = 4, min = 0) {
 }
 
 // Validated categorical slots 1–3 (blue, orange, aqua) and chart chrome.
-export const SERIES = ["#2a78d6", "#eb6834", "#1baf7a"];
-export const GRID = "#e1e0d9";
-export const AXIS = "#c3c2b7";
-export const MUTED = "#898781";
+// theme tokens from globals.css, so charts follow light and dark mode; ink leads because amber lines are faint on white
+export const SERIES = ["var(--ink)", "var(--accent)", "var(--muted)"];
+export const GRID = "var(--line)";
+export const AXIS = "var(--line-strong)";
+export const MUTED = "var(--muted)";

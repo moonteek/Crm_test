@@ -8,10 +8,10 @@ import { createRole, deleteRole, updateRole } from "../../actions";
 
 function PermissionChecklist({ selected, disabled }: { selected: Set<string>; disabled?: boolean }) {
   return (
-    <div className="max-h-[55vh] space-y-4 overflow-y-auto rounded-lg border border-slate-200 p-4">
+    <div className="max-h-[55vh] space-y-4 overflow-y-auto rounded-lg border border-line p-4">
       {PERMISSION_GROUPS.map((g) => (
         <fieldset key={g.title}>
-          <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{g.title}</legend>
+          <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{g.title}</legend>
           <div className="space-y-1.5">
             {g.items.map((p) => (
               <label key={p.key} className="flex items-start gap-2 text-sm">
@@ -21,7 +21,7 @@ function PermissionChecklist({ selected, disabled }: { selected: Set<string>; di
                   value={p.key}
                   defaultChecked={selected.has(p.key)}
                   disabled={disabled}
-                  className="mt-0.5 h-4 w-4 shrink-0 accent-brand-600"
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-ink"
                 />
                 {p.label}
               </label>
@@ -61,13 +61,13 @@ export default async function RolesPage() {
                 <div>
                   <h3 className="flex items-center gap-2 text-lg font-semibold">
                     {r.name}
-                    {r.isSystem && <Lock className="h-4 w-4 text-amber-500" />}
+                    {r.isSystem && <Lock className="h-4 w-4 text-warning" />}
                   </h3>
-                  <p className="text-sm text-slate-500">{r._count.users} xodim · {perms.size}/{ALL_PERMISSIONS.length} ruxsat</p>
+                  <p className="text-sm text-muted">{r._count.users} xodim · {perms.size}/{ALL_PERMISSIONS.length} ruxsat</p>
                 </div>
                 {!r.isSystem && (
                   <div className="flex items-center gap-3">
-                    <Modal wide title={`Rolni tahrirlash — ${r.name}`} triggerClassName="text-slate-400 hover:text-brand-600" trigger={<Pencil className="h-4 w-4" />}>
+                    <Modal wide title={`Rolni tahrirlash — ${r.name}`} triggerClassName="text-faint hover:underline" trigger={<Pencil className="h-4 w-4" />}>
                       <form action={updateRole.bind(null, r.id)} className="space-y-3">
                         <Field label="Rol nomi"><input name="name" className="input" required defaultValue={r.name} /></Field>
                         <PermissionChecklist selected={perms} />
@@ -76,26 +76,26 @@ export default async function RolesPage() {
                     </Modal>
                     {r._count.users === 0 && (
                       <form action={deleteRole.bind(null, r.id)}>
-                        <button className="text-slate-400 hover:text-rose-600" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
+                        <button className="text-faint hover:text-danger" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
                       </form>
                     )}
                   </div>
                 )}
               </div>
               {r.isSystem ? (
-                <p className="mt-3 text-sm text-slate-600">Barcha ruxsatlarga ega. Bu rolni o&apos;zgartirib bo&apos;lmaydi.</p>
+                <p className="mt-3 text-sm text-muted">Barcha ruxsatlarga ega. Bu rolni o&apos;zgartirib bo&apos;lmaydi.</p>
               ) : (
                 <div className="mt-3 flex flex-wrap gap-1">
                   {PERMISSION_GROUPS.map((g) => {
                     const n = g.items.filter((i) => perms.has(i.key)).length;
                     if (!n) return null;
                     return (
-                      <span key={g.title} className="badge bg-slate-100 text-slate-700">
+                      <span key={g.title} className="badge bg-ink/5 text-ink">
                         {g.title} {n}/{g.items.length}
                       </span>
                     );
                   })}
-                  {perms.size === 0 && <span className="text-sm text-slate-400">Hech qanday ruxsat yo&apos;q</span>}
+                  {perms.size === 0 && <span className="text-sm text-faint">Hech qanday ruxsat yo&apos;q</span>}
                 </div>
               )}
             </div>

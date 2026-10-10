@@ -7,7 +7,7 @@ import { ColumnChart } from "@/components/charts/ColumnChart";
 import { BarList } from "@/components/charts/BarList";
 import { Kpi } from "@/components/charts/Kpi";
 import { fmt } from "@/components/charts/format";
-import { Empty } from "@/components/ui";
+import { Empty, Segmented } from "@/components/ui";
 
 const TABS = [
   { key: "overview", label: "Umumiy" },
@@ -38,22 +38,15 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     <>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Analitika</h1>
-          <p className="mt-1 text-sm text-slate-500">{period.label} · {a.period.from} — {a.period.to}</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">Analitika</h1>
+          <p className="mt-1 text-sm text-muted">{period.label} · {a.period.from} — {a.period.to}</p>
         </div>
-        <div className="flex gap-1 rounded-lg bg-white p-1 shadow-sm">
-          {ranges.map((r) => (
-            <Link key={r.key} href={`/analytics?tab=${tab}&range=${r.key}`}
-              className={`rounded-md px-3 py-1.5 text-sm ${range === r.key ? "bg-brand-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>
-              {r.label}
-            </Link>
-          ))}
-        </div>
+        <Segmented options={ranges.map((r) => ({ href: `/analytics?tab=${tab}&range=${r.key}`, label: r.label, active: range === r.key }))} />
       </div>
-      <div className="mb-6 flex gap-1 overflow-x-auto border-b border-slate-200">
+      <div className="mb-6 flex gap-1 overflow-x-auto border-b border-line">
         {tabs.map((x) => (
           <Link key={x.key} href={`/analytics?tab=${x.key}&range=${range}`}
-            className={`whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium ${tab === x.key ? "border-brand-600 text-brand-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}>
+            className={`whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium ${tab === x.key ? "border-ink text-ink" : "border-transparent text-muted hover:text-ink"}`}>
             {x.label}
           </Link>
         ))}
@@ -72,16 +65,16 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
 function Panel({ title, sub, children, className = "" }: { title: string; sub?: string; children: React.ReactNode; className?: string }) {
   return (
     <section className={`card p-5 ${className}`}>
-      <h2 className="font-semibold text-slate-900">{title}</h2>
-      {sub && <p className="mb-3 text-xs text-slate-500">{sub}</p>}
+      <h2 className="font-semibold text-ink">{title}</h2>
+      {sub && <p className="mb-3 text-xs text-muted">{sub}</p>}
       <div className={sub ? "" : "mt-3"}>{children}</div>
     </section>
   );
 }
 
 function Rate({ v, good = 85, ok = 70 }: { v: number | null; good?: number; ok?: number }) {
-  if (v === null) return <span className="text-slate-300">—</span>;
-  const cls = v >= good ? "bg-emerald-100 text-emerald-700" : v >= ok ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700";
+  if (v === null) return <span className="text-faint">—</span>;
+  const cls = v >= good ? "bg-success-tint text-success" : v >= ok ? "bg-warning-tint text-warning" : "bg-danger-tint text-danger";
   return <span className={`badge ${cls}`}>{Math.round(v)}%</span>;
 }
 
@@ -111,7 +104,7 @@ function Overview({ a, money }: { a: Analytics; money: boolean }) {
         <Kpi label="Davomat" value={c.attendanceRate} prev={p.attendanceRate} format="percent" />
         <Kpi label="O'rtacha baho" value={c.avgGrade} prev={p.avgGrade} format="grade" />
       </div>
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         {money ? (
           <Panel title="Tushum va xarajat" sub="Oylar kesimida, so'm">
             <LineChart labels={labels(a)} format="money" series={[
@@ -152,7 +145,7 @@ function Payments({ a }: { a: Analytics }) {
         <Kpi label="Yig'ilish darajasi" value={c.collectionRate} prev={p.collectionRate} format="percent" />
         <Kpi label="Umumiy qarzdorlik" value={a.payments.debtTotal} format="money" hint={`${a.payments.debtors.length} ta qarzdor (hozirgi holat)`} />
       </div>
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Panel title="Tushum va hisoblangan to'lov" sub="Kutilgan to'lov qancha qismi yig'ilgani" className="xl:col-span-2">
           <ColumnChart labels={labels(a)} format="money" series={[
             { name: "Hisoblangan", values: a.monthly.map((m) => m.charged) },
@@ -161,7 +154,7 @@ function Payments({ a }: { a: Analytics }) {
         </Panel>
         <Panel title="To'lov turlari"><BarList format="money" items={a.payments.byMethod} /></Panel>
       </div>
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Panel title="Kurslar bo'yicha tushum"><BarList format="money" items={a.payments.byCourse} /></Panel>
         <Panel title="Eng katta qarzdorlar" className="xl:col-span-2">
           <table className="table">
@@ -169,7 +162,7 @@ function Payments({ a }: { a: Analytics }) {
             <tbody>
               {a.payments.debtors.slice(0, 10).map((d) => (
                 <tr key={d.id}>
-                  <td><Link className="font-medium hover:text-brand-600" href={`/students/${d.id}`}>{d.name}</Link></td>
+                  <td><Link className="font-medium hover:underline" href={`/students/${d.id}`}>{d.name}</Link></td>
                   <td>{d.phone}</td>
                   <td className="text-right font-semibold tabular-nums">{fmt(d.debt, "money")}</td>
                 </tr>
@@ -191,7 +184,7 @@ function Attendance({ a }: { a: Analytics }) {
         <Kpi label="O'rtacha davomat" value={a.current.attendanceRate} prev={a.previous.attendanceRate} format="percent" />
         <Kpi label="Xavf ostidagi o'quvchilar" value={a.attendance.atRisk.length} format="number" hint="davomati 70% dan past" />
       </div>
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Panel title="Davomat dinamikasi" sub="%" className="xl:col-span-2">
           <LineChart labels={labels(a)} format="percent" yMax={100} series={[{ name: "Davomat", values: a.monthly.map((m) => m.attendanceRate) }]} />
         </Panel>
@@ -213,7 +206,7 @@ function Grades({ a }: { a: Analytics }) {
         <Kpi label="Imtihonlar o'rtachasi" value={a.current.examAvg} prev={a.previous.examAvg} format="percent" />
         <Kpi label="Yordam kerak" value={a.grades.struggling.length} format="number" hint="o'rtacha < 3.5 yoki imtihon < 60%" />
       </div>
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Panel title="O'rtacha baho dinamikasi" sub="5 ballik tizim" className="xl:col-span-2">
           <LineChart labels={labels(a)} format="grade" yMax={5} series={[{ name: "O'rtacha baho", values: a.monthly.map((m) => m.avgGrade) }]} />
         </Panel>
@@ -222,7 +215,7 @@ function Grades({ a }: { a: Analytics }) {
         </Panel>
       </div>
       <GroupTable a={a} cols={["avgGrade", "examAvg"]} title="Guruhlar bo'yicha o'zlashtirish" />
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Panel title="Eng yaxshi o'quvchilar">
           <StudentTable head={["O'rtacha", "Imtihon", "Davomat"]} rows={a.grades.topStudents.map((s) => ({
             id: s.id, name: s.name, cells: [fmt(s.avgGrade, "grade"), <Rate key="e" v={s.examAvg} />, <Rate key="a" v={s.attendance} />],
@@ -271,7 +264,7 @@ function Teachers({ a, money }: { a: Analytics; money: boolean }) {
           {a.teachers.length === 0 && <Empty text="O'qituvchilar yo'q" />}
         </div>
       </Panel>
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         {money
           ? <Panel title="Tushum bo'yicha"><BarList format="money" items={a.teachers.map((t) => ({ label: t.name, value: t.collected }))} /></Panel>
           : <Panel title="O'rtacha baho bo'yicha"><BarList format="grade" max={5} items={a.teachers.map((t) => ({ label: t.name, value: t.avgGrade ?? 0 }))} /></Panel>}
@@ -289,7 +282,7 @@ function Leads({ a }: { a: Analytics }) {
         <Kpi label="O'qishga yozilganlar" value={a.current.leadsWon} prev={a.previous.leadsWon} format="number" />
         <Kpi label="Konversiya" value={a.current.conversion} prev={a.previous.conversion} format="percent" />
       </div>
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Panel title="Lidlar va yozilganlar" className="xl:col-span-2">
           <ColumnChart labels={labels(a)} format="number" series={[
             { name: "Lidlar", values: a.monthly.map((m) => m.leads) },
@@ -298,7 +291,7 @@ function Leads({ a }: { a: Analytics }) {
         </Panel>
         <Panel title="Voronka" sub="Tanlangan davrdagi lidlar holati"><BarList format="number" items={a.leads.funnel} /></Panel>
       </div>
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Panel title="Manbalar samaradorligi" sub="Qaysi reklama kanali o'quvchi olib keladi" className="xl:col-span-2">
           <table className="table">
             <thead><tr><th>Manba</th><th className="text-right">Lidlar</th><th className="text-right">Yozildi</th><th className="text-right">Rad etdi</th><th>Konversiya</th></tr></thead>
@@ -337,7 +330,7 @@ function Finance({ a }: { a: Analytics }) {
         <Kpi label="O'qish to'lovlari" value={c.tuition} prev={p.tuition} format="money" />
         <Kpi label="Do'kon savdosi" value={c.shopIncome} prev={p.shopIncome} format="money" hint={`yalpi foyda: ${fmt(c.shopGrossProfit, "money")}`} />
       </div>
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Panel title="Sof foyda dinamikasi" sub="Tushum − xarajat, so'm" className="xl:col-span-2">
           <LineChart labels={labels(a)} format="money" series={[{ name: "Foyda", values: a.monthly.map((m) => m.profit) }]} />
         </Panel>
@@ -356,7 +349,7 @@ function Finance({ a }: { a: Analytics }) {
                   <td className="text-right tabular-nums">{fmt(m.shopIncome, "money")}</td>
                   <td><Rate v={m.collectionRate} good={95} ok={80} /></td>
                   <td className="text-right tabular-nums">{fmt(m.expense, "money")}</td>
-                  <td className={`text-right font-semibold tabular-nums ${m.profit < 0 ? "text-rose-700" : "text-emerald-700"}`}>{fmt(m.profit, "money")}</td>
+                  <td className={`text-right font-semibold tabular-nums ${m.profit < 0 ? "text-danger" : "text-success"}`}>{fmt(m.profit, "money")}</td>
                 </tr>
               ))}
             </tbody>
@@ -390,7 +383,7 @@ function GroupTable({ a, cols, title }: { a: Analytics; cols: GroupCol[]; title:
           <tbody>
             {a.groups.map((g) => (
               <tr key={g.id}>
-                <td><Link href={`/groups/${g.id}`} className="font-medium hover:text-brand-600">{g.name}</Link><p className="text-xs text-slate-500">{g.course}</p></td>
+                <td><Link href={`/groups/${g.id}`} className="font-medium hover:underline">{g.name}</Link><p className="text-xs text-muted">{g.course}</p></td>
                 <td>{g.teacher}</td>
                 <td className="text-right tabular-nums">{g.students}</td>
                 {cols.map((c) => <td key={c} className={GROUP_COLS[c].right ? "text-right tabular-nums" : ""}>{GROUP_COLS[c].render(g)}</td>)}
@@ -413,7 +406,7 @@ function StudentTable({ head, rows }: { head: string[]; rows: { id: number; name
         <tbody>
           {rows.map((r) => (
             <tr key={r.id}>
-              <td><Link href={`/students/${r.id}`} className="font-medium hover:text-brand-600">{r.name}</Link></td>
+              <td><Link href={`/students/${r.id}`} className="font-medium hover:underline">{r.name}</Link></td>
               {r.cells.map((c, i) => <td key={i} className="tabular-nums">{c}</td>)}
             </tr>
           ))}

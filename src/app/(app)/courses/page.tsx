@@ -43,17 +43,17 @@ export default async function CoursesPage() {
           <div key={c.id} className="card flex flex-col p-5">
             <div className="flex items-start justify-between gap-2">
               <h3 className="text-lg font-semibold">{c.name}</h3>
-              {manage && <Modal title="Kursni tahrirlash" triggerClassName="text-slate-400 hover:text-brand-600" trigger={<Pencil className="h-4 w-4" />}>
+              {manage && <Modal title="Kursni tahrirlash" triggerClassName="text-faint hover:underline" trigger={<Pencil className="h-4 w-4" />}>
                 <form action={updateCourse.bind(null, c.id)} className="space-y-3"><CourseFields c={c} /><SubmitRow /></form>
               </Modal>}
             </div>
-            <p className="mt-1 flex-1 text-sm text-slate-500">{c.description}</p>
-            <p className="mt-4 text-xl font-bold text-brand-600">{money(c.price)}<span className="text-sm font-normal text-slate-500"> / oy</span></p>
-            <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3 text-xs text-slate-600">
-              <span className="badge bg-slate-100">{c.durationMon} oy</span>
-              <span className="badge bg-slate-100">{c.lessonMin} daqiqa</span>
-              <span className="badge bg-brand-50 text-brand-700">{c.groups.length} guruh</span>
-              <span className="badge bg-emerald-50 text-emerald-700">{c.groups.reduce((s, g) => s + g._count.students, 0)} o&apos;quvchi</span>
+            <p className="mt-1 flex-1 text-sm text-muted">{c.description}</p>
+            <p className="mt-4 text-xl font-semibold tracking-tight text-accent-ink">{money(c.price)}<span className="text-sm font-normal text-muted"> / oy</span></p>
+            <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3 text-xs text-muted">
+              <span className="badge bg-ink/5">{c.durationMon} oy</span>
+              <span className="badge bg-ink/5">{c.lessonMin} daqiqa</span>
+              <span className="badge bg-accent-tint text-accent-ink">{c.groups.length} guruh</span>
+              <span className="badge bg-success-tint text-success">{c.groups.reduce((s, g) => s + g._count.students, 0)} o&apos;quvchi</span>
             </div>
           </div>
         ))}
