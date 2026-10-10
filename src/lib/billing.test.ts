@@ -99,11 +99,17 @@ test("billableLessonsIn counts the lessons charged in one month", () => {
 
 test("previewCharge shows what a freeze would cost this month", () => {
   const p = previewCharge(even(["ACTIVATE", nov(1)]), { type: "FREEZE", date: nov(10) });
-  assert.deepEqual(p, { year: 2026, month: 10, lessons: 12, billable: 4, amount: 200_000, from: nov(3), to: nov(10) });
+  assert.deepEqual(p, { year: 2026, month: 10, lessons: 12, billable: 4, amount: 200_000, legacy: false, from: nov(3), to: nov(10) });
 });
 
 test("previewCharge for activating mid-month", () => {
   const p = previewCharge(even(["TRIAL", nov(3)]), { type: "ACTIVATE", date: nov(10) });
   assert.equal(p.amount, 450_000);
   assert.deepEqual([p.from, p.to], [nov(10), nov(28)]);
+});
+
+test("previewCharge says when a month still uses the old full-month rule", () => {
+  const p = previewCharge(even(["ACTIVATE", d(2026, 9, 1)]), { type: "FREEZE", date: d(2026, 10, 12) });
+  assert.equal(p.legacy, true);
+  assert.equal(p.amount, 600_000);
 });

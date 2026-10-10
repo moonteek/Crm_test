@@ -118,6 +118,6 @@ export function previewCharge(m: BillableMembership, extra: { type: EventType; d
   const events = [...sorted(m), { type: extra.type, date: extra.date }];
   const y = extra.date.getUTCFullYear();
   const mo = extra.date.getUTCMonth();
-  const { days, legacy: _legacy, ...line } = lineFor(m, events, y, mo);
+  const { days, ...line } = lineFor(m, events, y, mo);
   return { ...line, from: days[0] ?? null, to: days.at(-1) ?? null };
 }

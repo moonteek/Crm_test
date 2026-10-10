@@ -11,7 +11,10 @@ import { Modal } from "@/components/Modal";
 import { GroupFields } from "@/components/GroupFields";
 import { BalanceBadge, Empty, Field, LevelBadge, SubmitRow } from "@/components/ui";
 import { GradeCell } from "@/components/GradeCell";
-import { addStudentToGroup, createExam, deleteExam, deleteGroup, removeStudentFromGroup, toggleAttendance, updateGroup } from "../../actions";
+import { MemberMenu } from "@/components/members/MemberMenu";
+import { StatusBadge, StatusLegend } from "@/components/members/StatusBadge";
+import { toMemberData } from "@/components/members/types";
+import { addStudentToGroup, createExam, deleteExam, deleteGroup, toggleAttendance, updateGroup } from "../../actions";
 
 export default async function GroupPage({
   params, searchParams,
@@ -24,6 +27,7 @@ export default async function GroupPage({
     attendance: can(user, "attendance.mark"),
     grades: can(user, "grades.manage"),
     balance: canSeeBalances(user),
+    pay: can(user, "payments.create"),
   };
   const id = Number((await params).id);
   const { m, tab: tabParam } = await searchParams;
@@ -37,7 +41,7 @@ export default async function GroupPage({
       course: true, teacher: true, assistant: true, room: true,
       students: {
         where: { leftAt: null },
-        include: { student: { include: { payments: { select: { amount: true } }, groups: { include: membershipInclude } } } },
+        include: { events: membershipInclude.events, student: { include: { payments: { select: { amount: true } }, groups: { include: membershipInclude } } } },
         orderBy: { student: { name: "asc" } },
       },
     },
@@ -46,7 +50,7 @@ export default async function GroupPage({
 
   const days = lessonDates(group.days, year, month);
   const range = { gte: days[0] ?? new Date(), lte: days.at(-1) ?? new Date() };
-  const [attendance, grades, exams, courses, teachers, rooms, others] = await Promise.all([
+  const [attendance, grades, exams, courses, teachers, rooms, others, reasons, transferGroups] = await Promise.all([
     db.attendance.findMany({ where: { groupId: id, date: range } }),
     db.grade.findMany({ where: { groupId: id, date: range } }),
     db.exam.findMany({ where: { groupId: id }, include: { results: true }, orderBy: { date: "asc" } }),
@@ -54,7 +58,10 @@ export default async function GroupPage({
     db.user.findMany({ where: { isTeacher: true, active: true }, orderBy: { name: "asc" } }),
     db.room.findMany({ orderBy: { name: "asc" } }),
     db.student.findMany({ where: { groups: { none: { groupId: id, leftAt: null } } }, orderBy: { name: "asc" } }),
+    db.reason.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    db.group.findMany({ where: { status: "ACTIVE", NOT: { id }, ...groupScope(user) }, select: { id: true, name: true, days: true, course: { select: { name: true, price: true } } }, orderBy: { name: "asc" } }),
   ]);
+  const thisGroup = { id: group.id, name: group.name, days: group.days, course: group.course };
   const mark = new Map(attendance.map((a) => [`${a.studentId}:${isoDate(a.date)}`, a.present]));
   const gradeMap = new Map(grades.map((g) => [`${g.studentId}:${isoDate(g.date)}`, g.score]));
   const prev = new Date(year, month - 1, 1);
@@ -147,7 +154,15 @@ export default async function GroupPage({
                     {others.map((s) => <option key={s.id} value={s.id}>{s.name} — {s.phone}</option>)}
                   </select>
                 </Field>
-                <Field label="Qo'shilish sanasi"><input type="date" name="joinedAt" className="input" defaultValue={isoDate(new Date())} /></Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Holati">
+                    <select name="mode" className="input" defaultValue="TRIAL">
+                      <option value="TRIAL">Sinov darsi (bepul)</option>
+                      <option value="ACTIVE">Faol (to&apos;lovli)</option>
+                    </select>
+                  </Field>
+                  <Field label="Qaysi kundan"><input type="date" name="joinedAt" className="input" defaultValue={isoDate(new Date())} /></Field>
+                </div>
                 <SubmitRow />
               </form>
             </Modal>}
@@ -155,6 +170,7 @@ export default async function GroupPage({
         </div>
 
         {tab === "attendance" && allow.attendance && <p className="px-5 pt-3 text-xs text-muted">Katakchani bosing: <span className="text-success">✓ keldi</span> → <span className="text-danger">✗ kelmadi</span> → bo&apos;sh</p>}
+        <div className="px-5 pt-3"><StatusLegend /></div>
         {tab === "grades" && <p className="px-5 pt-3 text-xs text-muted">Har bir dars uchun 1–5 baho. {allow.grades ? "Katakchani bosib baho tanlang." : ""}</p>}
 
         {tab !== "exams" ? (
@@ -168,19 +184,34 @@ export default async function GroupPage({
                   {days.map((d) => (
                     <th key={d.toISOString()} className={`px-1 text-center ${isoDate(d) === today ? "text-accent-ink" : ""}`}>{d.getUTCDate()}</th>
                   ))}
-                  <th></th>
                 </tr>
               </thead>
               <tbody>
-                {group.students.map(({ student }) => {
+                {group.students.map((gs) => {
+                  const { student } = gs;
                   const b = balance(student.groups, student.payments);
                   const marks = days.map((d) => mark.get(`${student.id}:${isoDate(d)}`)).filter((v) => v !== undefined);
                   const scores = days.map((d) => gradeMap.get(`${student.id}:${isoDate(d)}`)).filter((v): v is number => v !== undefined);
                   return (
                     <tr key={student.id}>
                       <td className="sticky left-0 z-10 bg-surface">
-                        <Link href={`/students/${student.id}`} className="font-medium hover:underline">{student.name}</Link>
-                        <p className="font-mono text-xs text-faint">{student.phone}</p>
+                        <div className="flex items-center gap-2">
+                          <div className="min-w-0 flex-1">
+                            <Link href={`/students/${student.id}`} className="font-medium hover:underline">{student.name}</Link>
+                            <p className="mt-0.5 flex items-center gap-2">
+                              <span className="font-mono text-xs text-faint">{student.phone}</span>
+                              {gs.status !== "ACTIVE" && <StatusBadge status={gs.status} />}
+                            </p>
+                          </div>
+                          <MemberMenu
+                            member={toMemberData({ ...gs, group: thisGroup }, { id: student.id, name: student.name })}
+                            reasons={reasons}
+                            groups={transferGroups.map((g) => ({ ...g }))}
+                            balance={allow.balance ? b : null}
+                            canManage={allow.students}
+                            canPay={allow.pay}
+                          />
+                        </div>
                       </td>
                       {tab === "attendance" && allow.balance && <td><BalanceBadge value={b} label={money(b)} /></td>}
                       <td className="text-center font-semibold">
@@ -215,11 +246,6 @@ export default async function GroupPage({
                           </td>
                         );
                       })}
-                      <td>
-                        {allow.students && <form action={removeStudentFromGroup.bind(null, id, student.id)}>
-                          <button className="text-xs text-danger hover:underline">Chiqarish</button>
-                        </form>}
-                      </td>
                     </tr>
                   );
                 })}
