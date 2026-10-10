@@ -17,6 +17,7 @@ import {
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
 import { check, parseForm, v } from "@/lib/validation";
+import { phoneKey } from "@/lib/phone";
 
 // ---------- Leads ----------
 const leadSchema = z.object({
@@ -355,16 +356,25 @@ export async function deleteRoom(id: number) {
 // ---------- Staff ----------
 const staffSchema = z.object({
   name: v.text("Ism", 120),
-  phone: v.text("Telefon", 40),
+  phone: v.text("Telefon", 40).refine((p) => phoneKey(p).length >= 9, "Telefon raqam noto'g'ri (9 ta raqam kerak, masalan 901234567)"),
   roleId: v.id("Rol"),
   isTeacher: v.checkbox(),
   isSales: v.checkbox(),
   password: v.password(),
 });
 
+/** Login matches phones by digits, so two staff can't share a number written differently. */
+async function assertPhoneFree(phone: string, exceptUserId?: number) {
+  const key = phoneKey(phone);
+  const users = await db.user.findMany({ where: exceptUserId ? { id: { not: exceptUserId } } : {}, select: { phone: true, name: true } });
+  const taken = users.find((u) => phoneKey(u.phone) === key);
+  if (taken) throw new Error(`Bu telefon raqam allaqachon ${taken.name} uchun ishlatilgan`);
+}
+
 export async function createUser(f: FormData) {
   const me = await requirePermission("staff.manage");
   const { password, ...data } = parseForm(staffSchema, f);
+  await assertPhoneFree(data.phone);
   const created = await db.user.create({
     data: { ...data, password: await bcrypt.hash(password, 10) },
     include: { role: true },
@@ -378,6 +388,7 @@ export async function updateUser(id: number, f: FormData) {
   const me = await requirePermission("staff.manage");
   // leaving the password blank keeps the current one
   const { password, ...data } = parseForm(staffSchema.extend({ password: v.optPassword() }), f);
+  await assertPhoneFree(data.phone, id);
   if (id === me.id) {
     // Changing your own role could lock you out of this page.
     const current = await db.user.findUniqueOrThrow({ where: { id } });

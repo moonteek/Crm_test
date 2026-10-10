@@ -10,11 +10,14 @@ function key() {
   return new TextEncoder().encode(secret);
 }
 
-export async function signSession(session: Session) {
+/** `remember`: 30-day login; otherwise the cookie ends with the browser session and the token within 12 hours. */
+export const SESSION_TTL = { remember: 60 * 60 * 24 * 30, session: 60 * 60 * 12 };
+
+export async function signSession(session: Session, ttlSeconds: number) {
   return new SignJWT(session)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("7d")
+    .setExpirationTime(`${ttlSeconds}s`)
     .sign(key());
 }
 
