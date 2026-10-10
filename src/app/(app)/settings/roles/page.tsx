@@ -67,7 +67,7 @@ export default async function RolesPage() {
                 </div>
                 {!r.isSystem && (
                   <div className="flex items-center gap-3">
-                    <Modal wide title={`Rolni tahrirlash — ${r.name}`} triggerClassName="text-faint hover:underline" trigger={<Pencil className="h-4 w-4" />}>
+                    <Modal wide title={`Rolni tahrirlash — ${r.name}`} triggerClassName="text-faint hover:text-ink" trigger={<Pencil className="h-4 w-4" />}>
                       <form action={updateRole.bind(null, r.id)} className="space-y-3">
                         <Field label="Rol nomi"><input name="name" className="input" required defaultValue={r.name} /></Field>
                         <PermissionChecklist selected={perms} />

@@ -75,3 +75,9 @@ export function findClashes(lessons: Lesson[]) {
   }
   return clashes;
 }
+
+/** Midnight (server time) on the 1st of the centre's current month, for "this month" queries. */
+export function centreMonthStart(d = new Date()) {
+  const t = centreToday(d);
+  return new Date(t.year, t.month - 1, 1);
+}

@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { can, firstAllowedPage, groupScope, studentScope } from "@/lib/access";
 import { balance } from "@/lib/billing";
-import { centreToday, fromMinutes, greeting, scheduleKeysOn, toMinutes, WEEKDAYS } from "@/lib/schedule";
+import { centreMonthStart, centreToday, fromMinutes, greeting, scheduleKeysOn, toMinutes, WEEKDAYS } from "@/lib/schedule";
 import { date, money, MONTHS, PAYMENT_METHODS, LEAD_STATUSES } from "@/lib/format";
 import { DotMeter, Empty, PageHeader, StatCard } from "@/components/ui";
 
@@ -20,7 +20,7 @@ export default async function Dashboard() {
   };
   const now = new Date();
   const today = centreToday(now);
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthStart = centreMonthStart(now);
 
   const [students, groups, leads, monthPayments, monthExpenses, recent, leadCounts, todayGroups, monthShop] = await Promise.all([
     db.student.findMany({

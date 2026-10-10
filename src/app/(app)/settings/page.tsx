@@ -78,7 +78,7 @@ export default async function StaffPage() {
                 <td>{date(u.createdAt)}</td>
                 <td>
                   <div className="flex items-center justify-end gap-3">
-                    <Modal title="Xodimni tahrirlash" triggerClassName="text-faint hover:underline" trigger={<Pencil className="h-4 w-4" />}>
+                    <Modal title="Xodimni tahrirlash" triggerClassName="text-faint hover:text-ink" trigger={<Pencil className="h-4 w-4" />}>
                       <form action={updateUser.bind(null, u.id)} className="space-y-3">
                         <StaffFields roles={roles} u={u} />
                         <SubmitRow />

@@ -33,15 +33,15 @@ export function PhoneNav({ name, roleName, permissions, theme }: Props) {
   }, [open]);
 
   return (
-    <div className="md:hidden">
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-page/85 px-4 backdrop-blur-md">
+    <>
+      <header className="sticky top-0 z-30 flex h-14 md:hidden items-center gap-3 border-b border-line bg-page/85 px-4 backdrop-blur-md">
         <Link href="/" aria-label="Bosh sahifa"><LogoMark className="h-6 w-auto" /></Link>
         <span className="truncate font-semibold">{current?.label ?? "Algoritm"}</span>
       </header>
 
       <nav
         aria-label="Asosiy"
-        className="fixed inset-x-3 z-30 flex items-center justify-around rounded-full border border-line bg-raised/90 p-1.5 backdrop-blur-md"
+        className="fixed inset-x-3 z-30 flex items-center md:hidden justify-around rounded-full border border-line bg-raised/90 p-1.5 backdrop-blur-md"
         style={{ bottom: "calc(env(safe-area-inset-bottom) + 12px)" }}
       >
         {tabs.map(({ href, label, icon: Icon }) => {
@@ -72,7 +72,7 @@ export function PhoneNav({ name, roleName, permissions, theme }: Props) {
       </nav>
 
       {open && (
-        <div className="fixed inset-0 z-50">
+        <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 animate-fade bg-black/50" onClick={() => setOpen(false)} />
           <div
             role="dialog"
@@ -120,6 +120,6 @@ export function PhoneNav({ name, roleName, permissions, theme }: Props) {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

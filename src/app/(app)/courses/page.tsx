@@ -43,7 +43,7 @@ export default async function CoursesPage() {
           <div key={c.id} className="card flex flex-col p-5">
             <div className="flex items-start justify-between gap-2">
               <h3 className="text-lg font-semibold">{c.name}</h3>
-              {manage && <Modal title="Kursni tahrirlash" triggerClassName="text-faint hover:underline" trigger={<Pencil className="h-4 w-4" />}>
+              {manage && <Modal title="Kursni tahrirlash" triggerClassName="text-faint hover:text-ink" trigger={<Pencil className="h-4 w-4" />}>
                 <form action={updateCourse.bind(null, c.id)} className="space-y-3"><CourseFields c={c} /><SubmitRow /></form>
               </Modal>}
             </div>

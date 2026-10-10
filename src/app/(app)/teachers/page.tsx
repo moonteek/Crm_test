@@ -60,10 +60,10 @@ export default async function TeachersPage() {
             </div>
             <div className="mt-3 flex flex-wrap gap-1">
               {t.assistedGroups.map((g) => (
-                <Link key={`a${g.id}`} href={`/groups/${g.id}`} className="badge bg-ink/5 text-ink hover:bg-ink/5">{g.name} · yordamchi</Link>
+                <Link key={`a${g.id}`} href={`/groups/${g.id}`} className="badge bg-ink/5 text-ink hover:bg-ink/10">{g.name} · yordamchi</Link>
               ))}
               {t.groups.map((g) => (
-                <Link key={g.id} href={`/groups/${g.id}`} className="badge bg-accent-tint text-accent-ink hover:bg-accent-tint">{g.name} · {g.time}</Link>
+                <Link key={g.id} href={`/groups/${g.id}`} className="badge border border-transparent bg-accent-tint text-accent-ink hover:border-accent-ink/40">{g.name} · {g.time}</Link>
               ))}
             </div>
           </div>

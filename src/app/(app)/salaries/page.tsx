@@ -61,7 +61,7 @@ export default async function SalariesPage({ searchParams }: { searchParams: Pro
                       )}
                     </span>
                     {manage && (
-                      <Modal title={`Ish haqi qoidasi — ${r.name}`} triggerClassName="text-faint hover:underline" trigger={<Pencil className="h-4 w-4" />}>
+                      <Modal title={`Ish haqi qoidasi — ${r.name}`} triggerClassName="text-faint hover:text-ink" trigger={<Pencil className="h-4 w-4" />}>
                         <form action={updateSalaryRule.bind(null, r.userId)} className="space-y-3">
                           <Field label="Turi">
                             <select name="salaryType" className="input" defaultValue={r.salaryType}>

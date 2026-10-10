@@ -135,7 +135,7 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
                   {manage && (
                     <td>
                       <div className="flex items-center justify-end gap-3">
-                        <Modal title={`Kirim — ${p.name}`} triggerClassName="text-faint hover:underline" trigger={<PackagePlus className="h-4 w-4" />}>
+                        <Modal title={`Kirim — ${p.name}`} triggerClassName="text-faint hover:text-ink" trigger={<PackagePlus className="h-4 w-4" />}>
                           <form action={restockProduct.bind(null, p.id)} className="space-y-3">
                             <div className="grid grid-cols-2 gap-3">
                               <Field label="Miqdor"><input name="qty" type="number" min={1} className="input" required /></Field>
@@ -146,7 +146,7 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
                             <SubmitRow text="Kirim qilish" />
                           </form>
                         </Modal>
-                        <Modal title={`Inventarizatsiya — ${p.name}`} triggerClassName="text-faint hover:underline" trigger={<ClipboardCheck className="h-4 w-4" />}>
+                        <Modal title={`Inventarizatsiya — ${p.name}`} triggerClassName="text-faint hover:text-ink" trigger={<ClipboardCheck className="h-4 w-4" />}>
                           <form action={adjustStock.bind(null, p.id)} className="space-y-3">
                             <p className="text-sm text-muted">Tizimda: <b>{p.stock} ta</b>. Sanab chiqilgan haqiqiy sonni kiriting.</p>
                             <Field label="Haqiqiy qoldiq"><input name="counted" type="number" min={0} className="input" required defaultValue={p.stock} /></Field>
@@ -154,7 +154,7 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
                             <SubmitRow />
                           </form>
                         </Modal>
-                        <Modal title="Mahsulotni tahrirlash" triggerClassName="text-faint hover:underline" trigger={<Pencil className="h-4 w-4" />}>
+                        <Modal title="Mahsulotni tahrirlash" triggerClassName="text-faint hover:text-ink" trigger={<Pencil className="h-4 w-4" />}>
                           <form action={saveProduct.bind(null, p.id)} className="space-y-3"><ProductFields p={p} /><SubmitRow /></form>
                         </Modal>
                       </div>

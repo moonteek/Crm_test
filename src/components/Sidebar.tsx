@@ -24,7 +24,7 @@ export function Sidebar({ name, roleName, permissions, theme }: Props) {
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-16 flex-col border-r border-line bg-nav md:flex lg:w-64">
         <Link href="/" className="flex h-16 items-center justify-center px-5 lg:justify-start">
           <LogoMark className="h-7 w-auto lg:hidden" />
-          <Logo className="hidden lg:inline-flex" />
+          <span className="hidden lg:block"><Logo /></span>
         </Link>
 
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-2">

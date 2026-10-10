@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
-import { THEME_COOKIE, type Theme } from "@/lib/theme";
+import { THEME_COOKIE, themeFromCookie, type Theme } from "@/lib/theme";
+
+const THEME_EVENT = "themechange";
 
 const OPTIONS: { value: Theme; label: string; icon: typeof Sun }[] = [
   { value: "light", label: "Yorug'", icon: Sun },
@@ -14,6 +16,14 @@ const OPTIONS: { value: Theme; label: string; icon: typeof Sun }[] = [
 export function ThemeToggle({ initial, compact = false }: { initial: Theme; compact?: boolean }) {
   const [theme, setTheme] = useState(initial);
 
+  // the server prop goes stale after a switch; the cookie is the truth, and other toggles announce changes
+  useEffect(() => {
+    setTheme(themeFromCookie(document.cookie));
+    const sync = () => setTheme(themeFromCookie(document.cookie));
+    window.addEventListener(THEME_EVENT, sync);
+    return () => window.removeEventListener(THEME_EVENT, sync);
+  }, []);
+
   function choose(next: Theme) {
     setTheme(next);
     document.cookie = `${THEME_COOKIE}=${next}; path=/; max-age=31536000; samesite=lax`;
@@ -22,6 +32,7 @@ export function ThemeToggle({ initial, compact = false }: { initial: Theme; comp
     if (next === "auto") delete root.dataset.theme;
     else root.dataset.theme = next;
     setTimeout(() => root.classList.remove("theme-fade"), 300);
+    window.dispatchEvent(new Event(THEME_EVENT));
   }
 
   return (

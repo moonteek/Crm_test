@@ -155,9 +155,11 @@ body {
 }
 
 /* added for ~300ms by ThemeToggle so a theme switch cross-fades instead of snapping */
-.theme-fade,
-.theme-fade * {
-  transition: background-color 200ms var(--ease-smooth), color 200ms var(--ease-smooth), border-color 200ms var(--ease-smooth) !important;
+@media (prefers-reduced-motion: no-preference) {
+  .theme-fade,
+  .theme-fade * {
+    transition: background-color 200ms var(--ease-smooth), color 200ms var(--ease-smooth), border-color 200ms var(--ease-smooth) !important;
+  }
 }
 
 @utility dot-grid {
