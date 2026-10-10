@@ -8,7 +8,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     ...(can(user, "staff.manage")
       ? [{ href: "/settings", label: "Xodimlar" }, { href: "/settings/roles", label: "Rollar va ruxsatlar" }]
       : []),
-    ...(can(user, "mcp.use") ? [{ href: "/settings/mcp", label: "AI / MCP ulanish" }] : []),
+    ...(can(user, "mcp.use") ? [{ href: "/settings/mcp", label: "Integratsiyalar (AI, Instagram, Telegram)" }] : []),
   ];
   return (
     <>

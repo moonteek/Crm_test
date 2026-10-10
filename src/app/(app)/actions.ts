@@ -6,10 +6,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requirePermission, requireUser } from "@/lib/auth";
-import { assertGroupAccess, assertStudentAccess, can, ForbiddenError } from "@/lib/access";
+import { assertGroupAccess, assertLeadAccess, assertStudentAccess, can, ForbiddenError } from "@/lib/access";
+import { pickAssignee } from "@/lib/sales";
+import { shiftMonth } from "@/lib/month";
 import { ALL_PERMISSIONS } from "@/lib/permissions";
 import { logAction } from "@/lib/audit";
-import { money } from "@/lib/format";
+import { ACTIVITY_TYPES, KPI_METRICS, LEAD_STATUSES, money, PRODUCT_CATEGORIES } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -20,22 +22,78 @@ const day = (f: FormData, k: string) => (str(f, k) ? new Date(str(f, k)) : null)
 
 // ---------- Leads ----------
 export async function createLead(f: FormData) {
-  await requirePermission("leads.manage");
-  await db.lead.create({
-    data: { name: str(f, "name"), phone: str(f, "phone"), source: optStr(f, "source"), courseId: optId(f, "courseId"), note: optStr(f, "note") },
+  const user = await requirePermission("leads.manage");
+  // salespeople own the leads they add; others pick a salesperson or let the CRM choose
+  const choice = str(f, "assignedToId");
+  const assignedToId = can(user, "leads.own") ? user.id : choice === "auto" ? await pickAssignee() : optId(f, "assignedToId");
+  const lead = await db.lead.create({
+    data: {
+      name: str(f, "name"), phone: str(f, "phone"), source: optStr(f, "source"), courseId: optId(f, "courseId"), note: optStr(f, "note"),
+      assignedToId, nextActionAt: new Date(),
+    },
   });
+  await logAction(user, "lead.create", `Yangi lid: ${lead.name} (${lead.source ?? "manba yo'q"})`);
   revalidatePath("/leads");
 }
 
-export async function setLeadStatus(id: number, status: string) {
+/** Changes a lead's status and records it in the lead's history. LOST needs a reason. */
+export async function setLeadStatus(id: number, status: string, f?: FormData) {
   const user = await requirePermission("leads.manage");
-  const lead = await db.lead.update({ where: { id }, data: { status } });
-  await logAction(user, "lead.status", `Lid "${lead.name}" holati: ${status}`);
+  await assertLeadAccess(user, id);
+  if (!LEAD_STATUSES.some((s) => s.key === status) || status === "WON") throw new Error("Noto'g'ri holat");
+  const lostReason = status === "LOST" ? (f && str(f, "lostReason")) || "Boshqa" : null;
+  const lead = await db.lead.update({
+    where: { id },
+    data: { status, lostReason, ...(status === "LOST" ? { nextActionAt: null } : {}) },
+  });
+  await db.leadActivity.create({
+    data: { leadId: id, userId: user.id, type: "STATUS", result: status, text: lostReason ?? (f ? optStr(f, "text") : null) },
+  });
+  await logAction(user, "lead.status", `Lid "${lead.name}" holati: ${status}${lostReason ? ` (${lostReason})` : ""}`);
   revalidatePath("/leads");
+  revalidatePath(`/leads/${id}`);
+}
+
+export async function assignLead(id: number, f: FormData) {
+  const user = await requirePermission("leads.manage");
+  if (can(user, "leads.own")) throw new ForbiddenError();
+  const assignedToId = optId(f, "assignedToId");
+  const lead = await db.lead.update({ where: { id }, data: { assignedToId }, include: { assignedTo: true } });
+  await db.leadActivity.create({ data: { leadId: id, userId: user.id, type: "NOTE", text: `Biriktirildi: ${lead.assignedTo?.name ?? "hech kimga"}` } });
+  await logAction(user, "lead.assign", `Lid "${lead.name}" → ${lead.assignedTo?.name ?? "biriktirilmagan"}`);
+  revalidatePath("/leads");
+  revalidatePath(`/leads/${id}`);
+}
+
+/** Logs a call / message / meeting / note and sets (or clears) the next follow-up. */
+export async function addLeadActivity(id: number, f: FormData) {
+  const user = await requirePermission("leads.manage");
+  await assertLeadAccess(user, id);
+  const type = str(f, "type") || "NOTE";
+  if (!ACTIVITY_TYPES[type] || type === "STATUS") throw new Error("Noto'g'ri tur");
+  const result = type === "CALL" ? optStr(f, "result") : null;
+  const next = str(f, "nextActionAt");
+  await db.leadActivity.create({ data: { leadId: id, userId: user.id, type, result, text: optStr(f, "text") } });
+  const lead = await db.lead.findUniqueOrThrow({ where: { id } });
+  const reached = type !== "NOTE" && !(type === "CALL" && result !== "ANSWERED");
+  await db.lead.update({
+    where: { id },
+    data: {
+      nextActionAt: next ? new Date(next) : null,
+      // the first real contact moves a new lead forward automatically
+      ...(lead.status === "NEW" && reached ? { status: "CONTACTED" } : {}),
+    },
+  });
+  if (lead.status === "NEW" && reached) {
+    await db.leadActivity.create({ data: { leadId: id, userId: user.id, type: "STATUS", result: "CONTACTED" } });
+  }
+  revalidatePath("/leads");
+  revalidatePath(`/leads/${id}`);
 }
 
 export async function deleteLead(id: number) {
   const user = await requirePermission("leads.manage");
+  await assertLeadAccess(user, id);
   const lead = await db.lead.delete({ where: { id } });
   await logAction(user, "lead.delete", `Lid o'chirildi: ${lead.name} (${lead.phone})`);
   revalidatePath("/leads");
@@ -44,6 +102,7 @@ export async function deleteLead(id: number) {
 /** Turns a lead into a student (optionally adding them to a group) and marks the lead as won. */
 export async function convertLead(id: number, f: FormData) {
   const user = await requirePermission("leads.manage", "students.manage");
+  await assertLeadAccess(user, id);
   const lead = await db.lead.findUniqueOrThrow({ where: { id } });
   const groupId = optId(f, "groupId");
   const student = await db.student.create({
@@ -54,10 +113,49 @@ export async function convertLead(id: number, f: FormData) {
       groups: groupId ? { create: { groupId } } : undefined,
     },
   });
-  await db.lead.update({ where: { id }, data: { status: "WON" } });
+  await db.lead.update({ where: { id }, data: { status: "WON", wonAt: new Date(), studentId: student.id, nextActionAt: null } });
+  await db.leadActivity.create({ data: { leadId: id, userId: user.id, type: "STATUS", result: "WON" } });
   await logAction(user, "lead.convert", `Lid o'quvchiga aylantirildi: ${lead.name}`);
   revalidatePath("/leads");
   redirect(`/students/${student.id}`);
+}
+
+// ---------- Sales KPI ----------
+export async function saveKpiTargets(userId: number, month: string, f: FormData) {
+  const me = await requirePermission("sales.manage");
+  if (!/^\d{4}-\d{2}$/.test(month)) throw new Error("Noto'g'ri oy");
+  const u = await db.user.findUniqueOrThrow({ where: { id: userId } });
+  const parts: string[] = [];
+  for (const metric of Object.keys(KPI_METRICS)) {
+    const target = num(f, `target_${metric}`);
+    const key = { userId_month_metric: { userId, month, metric } };
+    if (target <= 0) {
+      await db.kpiTarget.deleteMany({ where: { userId, month, metric } });
+      continue;
+    }
+    const data = { target, bonus: num(f, `bonus_${metric}`), perExtra: num(f, `extra_${metric}`) };
+    await db.kpiTarget.upsert({ where: key, create: { userId, month, metric, ...data }, update: data });
+    parts.push(`${KPI_METRICS[metric].label} ${target}`);
+  }
+  await logAction(me, "sales.kpi", `${u.name} KPI (${month}): ${parts.join(", ") || "o'chirildi"}`);
+  revalidatePath("/sales");
+  revalidatePath("/salaries");
+}
+
+/** Copies last month's KPI targets to this month for everyone who has none yet. */
+export async function copyKpiFromPrevious(month: string) {
+  const me = await requirePermission("sales.manage");
+  const prev = shiftMonth(month, -1);
+  const targets = await db.kpiTarget.findMany({ where: { month: prev } });
+  let copied = 0;
+  for (const t of targets) {
+    const exists = await db.kpiTarget.count({ where: { userId: t.userId, month } });
+    if (exists) continue;
+    await db.kpiTarget.create({ data: { userId: t.userId, month, metric: t.metric, target: t.target, bonus: t.bonus, perExtra: t.perExtra } });
+    copied++;
+  }
+  await logAction(me, "sales.kpi", `KPI ${prev} dan ${month} ga ko'chirildi (${copied} ta)`);
+  revalidatePath("/sales");
 }
 
 // ---------- Students ----------
@@ -253,6 +351,7 @@ export async function createUser(f: FormData) {
       phone: str(f, "phone"),
       roleId: Number(str(f, "roleId")),
       isTeacher: f.get("isTeacher") === "on",
+      isSales: f.get("isSales") === "on",
       password: await bcrypt.hash(str(f, "password"), 10),
     },
     include: { role: true },
@@ -281,6 +380,7 @@ export async function updateUser(id: number, f: FormData) {
       phone: str(f, "phone"),
       roleId,
       isTeacher: f.get("isTeacher") === "on",
+      isSales: f.get("isSales") === "on",
       ...(password ? { password: await bcrypt.hash(password, 10) } : {}),
     },
     include: { role: true },
@@ -513,4 +613,117 @@ export async function deleteSalaryPayment(id: number) {
   await logAction(me, "salary.delete", `Ish haqi to'lovi bekor qilindi: ${p.user.name} — ${money(p.amount)} (${p.month})`);
   revalidatePath("/salaries");
   revalidatePath("/finance");
+}
+
+// ---------- Shop ----------
+export async function saveProduct(id: number | null, f: FormData) {
+  const user = await requirePermission("shop.manage");
+  const data = {
+    name: str(f, "name"),
+    category: PRODUCT_CATEGORIES[str(f, "category")] ? str(f, "category") : "OTHER",
+    price: num(f, "price"),
+    cost: num(f, "cost"),
+    active: id === null ? true : f.get("active") === "on",
+  };
+  if (!data.name || data.price <= 0) throw new Error("Nomi va narxi kerak");
+  if (id === null) {
+    const stock = num(f, "stock");
+    const p = await db.product.create({ data: { ...data, stock } });
+    if (stock > 0) await db.stockMove.create({ data: { productId: p.id, type: "IN", qty: stock, note: "Boshlang'ich qoldiq" } });
+    await logAction(user, "shop.product", `Yangi mahsulot: ${p.name} — ${money(p.price)}`);
+  } else {
+    const before = await db.product.findUniqueOrThrow({ where: { id } });
+    await db.product.update({ where: { id }, data });
+    if (before.price !== data.price) await logAction(user, "shop.price", `${before.name} narxi: ${money(before.price)} → ${money(data.price)}`);
+  }
+  revalidatePath("/shop");
+}
+
+/** Adds stock (purchase). Optionally records the purchase as a GOODS expense. */
+export async function restockProduct(id: number, f: FormData) {
+  const user = await requirePermission("shop.manage");
+  const qty = num(f, "qty");
+  const unitCost = num(f, "cost");
+  if (qty <= 0) throw new Error("Miqdor kerak");
+  const p = await db.product.update({
+    where: { id },
+    data: { stock: { increment: qty }, ...(unitCost > 0 ? { cost: unitCost } : {}) },
+  });
+  await db.stockMove.create({ data: { productId: id, type: "IN", qty, note: optStr(f, "note") } });
+  if (unitCost > 0 && f.get("asExpense") === "on") {
+    await db.expense.create({ data: { title: `Tovar xaridi — ${p.name} × ${qty}`, category: "GOODS", amount: unitCost * qty } });
+  }
+  await logAction(user, "shop.restock", `Kirim: ${p.name} +${qty} (qoldiq ${p.stock})`);
+  revalidatePath("/shop");
+  revalidatePath("/finance");
+}
+
+/** Sets stock to the counted amount (inventory check). */
+export async function adjustStock(id: number, f: FormData) {
+  const user = await requirePermission("shop.manage");
+  const counted = num(f, "counted");
+  const p = await db.product.findUniqueOrThrow({ where: { id } });
+  if (counted === p.stock) return;
+  await db.product.update({ where: { id }, data: { stock: counted } });
+  await db.stockMove.create({ data: { productId: id, type: "ADJUST", qty: counted - p.stock, note: optStr(f, "note") ?? "Inventarizatsiya" } });
+  await logAction(user, "shop.adjust", `Inventarizatsiya: ${p.name} ${p.stock} → ${counted}`);
+  revalidatePath("/shop");
+}
+
+export type SaleState = { error?: string; ok?: boolean } | null;
+
+export async function createSale(_: SaleState, f: FormData): Promise<SaleState> {
+  const user = await requirePermission("shop.sell");
+  const wanted = [...f.entries()]
+    .filter(([k]) => k.startsWith("qty_"))
+    .map(([k, v]) => ({ productId: Number(k.slice(4)), qty: Math.floor(Number(v) || 0) }))
+    .filter((x) => x.qty > 0);
+  if (!wanted.length) return { error: "Kamida bitta mahsulot tanlang" };
+  const products = await db.product.findMany({ where: { id: { in: wanted.map((w) => w.productId) }, active: true } });
+  for (const w of wanted) {
+    const p = products.find((x) => x.id === w.productId);
+    if (!p) return { error: "Mahsulot topilmadi" };
+    if (p.stock < w.qty) return { error: `${p.name}: omborda faqat ${p.stock} ta bor` };
+  }
+  const studentId = optId(f, "studentId");
+  const items = wanted.map((w) => {
+    const p = products.find((x) => x.id === w.productId)!;
+    return { productId: p.id, qty: w.qty, price: p.price, cost: p.cost };
+  });
+  const total = items.reduce((s, i) => s + i.qty * i.price, 0);
+  let sale;
+  try {
+    sale = await db.$transaction(async (tx) => {
+    // re-check stock inside the transaction so two cashiers can't oversell
+    for (const i of items) {
+      const res = await tx.product.updateMany({ where: { id: i.productId, stock: { gte: i.qty } }, data: { stock: { decrement: i.qty } } });
+      if (res.count === 0) throw new Error("Omborda yetarli emas");
+      await tx.stockMove.create({ data: { productId: i.productId, type: "OUT", qty: -i.qty } });
+    }
+    return tx.sale.create({
+      data: { studentId, buyerName: studentId ? null : optStr(f, "buyerName"), userId: user.id, total, method: str(f, "method") || "CASH", items: { create: items } },
+      include: { student: true },
+    });
+    });
+  } catch {
+    return { error: "Omborda yetarli mahsulot yo'q — sahifani yangilang" };
+  }
+  await logAction(user, "shop.sale", `Sotuv: ${sale.student?.name ?? sale.buyerName ?? "mijoz"} — ${money(total)} (${items.reduce((s, i) => s + i.qty, 0)} ta)`);
+  revalidatePath("/shop");
+  if (studentId) revalidatePath(`/students/${studentId}`);
+  return { ok: true };
+}
+
+export async function deleteSale(id: number) {
+  const user = await requirePermission("shop.manage");
+  const sale = await db.sale.findUniqueOrThrow({ where: { id }, include: { items: true, student: true } });
+  await db.$transaction(async (tx) => {
+    for (const i of sale.items) {
+      await tx.product.update({ where: { id: i.productId }, data: { stock: { increment: i.qty } } });
+      await tx.stockMove.create({ data: { productId: i.productId, type: "IN", qty: i.qty, note: `Sotuv #${id} bekor qilindi` } });
+    }
+    await tx.sale.delete({ where: { id } });
+  });
+  await logAction(user, "shop.sale_delete", `Sotuv bekor qilindi: ${sale.student?.name ?? sale.buyerName ?? "mijoz"} — ${money(sale.total)}`);
+  revalidatePath("/shop");
 }

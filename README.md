@@ -16,6 +16,9 @@ O'quv markazi uchun CRM tizimi: lidlar, o'quvchilar, guruhlar, davomat, to'lovla
 - **Ish haqi** — har bir xodim uchun qoida (oylik, tushumdan foiz yoki har bir o'quvchi uchun), oylik hisob-kitob va to'lovlar (avtomatik xarajat sifatida yoziladi)
 - **Analitika** — 7 bo'lim: umumiy, to'lovlar, davomat, baholar, o'qituvchilar, lidlar, moliya; 3/6/12 oy yoki yil bo'yicha, oldingi davr bilan solishtirish
 - **Faoliyat jurnali** — kim, qachon, nima qildi (to'lovlar, o'chirishlar, rol o'zgarishlari, AI orqali amallar)
+- **Sotuv** — lidlar sotuvchilarga biriktiriladi (avtomatik yoki qo'lda), har bir qo'ng'iroq/xabar tarixi, keyingi aloqa eslatmalari, rad etish sabablari
+- **KPI va bonuslar** — har oy sotuvchiga maqsad (yozilganlar, birinchi to'lovlar, sinov darslari, qo'ng'iroqlar, konversiya) va bonus; bonus ish haqiga avtomatik qo'shiladi
+- **Do'kon** — kitob, merch va boshqa mahsulotlar: sotish, ombor qoldig'i, kirim, inventarizatsiya, yalpi foyda; savdo moliya va analitikaga qo'shiladi
 - **Rollar va ruxsatlar** — direktor istalgancha rol yaratadi va har biriga 23 ta ruxsatdan keraklilarini belgilaydi
 - **Xodimlar** — qo'shish, rolini o'zgartirish, parolni tiklash, bloklash
 - **AI / MCP** — Claude kabi AI yordamchilarni CRM ga ulash
@@ -30,7 +33,8 @@ Standart rollar:
 | **Nazoratchi** | Hammasini ko'radi (analitika, moliya, ish haqi, jurnal), hech narsani o'zgartira olmaydi |
 | **Menejer** | Lidlar, o'quvchilar, guruhlar, to'lov qabul qilish |
 | **O'quv bo'limi boshlig'i** | Guruhlar, o'quvchilar, davomat, baholar, kurslar, o'qituvchilar analitikasi — pulsiz |
-| **Kassir** | To'lovlar va qarzdorlar |
+| **Sotuv menejeri** | Faqat o'ziga biriktirilgan lidlar, o'z natijalari va KPI si |
+| **Kassir** | To'lovlar, qarzdorlar va do'kon savdosi |
 | **Qabulxona operatori** | Lidlar va o'quvchilarni ro'yxatga olish |
 | **O'qituvchi** | Faqat o'z guruhlari: davomat va baholar |
 | **Yordamchi o'qituvchi** | Faqat yordamchi sifatida biriktirilgan guruhlari: davomat va baholar |
@@ -57,7 +61,8 @@ CRM ichida MCP server bor: `https://<sayt>/api/mcp` (Streamable HTTP).
 AI token egasi nomidan ishlaydi va faqat uning roli ruxsat bergan vositalarni ko'radi. Vositalar:
 `get_overview`, `search_students`, `get_student`, `list_groups`, `get_group_attendance`, `mark_attendance`,
 `list_leads`, `create_lead`, `update_lead_status`, `list_debtors`, `record_payment`, `list_payments`,
-`finance_summary`, `list_courses`, `get_analytics`, `get_salaries`, `record_grades`, `list_activity`.
+`finance_summary`, `list_courses`, `get_analytics`, `get_salaries`, `record_grades`, `list_activity`,
+`list_followups`, `log_lead_contact`, `get_sales_report`, `shop_report`.
 
 Tokenlar bazada faqat xesh ko'rinishida saqlanadi; xodim bloklansa, uning tokenlari o'chiriladi.
 
@@ -65,6 +70,21 @@ Tokenlar bazada faqat xesh ko'rinishida saqlanadi; xodim bloklansa, uning tokenl
 
 Next.js 15 (App Router, Server Actions), TypeScript, Tailwind CSS 4, Prisma ORM, MCP TypeScript SDK.
 Lokal ishlashda SQLite; productionda PostgreSQL ga o'tish uchun `prisma/schema.prisma` dagi `provider` ni `"postgresql"` ga o'zgartiring.
+
+## Instagram / Telegram lidlarini ulash
+
+`.env` faylida `LEADS_WEBHOOK_KEY` ga uzun maxfiy so'z yozing. So'ng ManyChat, Telegram bot, sayt formasi yoki Make/Zapier
+`POST https://<sayt>/api/leads/inbound?key=<kalit>` manziliga `name`, `phone`, `source`, `course`, `note` maydonlarini yuborsin.
+Lid avtomatik yaratiladi va eng kam band sotuvchiga biriktiriladi; o'sha raqam qayta yozsa, mavjud lidga izoh qo'shiladi.
+Tayyor manzil: Sozlamalar → Integratsiyalar.
+
+## KPI qanday hisoblanadi
+
+- **O'qishga yozilganlar** — shu oyda sotuvchining lidi "Yozildi" bo'lgani.
+- **Birinchi to'lovlar** — sotuvchi olib kelgan o'quvchilarning birinchi to'lovi shu oyga to'g'ri kelsa.
+- **Sinov darsiga yozilganlar** va **qo'ng'iroqlar** — sotuvchi shu oyda yozib qo'ygan amallar.
+- **Konversiya** — shu oyda kelgan lidlardan nechtasi yozilgani.
+- Bonus maqsadga yetganda beriladi, ixtiyoriy ravishda maqsaddan oshgan har bir birlik uchun qo'shimcha.
 
 ## Analitika qanday hisoblanadi
 
@@ -89,6 +109,7 @@ Demo kirish (parol hammasida `admin123`, productionda darhol o'zgartiring):
 | Administrator | `901234567` |
 | Menejer | `901112233` |
 | Kassir | `901114455` |
+| Sotuv menejeri | `901113301`, `901113302` |
 | Nazoratchi | `901117788` |
 | O'quv bo'limi boshlig'i | `901119900` |
 | Qabulxona operatori | `901116677` |

@@ -45,7 +45,7 @@ export default async function SalariesPage({ searchParams }: { searchParams: Pro
 
       <div className="card mb-6 overflow-x-auto">
         <table className="table">
-          <thead><tr><th>Xodim</th><th>Qoida</th><th>Asos</th><th>Hisoblangan</th><th>To&apos;langan</th><th>Qolgan</th><th></th></tr></thead>
+          <thead><tr><th>Xodim</th><th>Qoida</th><th>Asos</th><th>Bonus (KPI)</th><th>Hisoblangan</th><th>To&apos;langan</th><th>Qolgan</th><th></th></tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.userId}>
@@ -85,11 +85,12 @@ export default async function SalariesPage({ searchParams }: { searchParams: Pro
                 <td className="text-slate-500">
                   {r.salaryType === "PERCENT" ? `${money(r.base)} tushum` : r.salaryType === "PER_STUDENT" ? `${r.base} o'quvchi` : "—"}
                 </td>
+                <td className={r.bonus ? "text-emerald-700" : "text-slate-400"}>{r.bonus ? `+${money(r.bonus)}` : "—"}</td>
                 <td className="font-semibold">{money(r.accrued)}</td>
                 <td className="text-emerald-600">{money(r.paid)}</td>
                 <td className={r.remaining > 0 ? "font-semibold text-rose-600" : "text-slate-400"}>{money(r.remaining)}</td>
                 <td>
-                  {manage && r.salaryType !== "NONE" && (
+                  {manage && (r.salaryType !== "NONE" || r.accrued > 0) && (
                     <Modal title={`Ish haqi to'lash — ${r.name}`} triggerClassName="text-sm text-brand-600 hover:underline" trigger="To'lash">
                       <form action={paySalary} className="space-y-3">
                         <input type="hidden" name="userId" value={r.userId} />

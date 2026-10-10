@@ -9,6 +9,6 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // /api/mcp authenticates with bearer tokens instead of the session cookie.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|api/mcp).*)"],
+  // /api/mcp and /api/leads/inbound authenticate with their own keys instead of the session cookie.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|api/mcp|api/leads/inbound).*)"],
 };

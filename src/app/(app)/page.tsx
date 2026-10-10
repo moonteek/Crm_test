@@ -20,7 +20,7 @@ export default async function Dashboard() {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [students, groups, leads, monthPayments, monthExpenses, recent, leadCounts, todayGroups] = await Promise.all([
+  const [students, groups, leads, monthPayments, monthExpenses, recent, leadCounts, todayGroups, monthShop] = await Promise.all([
     db.student.findMany({
       where: { AND: [{ groups: { some: { leftAt: null } } }, studentScope(user)] },
       include: { payments: { select: { amount: true } }, groups: { include: { group: { include: { course: true } } } } },
@@ -36,10 +36,11 @@ export default async function Dashboard() {
       include: { course: true, teacher: true, room: true, _count: { select: { students: { where: { leftAt: null } } } } },
       orderBy: { time: "asc" },
     }),
+    db.sale.aggregate({ _sum: { total: true }, where: { date: { gte: monthStart } } }),
   ]);
 
   const debtors = students.filter((s) => balance(s.groups, s.payments) < 0).length;
-  const income = monthPayments._sum.amount ?? 0;
+  const income = (monthPayments._sum.amount ?? 0) + (monthShop._sum.total ?? 0);
   const expense = monthExpenses._sum.amount ?? 0;
   const totalLeads = leadCounts.reduce((s, l) => s + l._count, 0) || 1;
 

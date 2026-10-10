@@ -35,6 +35,7 @@ export const EXPENSE_CATEGORIES: Record<string, string> = {
   RENT: "Ijara",
   MARKETING: "Marketing",
   UTILITIES: "Kommunal",
+  GOODS: "Tovar xaridi",
   OTHER: "Boshqa",
 };
 
@@ -45,6 +46,36 @@ export const LEAD_STATUSES: { key: string; label: string; color: string }[] = [
   { key: "WON", label: "O'qishga yozildi", color: "bg-emerald-500" },
   { key: "LOST", label: "Rad etdi", color: "bg-rose-500" },
 ];
+
+export const LOST_REASONS = ["Narx qimmat", "Vaqt to'g'ri kelmadi", "Manzil uzoq", "Boshqa markazni tanladi", "Javob bermayapti", "Shunchaki qiziqdi", "Boshqa"];
+
+export const ACTIVITY_TYPES: Record<string, string> = {
+  CALL: "Qo'ng'iroq",
+  MESSAGE: "Xabar",
+  MEETING: "Uchrashuv",
+  NOTE: "Izoh",
+  STATUS: "Holat",
+};
+
+export const CALL_RESULTS: Record<string, string> = {
+  ANSWERED: "Gaplashdik",
+  NO_ANSWER: "Javob bermadi",
+  BUSY: "Band",
+};
+
+export const PRODUCT_CATEGORIES: Record<string, string> = {
+  BOOK: "Kitob",
+  MERCH: "Merch",
+  OTHER: "Boshqa",
+};
+
+export const KPI_METRICS: Record<string, { label: string; unit: string }> = {
+  WON: { label: "O'qishga yozilganlar", unit: "ta" },
+  REVENUE: { label: "Yangi o'quvchilardan birinchi to'lov", unit: "so'm" },
+  TRIALS: { label: "Sinov darsiga yozilganlar", unit: "ta" },
+  CALLS: { label: "Qo'ng'iroqlar", unit: "ta" },
+  CONVERSION: { label: "Konversiya", unit: "%" },
+};
 
 export const LEAD_SOURCES = ["Instagram", "Telegram", "Facebook", "Tanish orqali", "Banner", "Boshqa"];
 

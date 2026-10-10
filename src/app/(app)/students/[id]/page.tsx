@@ -23,6 +23,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
         attendance: true,
         grades: { select: { score: true } },
         examResults: { include: { exam: true } },
+        purchases: { include: { items: { include: { product: true } } }, orderBy: { date: "desc" } },
       },
     }),
     db.group.findMany({ where: { status: "ACTIVE", ...groupScope(user) }, include: { course: true }, orderBy: { name: "asc" } }),
@@ -43,6 +44,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     payments: can(user, "payments.view"),
     deletePayment: can(user, "payments.delete"),
     balance: canSeeBalances(user),
+    shop: can(user, "shop.view"),
   };
 
   return (
@@ -169,6 +171,24 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                 </tbody>
               </table>
               {student.payments.length === 0 && <Empty text="To'lovlar yo'q" />}
+            </div>
+          </div>}
+
+          {allow.shop && student.purchases.length > 0 && <div className="card">
+            <h2 className="px-5 py-4 font-semibold">Do&apos;kondan xaridlar</h2>
+            <div className="overflow-x-auto">
+              <table className="table">
+                <thead><tr><th>Sana</th><th>Mahsulotlar</th><th className="text-right">Summa</th></tr></thead>
+                <tbody>
+                  {student.purchases.map((s) => (
+                    <tr key={s.id}>
+                      <td>{date(s.date)}</td>
+                      <td className="whitespace-normal">{s.items.map((i) => `${i.product.name} × ${i.qty}`).join(", ")}</td>
+                      <td className="text-right font-semibold">{money(s.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>}
         </div>

@@ -1,4 +1,6 @@
 import { db } from "./db";
+import { monthBounds } from "./month";
+import { salesStats } from "./sales";
 
 export const SALARY_TYPES: Record<string, { label: string; unit: string }> = {
   NONE: { label: "Belgilanmagan", unit: "" },
@@ -7,14 +9,7 @@ export const SALARY_TYPES: Record<string, { label: string; unit: string }> = {
   PER_STUDENT: { label: "Har bir o'quvchi uchun", unit: "so'm / o'quvchi" },
 };
 
-export function monthBounds(month: string) {
-  const [y, m] = month.split("-").map(Number);
-  return { from: new Date(y, m - 1, 1), to: new Date(y, m, 1) };
-}
-
-export function currentMonth(d = new Date()) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
+export { monthBounds, currentMonth } from "./month";
 
 export type SalaryRow = {
   userId: number;
@@ -24,6 +19,10 @@ export type SalaryRow = {
   salaryAmount: number;
   /** what the rule is based on: collected so'm for PERCENT, student count for PER_STUDENT */
   base: number;
+  /** fixed/percent/per-student part */
+  salary: number;
+  /** KPI bonuses earned this month */
+  bonus: number;
   accrued: number;
   paid: number;
   remaining: number;
@@ -34,13 +33,14 @@ export async function salariesForMonth(month: string, { allActive = false } = {}
   const { from, to } = monthBounds(month);
   const [users, payouts] = await Promise.all([
     db.user.findMany({
-      where: { OR: [allActive ? { active: true } : { salaryType: { not: "NONE" } }, { salaryPayments: { some: { month } } }] },
+      where: { OR: [allActive ? { active: true } : { salaryType: { not: "NONE" } }, { salaryPayments: { some: { month } } }, { kpiTargets: { some: { month } } }] },
       include: { role: true },
       orderBy: { name: "asc" },
     }),
     db.salaryPayment.groupBy({ by: ["userId"], where: { month }, _sum: { amount: true } }),
   ]);
 
+  const bonuses = new Map((await salesStats(month)).map((r) => [r.userId, r.bonus]));
   const rows: SalaryRow[] = [];
   for (const u of users) {
     let base = 0;
@@ -62,9 +62,11 @@ export async function salariesForMonth(month: string, { allActive = false } = {}
       accrued = base * u.salaryAmount;
     }
     const paid = payouts.find((p) => p.userId === u.id)?._sum.amount ?? 0;
+    const bonus = bonuses.get(u.id) ?? 0;
+    const total = accrued + bonus;
     rows.push({
       userId: u.id, name: u.name, roleName: u.role.name, salaryType: u.salaryType, salaryAmount: u.salaryAmount,
-      base, accrued, paid, remaining: Math.max(0, accrued - paid),
+      base, salary: accrued, bonus, accrued: total, paid, remaining: Math.max(0, total - paid),
     });
   }
   return rows;

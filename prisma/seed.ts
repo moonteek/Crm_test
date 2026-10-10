@@ -161,21 +161,124 @@ async function main() {
     }
   }
 
-  // leads over the last 12 months
-  const sources = ["Instagram", "Instagram", "Telegram", "Telegram", "Tanish orqali", "Banner", "Facebook"];
+  // salespeople, leads with contact history, KPI targets
+  const sellers = [
+    await db.user.create({ data: { name: "Nodira Karimova", phone: "901113301", password: pw, roleId: roles["Sotuv menejeri"], isSales: true, salaryType: "FIXED", salaryAmount: 3_000_000 } }),
+    await db.user.create({ data: { name: "Sardor Yo'ldoshev", phone: "901113302", password: pw, roleId: roles["Sotuv menejeri"], isSales: true, salaryType: "FIXED", salaryAmount: 3_000_000 } }),
+  ];
+  const sources = ["Instagram", "Instagram", "Instagram", "Telegram", "Telegram", "Tanish orqali", "Banner", "Facebook"];
   const conv: Record<string, number> = { Instagram: 0.3, Telegram: 0.35, "Tanish orqali": 0.6, Banner: 0.15, Facebook: 0.2 };
+  const lostReasons = ["Narx qimmat", "Narx qimmat", "Vaqt to'g'ri kelmadi", "Vaqt to'g'ri kelmadi", "Manzil uzoq", "Boshqa markazni tanladi", "Javob bermayapti", "Shunchaki qiziqdi"];
+  const linkedStudents = new Set<number>();
+  const addDays = (d: Date, n: number, h = 11) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, h, Math.floor(rand() * 60));
   for (let ago = 11; ago >= 0; ago--) {
-    const count = 6 + Math.floor(rand() * 8);
+    const count = 8 + Math.floor(rand() * 8);
     for (let i = 0; i < count; i++) {
-      const createdAt = new Date(now.getFullYear(), now.getMonth() - ago, 1 + Math.floor(rand() * 27));
+      const createdAt = new Date(now.getFullYear(), now.getMonth() - ago, 1 + Math.floor(rand() * 27), 9 + Math.floor(rand() * 9));
       if (createdAt > now) continue;
       const source = pick(sources);
+      // the second seller converts a bit better
+      const seller = sellers[i % 2];
+      const skill = i % 2 === 0 ? 0 : 0.08;
       const r = rand();
-      const status = ago === 0 && r < 0.5 ? pick(["NEW", "CONTACTED", "TRIAL"]) : r < conv[source] ? "WON" : r < conv[source] + 0.45 ? "LOST" : pick(["CONTACTED", "TRIAL"]);
-      await db.lead.create({
+      const fresh = (now.getTime() - createdAt.getTime()) / 86400_000 < 10;
+      const status = fresh && r < 0.6 ? pick(["NEW", "CONTACTED", "TRIAL"]) : r < conv[source] + skill ? "WON" : r < conv[source] + skill + 0.45 ? "LOST" : pick(["CONTACTED", "TRIAL"]);
+      const lead = await db.lead.create({
         data: {
           name: `${pick(FIRST)} ${pick(LAST)}`, phone: `+99899${String(phoneSeq++ * 4111).padStart(7, "0").slice(-7)}`,
-          source, status, courseId: pick(courses).id, createdAt,
+          source, status, courseId: pick(courses).id, createdAt, assignedToId: seller.id,
+          lostReason: status === "LOST" ? pick(lostReasons) : null,
+        },
+      });
+      // history: a few calls/messages, then status changes
+      const acts: { type: string; result?: string | null; text?: string | null; createdAt: Date }[] = [];
+      let day = 0;
+      if (status !== "NEW") {
+        const tries = 1 + Math.floor(rand() * 3);
+        for (let t = 0; t < tries; t++) {
+          day += Math.floor(rand() * 2);
+          const answered = t === tries - 1 || rand() < 0.5;
+          acts.push({ type: rand() < 0.75 ? "CALL" : "MESSAGE", result: answered ? "ANSWERED" : pick(["NO_ANSWER", "BUSY"]), text: answered ? pick(["Narxni so'radi", "Jadvalni so'radi", "Ota-onasi bilan maslahatlashadi", "Sinov darsiga qiziqdi"]) : null, createdAt: addDays(createdAt, day) });
+        }
+        acts.push({ type: "STATUS", result: "CONTACTED", createdAt: addDays(createdAt, day, 12) });
+      }
+      if (status === "TRIAL" || status === "WON" || (status === "LOST" && rand() < 0.4)) {
+        day += 1 + Math.floor(rand() * 3);
+        acts.push({ type: "STATUS", result: "TRIAL", createdAt: addDays(createdAt, day) });
+      }
+      let wonAt: Date | null = null;
+      if (status === "WON" || status === "LOST") {
+        day += 1 + Math.floor(rand() * 4);
+        const at = addDays(createdAt, day, 15);
+        acts.push({ type: "STATUS", result: status, text: status === "LOST" ? lead.lostReason : null, createdAt: at });
+        if (status === "WON") wonAt = at;
+      }
+      const valid = acts.filter((x) => x.createdAt <= now);
+      if (valid.length) await db.leadActivity.createMany({ data: valid.map((x) => ({ ...x, leadId: lead.id, userId: seller.id })) });
+      const open = ["NEW", "CONTACTED", "TRIAL"].includes(status);
+      // open leads get a follow-up: some overdue, some today, some later
+      const nextActionAt = open ? addDays(now, pick([-2, -1, 0, 0, 1, 2]), pick([10, 14, 17])) : null;
+      let studentId: number | null = null;
+      if (wonAt && wonAt <= now) {
+        const candidate = await db.student.findFirst({
+          where: { id: { notIn: [...linkedStudents] }, createdAt: { gte: new Date(wonAt.getFullYear(), wonAt.getMonth(), 1), lt: new Date(wonAt.getFullYear(), wonAt.getMonth() + 1, 1) } },
+        });
+        if (candidate) { studentId = candidate.id; linkedStudents.add(candidate.id); }
+      }
+      await db.lead.update({ where: { id: lead.id }, data: { nextActionAt, wonAt: wonAt && wonAt <= now ? wonAt : null, studentId } });
+    }
+  }
+  for (let ago = 3; ago >= 0; ago--) {
+    const d = monthStart(ago);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    for (const sl of sellers) {
+      await db.kpiTarget.createMany({
+        data: [
+          { userId: sl.id, month: key, metric: "WON", target: 4, bonus: 400_000, perExtra: 100_000 },
+          { userId: sl.id, month: key, metric: "CALLS", target: 12, bonus: 150_000 },
+          { userId: sl.id, month: key, metric: "CONVERSION", target: 35, bonus: 300_000 },
+        ],
+      });
+    }
+  }
+
+  // shop: books and merch, sold to students over the last 6 months
+  const productSpecs = [
+    ["Python asoslari (kitob)", "BOOK", 120_000, 70_000],
+    ["JavaScript darsligi", "BOOK", 110_000, 65_000],
+    ["Kompyuter savodxonligi daftari", "BOOK", 45_000, 25_000],
+    ["Algoritm futbolkasi", "MERCH", 90_000, 45_000],
+    ["Algoritm xudi", "MERCH", 220_000, 120_000],
+    ["Algoritm krujkasi", "MERCH", 50_000, 22_000],
+    ["Stiker to'plami", "OTHER", 15_000, 5_000],
+  ] as const;
+  const products = [];
+  for (const [name, category, price, cost] of productSpecs) {
+    const initial = 30 + Math.floor(rand() * 30);
+    const p = await db.product.create({ data: { name, category, price, cost, stock: initial } });
+    await db.stockMove.create({ data: { productId: p.id, type: "IN", qty: initial, note: "Boshlang'ich qoldiq", createdAt: monthStart(6) } });
+    await db.expense.create({ data: { title: `Tovar xaridi — ${name} × ${initial}`, category: "GOODS", amount: initial * cost, date: monthStart(6) } });
+    products.push(p);
+  }
+  const cashier = await db.user.findUniqueOrThrow({ where: { phone: "901114455" } });
+  const allStudents = await db.student.findMany({ select: { id: true } });
+  for (let ago = 5; ago >= 0; ago--) {
+    const n = 8 + Math.floor(rand() * 10);
+    for (let i = 0; i < n; i++) {
+      const date = new Date(now.getFullYear(), now.getMonth() - ago, 1 + Math.floor(rand() * 27), 10 + Math.floor(rand() * 8));
+      if (date > now) continue;
+      const picks = [pick(products), ...(rand() < 0.3 ? [pick(products)] : [])];
+      const items = [...new Map(picks.map((p) => [p.id, p])).values()].map((p) => ({ productId: p.id, qty: rand() < 0.85 ? 1 : 2, price: p.price, cost: p.cost }));
+      const fresh = await db.product.findMany({ where: { id: { in: items.map((x) => x.productId) } } });
+      if (items.some((it) => (fresh.find((f) => f.id === it.productId)?.stock ?? 0) < it.qty)) continue;
+      for (const it of items) {
+        await db.product.update({ where: { id: it.productId }, data: { stock: { decrement: it.qty } } });
+        await db.stockMove.create({ data: { productId: it.productId, type: "OUT", qty: -it.qty, createdAt: date } });
+      }
+      await db.sale.create({
+        data: {
+          studentId: pick(allStudents).id, userId: cashier.id, date, method: pick(["CASH", "CASH", "CARD"]),
+          total: items.reduce((s, it) => s + it.qty * it.price, 0), items: { create: items },
         },
       });
     }

@@ -75,3 +75,13 @@ const PAGE_ORDER: [string, Permission][] = [
 export function firstAllowedPage(user: CurrentUser) {
   return PAGE_ORDER.find(([, p]) => can(user, p))?.[0] ?? "/no-access";
 }
+
+/** Leads the user may see: all, or only the ones assigned to them (salespeople). */
+export function leadScope(user: CurrentUser): Prisma.LeadWhereInput {
+  return can(user, "leads.own") ? { assignedToId: user.id } : {};
+}
+
+export async function assertLeadAccess(user: CurrentUser, leadId: number) {
+  const ok = await db.lead.count({ where: { id: leadId, ...leadScope(user) } });
+  if (!ok) throw new ForbiddenError();
+}

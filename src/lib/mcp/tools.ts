@@ -3,13 +3,15 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { balance } from "@/lib/billing";
 import {
-  assertGroupAccess, assertStudentAccess, can, canSeeBalances, groupScope, studentScope, type CurrentUser,
+  assertGroupAccess, assertLeadAccess, assertStudentAccess, can, canSeeBalances, groupScope, leadScope, studentScope, type CurrentUser,
 } from "@/lib/access";
+import { OPEN_STATUSES, pickAssignee, salesStats } from "@/lib/sales";
 import { EXPENSE_CATEGORIES, GROUP_DAYS, isoDate, LEAD_STATUSES, PAYMENT_METHODS } from "@/lib/format";
 import type { Permission } from "@/lib/permissions";
 import { logAction } from "@/lib/audit";
 import { getAnalytics, resolvePeriod } from "@/lib/analytics";
 import { currentMonth, salariesForMonth, SALARY_TYPES } from "@/lib/salary";
+import { CALL_RESULTS, KPI_METRICS, LOST_REASONS, PRODUCT_CATEGORIES } from "@/lib/format";
 import { money } from "@/lib/format";
 
 const json = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
@@ -194,12 +196,50 @@ export function buildServer(user: CurrentUser) {
   tool("leads.view", "list_leads", "Lidlar (potensial o'quvchilar) ro'yxati.", {
     status: z.enum(["NEW", "CONTACTED", "TRIAL", "WON", "LOST"]).optional(),
   }, async ({ status }) => {
-    const leads = await db.lead.findMany({ where: status ? { status } : {}, include: { course: true }, orderBy: { createdAt: "desc" }, take: 200 });
+    const leads = await db.lead.findMany({
+      where: { ...leadScope(user), ...(status ? { status } : {}) },
+      include: { course: true, assignedTo: true }, orderBy: { createdAt: "desc" }, take: 200,
+    });
     return leads.map((l) => ({
       id: l.id, name: l.name, phone: l.phone, source: l.source, course: l.course?.name ?? null,
       status: l.status, status_label: LEAD_STATUSES.find((s) => s.key === l.status)?.label, note: l.note, created: isoDate(l.createdAt),
+      assigned_to: l.assignedTo?.name ?? null, next_action_at: l.nextActionAt?.toISOString() ?? null, lost_reason: l.lostReason,
     }));
   });
+
+  tool("leads.view", "list_followups", "Bugun yoki undan oldin bog'lanish kerak bo'lgan (kechikkan) lidlar.", {}, async () => {
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+    const leads = await db.lead.findMany({
+      where: { ...leadScope(user), status: { in: OPEN_STATUSES }, nextActionAt: { lte: end } },
+      include: { course: true, assignedTo: true, activities: { orderBy: { createdAt: "desc" }, take: 1 } },
+      orderBy: { nextActionAt: "asc" },
+    });
+    return leads.map((l) => ({
+      id: l.id, name: l.name, phone: l.phone, course: l.course?.name ?? null, status: l.status,
+      due: l.nextActionAt!.toISOString(), overdue: l.nextActionAt! < new Date(), assigned_to: l.assignedTo?.name ?? null,
+      last_contact: l.activities[0] ? { at: l.activities[0].createdAt.toISOString(), type: l.activities[0].type, text: l.activities[0].text } : null,
+    }));
+  });
+
+  tool("leads.manage", "log_lead_contact", "Lid bilan aloqani yozib qo'yish (qo'ng'iroq, xabar, uchrashuv, izoh) va keyingi aloqa vaqtini belgilash.", {
+    lead_id: z.number().int(),
+    type: z.enum(["CALL", "MESSAGE", "MEETING", "NOTE"]),
+    call_result: z.enum(["ANSWERED", "NO_ANSWER", "BUSY"]).optional(),
+    text: z.string().optional(),
+    next_action_at: z.string().optional().describe("Keyingi aloqa vaqti, ISO formatda (masalan 2026-10-11T10:00). Bo'sh bo'lsa eslatma o'chiriladi"),
+  }, async ({ lead_id, type, call_result, text, next_action_at }) => {
+    await assertLeadAccess(user, lead_id);
+    await db.leadActivity.create({ data: { leadId: lead_id, userId: user.id, type, result: type === "CALL" ? call_result ?? null : null, text } });
+    const lead = await db.lead.findUniqueOrThrow({ where: { id: lead_id } });
+    const reached = type !== "NOTE" && !(type === "CALL" && call_result !== "ANSWERED");
+    await db.lead.update({
+      where: { id: lead_id },
+      data: { nextActionAt: next_action_at ? new Date(next_action_at) : null, ...(lead.status === "NEW" && reached ? { status: "CONTACTED" } : {}) },
+    });
+    if (lead.status === "NEW" && reached) await db.leadActivity.create({ data: { leadId: lead_id, userId: user.id, type: "STATUS", result: "CONTACTED" } });
+    return { ok: true, result_label: call_result ? CALL_RESULTS[call_result] : null };
+  }, false);
 
   tool("leads.manage", "create_lead", "Yangi lid qo'shish.", {
     name: z.string().min(1),
@@ -208,17 +248,25 @@ export function buildServer(user: CurrentUser) {
     course_id: z.number().int().optional(),
     note: z.string().optional(),
   }, async ({ name, phone, source, course_id, note }) => {
-    const lead = await db.lead.create({ data: { name, phone, source, courseId: course_id, note } });
+    const assignedToId = can(user, "leads.own") ? user.id : await pickAssignee();
+    const lead = await db.lead.create({ data: { name, phone, source, courseId: course_id, note, assignedToId, nextActionAt: new Date() } });
     await logAction(user, "lead.create", `Yangi lid (AI orqali): ${name}`);
     return { created_lead_id: lead.id };
   }, false);
 
-  tool("leads.manage", "update_lead_status", "Lid holatini o'zgartirish: NEW (yangi), CONTACTED (bog'lanildi), TRIAL (sinov darsi), WON (yozildi), LOST (rad etdi).", {
+  tool("leads.manage", "update_lead_status", "Lid holatini o'zgartirish: NEW (yangi), CONTACTED (bog'lanildi), TRIAL (sinov darsi), LOST (rad etdi, sabab bilan). O'qishga yozish CRM ichida \"Yozildi\" tugmasi orqali qilinadi.", {
     lead_id: z.number().int(),
-    status: z.enum(["NEW", "CONTACTED", "TRIAL", "WON", "LOST"]),
+    status: z.enum(["NEW", "CONTACTED", "TRIAL", "LOST"]),
+    lost_reason: z.string().optional().describe(`LOST uchun sabab: ${LOST_REASONS.join(", ")}`),
     note: z.string().optional(),
-  }, async ({ lead_id, status, note }) => {
-    const lead = await db.lead.update({ where: { id: lead_id }, data: { status, ...(note !== undefined && { note }) } });
+  }, async ({ lead_id, status, lost_reason, note }) => {
+    await assertLeadAccess(user, lead_id);
+    const lostReason = status === "LOST" ? lost_reason || "Boshqa" : null;
+    const lead = await db.lead.update({
+      where: { id: lead_id },
+      data: { status, lostReason, ...(status === "LOST" ? { nextActionAt: null } : {}), ...(note !== undefined && { note }) },
+    });
+    await db.leadActivity.create({ data: { leadId: lead_id, userId: user.id, type: "STATUS", result: status, text: lostReason } });
     await logAction(user, "lead.status", `Lid "${lead.name}" holati (AI orqali): ${status}`);
     return { ok: true };
   }, false);
@@ -281,20 +329,24 @@ export function buildServer(user: CurrentUser) {
   }, async ({ year, month }) => {
     if (month) {
       const { from, to } = monthRange(month);
-      const [inc, exp] = await Promise.all([
+      const [tuition, shopSum, exp] = await Promise.all([
         db.payment.aggregate({ _sum: { amount: true }, where: { date: { gte: from, lt: to } } }),
+        db.sale.aggregate({ _sum: { total: true }, where: { date: { gte: from, lt: to } } }),
         db.expense.findMany({ where: { date: { gte: from, lt: to } } }),
       ]);
+      const inc = { _sum: { amount: (tuition._sum.amount ?? 0) + (shopSum._sum.total ?? 0) } };
       const expense = exp.reduce((s, e) => s + e.amount, 0);
       const byCategory: Record<string, number> = {};
       exp.forEach((e) => (byCategory[EXPENSE_CATEGORIES[e.category]] = (byCategory[EXPENSE_CATEGORIES[e.category]] ?? 0) + e.amount));
-      return { month, income: inc._sum.amount ?? 0, expense, profit: (inc._sum.amount ?? 0) - expense, expense_by_category: byCategory };
+      return { month, income: inc._sum.amount, tuition: tuition._sum.amount ?? 0, shop_income: shopSum._sum.total ?? 0, expense, profit: (inc._sum.amount ?? 0) - expense, expense_by_category: byCategory };
     }
     const y = year ?? new Date().getFullYear();
-    const [payments, expenses] = await Promise.all([
+    const [tuitionRows, shopRows, expenses] = await Promise.all([
       db.payment.findMany({ where: { date: { gte: new Date(y, 0, 1), lt: new Date(y + 1, 0, 1) } }, select: { amount: true, date: true } }),
+      db.sale.findMany({ where: { date: { gte: new Date(y, 0, 1), lt: new Date(y + 1, 0, 1) } }, select: { total: true, date: true } }),
       db.expense.findMany({ where: { date: { gte: new Date(y, 0, 1), lt: new Date(y + 1, 0, 1) } }, select: { amount: true, date: true } }),
     ]);
+    const payments = [...tuitionRows, ...shopRows.map((r) => ({ amount: r.total, date: r.date }))];
     const months = Array.from({ length: 12 }, (_, i) => {
       const income = payments.filter((p) => p.date.getMonth() === i).reduce((s, p) => s + p.amount, 0);
       const expense = expenses.filter((e) => e.date.getMonth() === i).reduce((s, e) => s + e.amount, 0);
@@ -378,6 +430,38 @@ export function buildServer(user: CurrentUser) {
       include: { user: true }, orderBy: { createdAt: "desc" }, take: limit ?? 50,
     });
     return logs.map((l) => ({ at: l.createdAt.toISOString(), by: l.user?.name ?? null, action: l.action, summary: l.summary }));
+  });
+
+  tool("sales.view", "get_sales_report", "Sotuvchilar natijalari: lidlar, qo'ng'iroqlar, sinov darslari, yozilganlar, konversiya, birinchi to'lovlar, KPI bajarilishi va bonuslar.", {
+    month: z.string().regex(/^\d{4}-\d{2}$/).optional().describe("YYYY-MM, standart: joriy oy"),
+  }, async ({ month }) => {
+    const rows = await salesStats(month ?? currentMonth(), can(user, "leads.own") ? user.id : undefined);
+    return rows.map((r) => ({ ...r, kpis: r.kpis.map((k) => ({ ...k, metric_label: KPI_METRICS[k.metric].label })) }));
+  });
+
+  tool("shop.view", "shop_report", "Do'kon: mahsulotlar qoldig'i, kam qolganlar va oy bo'yicha savdo.", {
+    month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+  }, async ({ month }) => {
+    const { from, to } = monthRange(month);
+    const [products, sales] = await Promise.all([
+      db.product.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+      db.sale.findMany({ where: { date: { gte: from, lt: to } }, include: { items: { include: { product: true } } } }),
+    ]);
+    const items = sales.flatMap((s) => s.items);
+    const byProduct: Record<string, { qty: number; revenue: number }> = {};
+    items.forEach((i) => {
+      const e = (byProduct[i.product.name] ??= { qty: 0, revenue: 0 });
+      e.qty += i.qty;
+      e.revenue += i.qty * i.price;
+    });
+    return {
+      revenue: sales.reduce((s, x) => s + x.total, 0),
+      gross_profit: items.reduce((s, i) => s + (i.price - i.cost) * i.qty, 0),
+      purchases: sales.length,
+      by_product: byProduct,
+      low_stock: products.filter((p) => p.stock <= 5).map((p) => ({ name: p.name, stock: p.stock })),
+      products: products.map((p) => ({ id: p.id, name: p.name, category: PRODUCT_CATEGORIES[p.category], price: p.price, stock: p.stock })),
+    };
   });
 
   return server;

@@ -45,7 +45,7 @@ const pct = (a: number, b: number) => (b ? (a / b) * 100 : null);
 export async function getAnalytics(period: Period, now = new Date()) {
   const { from, to, prevFrom, prevTo, months } = period;
   const span = { gte: prevFrom, lt: to };
-  const [groups, enrollments, payments, attendance, grades, exams, expenses, leads, paidByStudent, students] = await Promise.all([
+  const [groups, enrollments, payments, attendance, grades, exams, expenses, leads, paidByStudent, students, shopSales] = await Promise.all([
     db.group.findMany({ include: { course: true, teacher: true } }),
     db.groupStudent.findMany({ include: { group: { include: { course: true } } } }),
     db.payment.findMany({ where: { date: span }, include: { group: { include: { course: true } } } }),
@@ -56,6 +56,7 @@ export async function getAnalytics(period: Period, now = new Date()) {
     db.lead.findMany({ where: { createdAt: span }, include: { course: true } }),
     db.payment.groupBy({ by: ["studentId"], _sum: { amount: true } }),
     db.student.findMany({ select: { id: true, name: true, phone: true } }),
+    db.sale.findMany({ where: { date: span }, include: { items: true } }),
   ]);
   const groupById = new Map(groups.map((g) => [g.id, g]));
   const studentById = new Map(students.map((s) => [s.id, s]));
@@ -99,14 +100,18 @@ export async function getAnalytics(period: Period, now = new Date()) {
     const ex = exams.filter((x) => inRange(x.date, a, b)).flatMap((e) => e.results.map((r) => (r.score / e.maxScore) * 100));
     const exp = expenses.filter((x) => inRange(x.date, a, b));
     const ld = leads.filter((l) => inRange(l.createdAt, a, b));
-    const income = sum(pays.map((p) => p.amount));
+    const tuition = sum(pays.map((p) => p.amount));
+    const shop = shopSales.filter((x) => inRange(x.date, a, b));
+    const shopIncome = sum(shop.map((x) => x.total));
+    const income = tuition + shopIncome;
     const expense = sum(exp.map((e) => e.amount));
     let chargedTotal = 0;
     for (const m of monthsBetween(a, b)) chargedTotal += monthlyCharge(m.from, m.to);
     return {
-      income, expense, profit: income - expense,
+      income, tuition, shopIncome, expense, profit: income - expense,
+      shopGrossProfit: shopIncome - sum(shop.flatMap((x) => x.items).map((i) => i.cost * i.qty)),
       charged: chargedTotal,
-      collectionRate: pct(income, chargedTotal),
+      collectionRate: pct(tuition, chargedTotal),
       activeStudents: activeStudentsAt(b < now ? b : now),
       newStudents: newStudents(a, b),
       leftStudents: leftStudents(a, b),
@@ -244,6 +249,9 @@ export async function getAnalytics(period: Period, now = new Date()) {
     return { source: src, total: xs.length, won, lost: xs.filter((l) => l.status === "LOST").length, conversion: pct(won, xs.length) };
   }).sort((a, b) => b.total - a.total);
   const funnel = LEAD_STATUSES.map((s) => ({ label: s.label, value: curLeads.filter((l) => l.status === s.key).length }));
+  const lostReasons = [...new Set(curLeads.filter((l) => l.status === "LOST").map((l) => l.lostReason ?? "Ko'rsatilmagan"))]
+    .map((r) => ({ label: r, value: curLeads.filter((l) => l.status === "LOST" && (l.lostReason ?? "Ko'rsatilmagan") === r).length }))
+    .sort((a, b) => b.value - a.value);
   const courseInterest = [...new Set(curLeads.map((l) => l.course?.name ?? "Tanlanmagan"))]
     .map((c) => ({ label: c, value: curLeads.filter((l) => (l.course?.name ?? "Tanlanmagan") === c).length }))
     .sort((a, b) => b.value - a.value);
@@ -264,7 +272,7 @@ export async function getAnalytics(period: Period, now = new Date()) {
     attendance: { byWeekday, atRisk: atRiskAttendance },
     grades: { distribution, topStudents, struggling },
     teachers: teacherRows,
-    leads: { sources: leadSources, funnel, courseInterest },
+    leads: { sources: leadSources, funnel, courseInterest, lostReasons },
     finance: { expenseByCategory, salaryTotal, salaryShare: pct(salaryTotal, current.income) },
   };
 }

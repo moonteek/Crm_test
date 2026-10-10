@@ -15,11 +15,14 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
   const from = new Date(year, 0, 1);
   const to = new Date(year + 1, 0, 1);
 
-  const [payments, expenses] = await Promise.all([
+  const [tuition, shop, expenses] = await Promise.all([
     db.payment.findMany({ where: { date: { gte: from, lt: to } }, select: { amount: true, date: true } }),
+    db.sale.findMany({ where: { date: { gte: from, lt: to } }, select: { total: true, date: true } }),
     db.expense.findMany({ where: { date: { gte: from, lt: to } }, include: { salaryPayment: true }, orderBy: { date: "desc" } }),
   ]);
 
+  // income = tuition payments + shop sales
+  const payments = [...tuition, ...shop.map((s) => ({ amount: s.total, date: s.date }))];
   const rows = MONTHS.map((name, i) => {
     const income = payments.filter((p) => p.date.getMonth() === i).reduce((s, p) => s + p.amount, 0);
     const expense = expenses.filter((e) => e.date.getMonth() === i).reduce((s, e) => s + e.amount, 0);

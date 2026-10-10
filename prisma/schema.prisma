@@ -26,6 +26,8 @@ model User {
   roleId    Int
   role      Role       @relation(fields: [roleId], references: [id])
   isTeacher Boolean    @default(false)
+  // salesperson: can be assigned leads and gets KPI targets
+  isSales   Boolean    @default(false)
   active    Boolean    @default(true)
   // salary rule: NONE | FIXED (so'm per month) | PERCENT (% of payments collected from own groups) | PER_STUDENT (so'm per active student)
   salaryType   String   @default("NONE")
@@ -36,6 +38,10 @@ model User {
   tokens    ApiToken[]
   salaryPayments SalaryPayment[]
   logs      AuditLog[]
+  assignedLeads Lead[]  @relation("LeadAssignee")
+  leadActivities LeadActivity[]
+  kpiTargets KpiTarget[]
+  sales     Sale[]
 }
 
 // Personal access tokens used by MCP clients. Only a SHA-256 hash is stored.
@@ -106,6 +112,8 @@ model Student {
   payments  Payment[]
   grades    Grade[]
   examResults ExamResult[]
+  leads     Lead[]
+  purchases Sale[]
 }
 
 model GroupStudent {
@@ -213,13 +221,99 @@ model AuditLog {
 
 // status: NEW | CONTACTED | TRIAL | WON | LOST
 model Lead {
+  id           Int       @id @default(autoincrement())
+  name         String
+  phone        String
+  source       String? // Instagram, Telegram, Tanish, ...
+  courseId     Int?
+  course       Course?   @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  status       String    @default("NEW")
+  note         String?
+  assignedToId Int?
+  assignedTo   User?     @relation("LeadAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  nextActionAt DateTime? // follow-up reminder
+  lostReason   String?
+  wonAt        DateTime?
+  studentId    Int? // student created from this lead
+  student      Student?  @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
+  activities   LeadActivity[]
+}
+
+// Contact history: CALL | MESSAGE | MEETING | NOTE, and STATUS for status changes.
+model LeadActivity {
   id        Int      @id @default(autoincrement())
+  leadId    Int
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type      String
+  result    String? // for calls: ANSWERED | NO_ANSWER | BUSY ; for STATUS: the new status
+  text      String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// Monthly KPI target for a salesperson. metric: WON | REVENUE | TRIALS | CALLS | CONVERSION
+model KpiTarget {
+  id       Int    @id @default(autoincrement())
+  userId   Int
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month    String // YYYY-MM
+  metric   String
+  target   Int
+  bonus    Int // paid once the target is reached
+  perExtra Int    @default(0) // extra bonus per unit above the target
+
+  @@unique([userId, month, metric])
+}
+
+// Books, merch and other goods sold to students.
+model Product {
+  id        Int        @id @default(autoincrement())
   name      String
-  phone     String
-  source    String? // Instagram, Telegram, Tanish, ...
-  courseId  Int?
-  course    Course?  @relation(fields: [courseId], references: [id], onDelete: SetNull)
-  status    String   @default("NEW")
+  category  String     @default("MERCH") // BOOK | MERCH | OTHER
+  price     Int
+  cost      Int        @default(0) // purchase price per unit, for margin
+  stock     Int        @default(0)
+  active    Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  items     SaleItem[]
+  moves     StockMove[]
+}
+
+model Sale {
+  id        Int        @id @default(autoincrement())
+  studentId Int?
+  student   Student?   @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  buyerName String? // when the buyer is not a student
+  userId    Int?
+  user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  total     Int
+  method    String     @default("CASH")
+  date      DateTime   @default(now())
+  items     SaleItem[]
+}
+
+model SaleItem {
+  id        Int     @id @default(autoincrement())
+  saleId    Int
+  sale      Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
+  qty       Int
+  price     Int // unit price at the time of sale
+  cost      Int     @default(0) // unit cost at the time of sale
+}
+
+// Stock changes: IN (restock), OUT (sale), ADJUST (count correction)
+model StockMove {
+  id        Int      @id @default(autoincrement())
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type      String
+  qty       Int // signed
   note      String?
   createdAt DateTime @default(now())
 }

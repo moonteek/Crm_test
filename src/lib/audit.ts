@@ -24,4 +24,6 @@ export const AUDIT_AREAS: Record<string, string> = {
   token: "MCP tokenlar",
   course: "Kurslar",
   auth: "Kirish",
+  sales: "Sotuv KPI",
+  shop: "Do'kon",
 };

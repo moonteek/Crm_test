@@ -13,7 +13,9 @@ export default async function McpPage() {
   const seeAll = can(user, "staff.manage");
   const h = await headers();
   const proto = h.get("x-forwarded-proto") ?? "http";
-  const endpoint = `${proto}://${h.get("x-forwarded-host") ?? h.get("host")}/api/mcp`;
+  const origin = `${proto}://${h.get("x-forwarded-host") ?? h.get("host")}`;
+  const endpoint = `${origin}/api/mcp`;
+  const leadsHook = process.env.LEADS_WEBHOOK_KEY ? `${origin}/api/leads/inbound?key=${process.env.LEADS_WEBHOOK_KEY}` : null;
   const tokens = await db.apiToken.findMany({
     where: seeAll ? {} : { userId: user.id },
     include: { user: true },
@@ -45,6 +47,26 @@ export default async function McpPage() {
         <h2 className="mb-4 font-semibold">Yangi token</h2>
         <NewTokenForm endpoint={endpoint} />
       </div>
+
+      {seeAll && (
+        <div className="card p-5">
+          <h2 className="font-semibold">Instagram va Telegram lidlarini avtomatik qabul qilish</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            ManyChat (Instagram), Telegram bot, sayt formasi yoki Make/Zapier yangi murojaatni shu manzilga POST qilsa, lid avtomatik
+            yaratiladi va eng kam band sotuvchiga biriktiriladi. Bir odam qayta yozsa, yangi lid ochilmaydi — mavjudiga izoh qo&apos;shiladi.
+          </p>
+          {leadsHook ? (
+            <div className="mt-4 space-y-3">
+              <CopyBox label="Webhook manzili (parol kabi maxfiy saqlang)" value={leadsHook} />
+              <CopyBox label="Yuboriladigan maydonlar (JSON yoki forma)" value={'{"name": "Ism", "phone": "+998901234567", "source": "Instagram", "course": "Python", "note": "Xabar matni"}'} />
+            </div>
+          ) : (
+            <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+              Yoqish uchun serverda <code>LEADS_WEBHOOK_KEY</code> sozlamasiga uzun maxfiy so&apos;z yozing va saytni qayta ishga tushiring.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="card overflow-x-auto">
         <h2 className="px-5 py-4 font-semibold">{seeAll ? "Barcha tokenlar" : "Mening tokenlarim"}</h2>

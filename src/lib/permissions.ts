@@ -11,7 +11,23 @@ export const PERMISSION_GROUPS: { title: string; items: { key: string; label: st
     title: "Lidlar",
     items: [
       { key: "leads.view", label: "Lidlarni ko'rish" },
-      { key: "leads.manage", label: "Lid qo'shish, holatini o'zgartirish, o'chirish" },
+      { key: "leads.manage", label: "Lid qo'shish, holatini o'zgartirish, o'chirish, sotuvchiga biriktirish" },
+      { key: "leads.own", label: "Faqat o'ziga biriktirilgan lidlarni ko'rish (sotuvchilar uchun cheklov)" },
+    ],
+  },
+  {
+    title: "Sotuv",
+    items: [
+      { key: "sales.view", label: "Sotuv natijalari va KPI ni ko'rish" },
+      { key: "sales.manage", label: "Sotuvchilarga KPI va bonus belgilash" },
+    ],
+  },
+  {
+    title: "Do'kon",
+    items: [
+      { key: "shop.view", label: "Do'kon: mahsulotlar va savdolarni ko'rish" },
+      { key: "shop.sell", label: "Do'kon: mahsulot sotish" },
+      { key: "shop.manage", label: "Do'kon: mahsulot qo'shish, narx va ombor (kirim) boshqarish" },
     ],
   },
   {
@@ -68,8 +84,11 @@ export const ALL_PERMISSIONS = PERMISSION_GROUPS.flatMap((g) => g.items.map((i) 
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];
 
+/** Permissions that limit access rather than grant it; the administrator never has these. */
+export const RESTRICTIONS = ["leads.own"];
+
 export function parsePermissions(role: { permissions: string; isSystem: boolean }) {
-  if (role.isSystem) return new Set(ALL_PERMISSIONS);
+  if (role.isSystem) return new Set(ALL_PERMISSIONS.filter((p) => !RESTRICTIONS.includes(p)));
   return new Set(role.permissions.split(",").filter((p) => ALL_PERMISSIONS.includes(p)));
 }
 
@@ -82,6 +101,7 @@ export const DEFAULT_ROLES: { name: string; isSystem?: boolean; permissions: str
     permissions: [
       "dashboard.view", "analytics.view", "audit.view", "leads.view", "students.view", "groups.view", "groups.all",
       "payments.view", "debtors.view", "finance.view", "salaries.view", "teachers.view", "courses.view",
+      "sales.view", "shop.view",
     ],
   },
   {
@@ -89,8 +109,16 @@ export const DEFAULT_ROLES: { name: string; isSystem?: boolean; permissions: str
     permissions: [
       "dashboard.view", "leads.view", "leads.manage", "students.view", "students.manage",
       "groups.view", "groups.all", "groups.manage", "attendance.mark", "grades.manage",
-      "payments.view", "payments.create", "debtors.view",
+      "payments.view", "payments.create", "debtors.view", "sales.view", "shop.view", "shop.sell",
       "teachers.view", "courses.view", "rooms.manage", "mcp.use",
+    ],
+  },
+  {
+    // sells courses: works only with the leads assigned to them
+    name: "Sotuv menejeri",
+    permissions: [
+      "dashboard.view", "leads.view", "leads.manage", "leads.own", "students.view", "students.manage",
+      "groups.view", "groups.all", "courses.view", "sales.view", "mcp.use",
     ],
   },
   {
@@ -104,12 +132,12 @@ export const DEFAULT_ROLES: { name: string; isSystem?: boolean; permissions: str
   },
   {
     name: "Kassir",
-    permissions: ["dashboard.view", "students.view", "groups.view", "groups.all", "payments.view", "payments.create", "debtors.view"],
+    permissions: ["dashboard.view", "students.view", "groups.view", "groups.all", "payments.view", "payments.create", "debtors.view", "shop.view", "shop.sell"],
   },
   {
     // reception / call centre: leads and sign-ups, no money
     name: "Qabulxona operatori",
-    permissions: ["dashboard.view", "leads.view", "leads.manage", "students.view", "students.manage", "groups.view", "groups.all", "courses.view"],
+    permissions: ["dashboard.view", "leads.view", "leads.manage", "students.view", "students.manage", "groups.view", "groups.all", "courses.view", "shop.view", "shop.sell"],
   },
   {
     name: "O'qituvchi",

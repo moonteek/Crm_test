@@ -9,7 +9,7 @@ import { Field, PageHeader, SubmitRow } from "@/components/ui";
 import { createUser, setUserActive, updateUser } from "../actions";
 
 type Role = { id: number; name: string };
-type Staff = { name: string; phone: string; roleId: number; isTeacher: boolean };
+type Staff = { name: string; phone: string; roleId: number; isTeacher: boolean; isSales: boolean };
 
 function StaffFields({ roles, u }: { roles: Role[]; u?: Staff }) {
   return (
@@ -29,6 +29,10 @@ function StaffFields({ roles, u }: { roles: Role[]; u?: Staff }) {
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" name="isTeacher" defaultChecked={u?.isTeacher} className="h-4 w-4 accent-brand-600" />
         Dars beradi (guruhlarga o&apos;qituvchi sifatida biriktirish mumkin)
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" name="isSales" defaultChecked={u?.isSales} className="h-4 w-4 accent-brand-600" />
+        Sotuvchi (lidlar biriktiriladi, KPI belgilanadi)
       </label>
     </>
   );
@@ -61,6 +65,7 @@ export default async function StaffPage() {
                 <td className="font-medium">
                   {u.name}
                   {u.isTeacher && <span className="badge ml-2 bg-violet-50 text-violet-700">o&apos;qituvchi</span>}
+                  {u.isSales && <span className="badge ml-2 bg-amber-50 text-amber-700">sotuvchi</span>}
                   {u.id === me.id && <span className="badge ml-2 bg-slate-100 text-slate-600">siz</span>}
                 </td>
                 <td>{u.phone}</td>

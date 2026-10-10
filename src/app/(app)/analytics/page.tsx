@@ -147,7 +147,7 @@ function Payments({ a }: { a: Analytics }) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Kpi label="Tushum" value={c.income} prev={p.income} format="money" />
+        <Kpi label="O'qish to'lovlari" value={c.tuition} prev={p.tuition} format="money" />
         <Kpi label="Hisoblangan to'lovlar" value={c.charged} prev={p.charged} format="money" hint="kurs narxi × o'quvchi-oy" />
         <Kpi label="Yig'ilish darajasi" value={c.collectionRate} prev={p.collectionRate} format="percent" />
         <Kpi label="Umumiy qarzdorlik" value={a.payments.debtTotal} format="money" hint={`${a.payments.debtors.length} ta qarzdor (hozirgi holat)`} />
@@ -156,7 +156,7 @@ function Payments({ a }: { a: Analytics }) {
         <Panel title="Tushum va hisoblangan to'lov" sub="Kutilgan to'lov qancha qismi yig'ilgani" className="xl:col-span-2">
           <ColumnChart labels={labels(a)} format="money" series={[
             { name: "Hisoblangan", values: a.monthly.map((m) => m.charged) },
-            { name: "Tushum", values: a.monthly.map((m) => m.income) },
+            { name: "Tushum", values: a.monthly.map((m) => m.tuition) },
           ]} />
         </Panel>
         <Panel title="To'lov turlari"><BarList format="money" items={a.payments.byMethod} /></Panel>
@@ -318,6 +318,9 @@ function Leads({ a }: { a: Analytics }) {
         </Panel>
         <Panel title="Qaysi kurslarga qiziqish bor"><BarList format="number" items={a.leads.courseInterest} /></Panel>
       </div>
+      <Panel title="Nima uchun rad etishdi" sub="Rad etgan lidlar sabablari — eng ko'p uchraydigan muammoni hal qiling">
+        <BarList format="number" items={a.leads.lostReasons} />
+      </Panel>
     </div>
   );
 }
@@ -331,6 +334,8 @@ function Finance({ a }: { a: Analytics }) {
         <Kpi label="Xarajat" value={c.expense} prev={p.expense} format="money" upIsGood={false} />
         <Kpi label="Sof foyda" value={c.profit} prev={p.profit} format="money" />
         <Kpi label="Ish haqi / tushum" value={a.finance.salaryShare} format="percent" hint={`ish haqi: ${fmt(a.finance.salaryTotal, "money")}`} />
+        <Kpi label="O'qish to'lovlari" value={c.tuition} prev={p.tuition} format="money" />
+        <Kpi label="Do'kon savdosi" value={c.shopIncome} prev={p.shopIncome} format="money" hint={`yalpi foyda: ${fmt(c.shopGrossProfit, "money")}`} />
       </div>
       <div className="grid gap-6 xl:grid-cols-3">
         <Panel title="Sof foyda dinamikasi" sub="Tushum − xarajat, so'm" className="xl:col-span-2">
@@ -341,13 +346,14 @@ function Finance({ a }: { a: Analytics }) {
       <Panel title="Oylar kesimida">
         <div className="-mx-5 overflow-x-auto">
           <table className="table">
-            <thead><tr><th>Oy</th><th className="text-right">Hisoblangan</th><th className="text-right">Tushum</th><th>Yig&apos;ilish</th><th className="text-right">Xarajat</th><th className="text-right">Foyda</th></tr></thead>
+            <thead><tr><th>Oy</th><th className="text-right">Hisoblangan</th><th className="text-right">O&apos;qish to&apos;lovi</th><th className="text-right">Do&apos;kon</th><th>Yig&apos;ilish</th><th className="text-right">Xarajat</th><th className="text-right">Foyda</th></tr></thead>
             <tbody>
               {a.monthly.map((m) => (
                 <tr key={m.key}>
                   <td className="font-medium">{m.label}</td>
                   <td className="text-right tabular-nums">{fmt(m.charged, "money")}</td>
-                  <td className="text-right tabular-nums">{fmt(m.income, "money")}</td>
+                  <td className="text-right tabular-nums">{fmt(m.tuition, "money")}</td>
+                  <td className="text-right tabular-nums">{fmt(m.shopIncome, "money")}</td>
                   <td><Rate v={m.collectionRate} good={95} ok={80} /></td>
                   <td className="text-right tabular-nums">{fmt(m.expense, "money")}</td>
                   <td className={`text-right font-semibold tabular-nums ${m.profit < 0 ? "text-rose-700" : "text-emerald-700"}`}>{fmt(m.profit, "money")}</td>
