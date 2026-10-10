@@ -49,21 +49,21 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
 
   return (
     <>
-      <Link href="/students" className="text-sm text-slate-500 hover:text-brand-600">← O&apos;quvchilar</Link>
-      <div className="mt-3 grid gap-6 xl:grid-cols-3">
+      <Link href="/students" className="label-mono hover:text-ink">← O&apos;quvchilar</Link>
+      <div className="mt-3 grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div className="space-y-6">
           <div className="card p-5">
             <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-100 text-xl font-bold text-brand-700">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-accent text-xl font-semibold text-on-accent">
                 {student.name.charAt(0)}
               </div>
               <div className="min-w-0">
-                <h1 className="truncate text-xl font-bold">{student.name}</h1>
-                <p className="text-sm text-slate-500">ID: {student.id}</p>
+                <h1 className="truncate text-xl font-semibold tracking-tight">{student.name}</h1>
+                <p className="text-sm text-muted">ID: {student.id}</p>
               </div>
             </div>
             <dl className="mt-5 space-y-2 text-sm">
-              <Row k="Telefon"><a href={`tel:${student.phone}`} className="flex items-center gap-1 hover:text-brand-600"><Phone className="h-3.5 w-3.5" />{student.phone}</a></Row>
+              <Row k="Telefon"><a href={`tel:${student.phone}`} className="flex items-center gap-1 hover:underline"><Phone className="h-3.5 w-3.5" />{student.phone}</a></Row>
               <Row k="Ota-ona">{student.parentPhone ?? "—"}</Row>
               <Row k="Tug'ilgan sana">{date(student.birthDate)}</Row>
               <Row k="Qo'shilgan">{date(student.createdAt)}</Row>
@@ -86,16 +86,16 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                 </button>
               ) : (
                 <form action={deleteStudent.bind(null, student.id)}>
-                  <button className="btn-secondary text-rose-600"><Trash2 className="h-4 w-4" /> O&apos;chirish</button>
+                  <button className="btn-danger"><Trash2 className="h-4 w-4" /> O&apos;chirish</button>
                 </form>
               ))}
             </div>
           </div>
 
           {allow.balance && <div className="card p-5">
-            <p className="text-sm text-slate-500">Balans</p>
-            <p className={`mt-1 text-2xl font-bold ${b < 0 ? "text-rose-600" : "text-emerald-600"}`}>{money(b)}</p>
-            <p className="mt-1 text-xs text-slate-500">{b < 0 ? "Qarzdorlik mavjud" : "Qarzdorlik yo'q"}</p>
+            <p className="label-mono">Balans</p>
+            <p className={`mt-1 text-2xl font-semibold tracking-tight ${b < 0 ? "text-danger" : "text-success"}`}>{money(b)}</p>
+            <p className="mt-1 text-xs text-muted">{b < 0 ? "Qarzdorlik mavjud" : "Qarzdorlik yo'q"}</p>
             {allow.pay && <div className="mt-4">
               <Modal title="To'lov qabul qilish" trigger={<><Wallet className="h-4 w-4" /> To&apos;lov qilish</>}>
                 <PaymentForm studentId={student.id} groups={activeGroups} />
@@ -127,19 +127,19 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                 <tbody>
                   {student.groups.map((gs) => (
                     <tr key={gs.id}>
-                      <td><Link href={`/groups/${gs.groupId}`} className="font-medium hover:text-brand-600">{gs.group.name}</Link></td>
-                      <td>{gs.group.course.name}<p className="text-xs text-slate-500">{money(gs.group.course.price)} / oy</p></td>
-                      <td>{GROUP_DAYS[gs.group.days]}<p className="text-xs text-slate-500">{gs.group.time}</p></td>
+                      <td><Link href={`/groups/${gs.groupId}`} className="font-medium hover:underline">{gs.group.name}</Link></td>
+                      <td>{gs.group.course.name}<p className="text-xs text-muted">{money(gs.group.course.price)} / oy</p></td>
+                      <td>{GROUP_DAYS[gs.group.days]}<p className="text-xs text-muted">{gs.group.time}</p></td>
                       <td>{monthsEnrolled(gs.joinedAt, gs.leftAt)}</td>
                       <td>
                         {gs.leftAt
-                          ? <span className="badge bg-slate-100 text-slate-600">Chiqgan {date(gs.leftAt)}</span>
-                          : <span className="badge bg-emerald-100 text-emerald-700">Faol · {date(gs.joinedAt)}</span>}
+                          ? <span className="badge bg-ink/5 text-muted">Chiqgan {date(gs.leftAt)}</span>
+                          : <span className="badge bg-success-tint text-success">Faol · {date(gs.joinedAt)}</span>}
                       </td>
                       <td>
                         {allow.manage && !gs.leftAt && (
                           <form action={removeStudentFromGroup.bind(null, gs.groupId, student.id)}>
-                            <button className="text-xs text-rose-600 hover:underline">Chiqarish</button>
+                            <button className="text-xs text-danger hover:underline">Chiqarish</button>
                           </form>
                         )}
                       </td>
@@ -160,14 +160,14 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                   {student.payments.map((p) => (
                     <tr key={p.id}>
                       <td>{date(p.date)}</td>
-                      <td className="font-semibold text-emerald-600">{money(p.amount)}</td>
+                      <td className="font-semibold text-success">{money(p.amount)}</td>
                       <td>{PAYMENT_METHODS[p.method]}</td>
                       <td>{p.group?.name ?? "—"}</td>
-                      <td className="text-slate-500">{p.note ?? ""}</td>
+                      <td className="text-muted">{p.note ?? ""}</td>
                       {allow.deletePayment && (
                         <td>
                           <form action={deletePayment.bind(null, p.id)}>
-                            <button className="text-slate-400 hover:text-rose-600" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
+                            <button className="text-faint hover:text-danger" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
                           </form>
                         </td>
                       )}
@@ -205,7 +205,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
 function Row({ k, children }: { k: string; children: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-4">
-      <dt className="text-slate-500">{k}</dt>
+      <dt className="text-muted">{k}</dt>
       <dd className="text-right font-medium">{children}</dd>
     </div>
   );

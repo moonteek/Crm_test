@@ -43,11 +43,11 @@ export const EXPENSE_CATEGORIES: Record<string, string> = {
 };
 
 export const LEAD_STATUSES: { key: string; label: string; color: string }[] = [
-  { key: "NEW", label: "Yangi", color: "bg-sky-500" },
-  { key: "CONTACTED", label: "Bog'lanildi", color: "bg-amber-500" },
-  { key: "TRIAL", label: "Sinov darsi", color: "bg-violet-500" },
-  { key: "WON", label: "O'qishga yozildi", color: "bg-emerald-500" },
-  { key: "LOST", label: "Rad etdi", color: "bg-rose-500" },
+  { key: "NEW", label: "Yangi", color: "bg-ink/25" },
+  { key: "CONTACTED", label: "Bog'lanildi", color: "bg-ink/60" },
+  { key: "TRIAL", label: "Sinov darsi", color: "bg-accent" },
+  { key: "WON", label: "O'qishga yozildi", color: "bg-success" },
+  { key: "LOST", label: "Rad etdi", color: "bg-danger" },
 ];
 
 export const LOST_REASONS = ["Narx qimmat", "Vaqt to'g'ri kelmadi", "Manzil uzoq", "Boshqa markazni tanladi", "Javob bermayapti", "Shunchaki qiziqdi", "Boshqa"];

@@ -48,13 +48,13 @@ export function StatCard({
 /** Pill switcher between a few views of a page, each a link. */
 export function Segmented({ options }: { options: { href: string; label: string; active: boolean }[] }) {
   return (
-    <div className="flex gap-0.5 rounded-full border border-line bg-surface p-0.5">
+    <div className="flex max-w-full gap-0.5 overflow-x-auto rounded-full border border-line bg-surface p-0.5">
       {options.map((o) => (
         <Link
           key={o.href}
           href={o.href}
           aria-current={o.active ? "page" : undefined}
-          className={`press rounded-full px-3.5 py-1.5 text-sm font-medium ${o.active ? "bg-nav-active text-nav-active-ink" : "text-muted hover:text-ink"}`}
+          className={`press shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium whitespace-nowrap ${o.active ? "bg-nav-active text-nav-active-ink" : "text-muted hover:text-ink"}`}
         >
           {o.label}
         </Link>

@@ -37,15 +37,15 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
 
   return (
     <>
-      <Link href="/leads" className="text-sm text-slate-500 hover:text-brand-600">← Lidlar</Link>
-      <div className="mt-3 grid gap-6 xl:grid-cols-3">
+      <Link href="/leads" className="label-mono hover:text-ink">← Lidlar</Link>
+      <div className="mt-3 grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div className="space-y-6">
           <div className="card p-5">
             <div className="flex items-start justify-between gap-2">
-              <h1 className="text-xl font-bold">{lead.name}</h1>
-              <span className="badge bg-slate-100 text-slate-700"><span className={`mr-1.5 h-2 w-2 rounded-full ${status?.color}`} />{status?.label}</span>
+              <h1 className="text-xl font-semibold tracking-tight">{lead.name}</h1>
+              <span className="badge bg-ink/5 text-ink"><span className={`mr-1.5 h-2 w-2 rounded-full ${status?.color}`} />{status?.label}</span>
             </div>
-            <a href={`tel:${lead.phone}`} className="mt-1 flex items-center gap-1 text-slate-600 hover:text-brand-600"><Phone className="h-4 w-4" />{lead.phone}</a>
+            <a href={`tel:${lead.phone}`} className="mt-1 flex items-center gap-1 text-muted hover:underline"><Phone className="h-4 w-4" />{lead.phone}</a>
             <dl className="mt-4 space-y-2 text-sm">
               <Row k="Manba">{lead.source ?? "—"}</Row>
               <Row k="Kurs">{lead.course?.name ?? "—"}</Row>
@@ -53,11 +53,11 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               <Row k="Keyingi aloqa">{lead.nextActionAt && open ? stamp(lead.nextActionAt) : "—"}</Row>
               <Row k="Kelgan sana">{date(lead.createdAt)}</Row>
               {lead.lostReason && <Row k="Rad etish sababi">{lead.lostReason}</Row>}
-              {lead.student && <Row k="O'quvchi"><Link className="text-brand-600 hover:underline" href={`/students/${lead.student.id}`}>Profilni ochish</Link></Row>}
+              {lead.student && <Row k="O'quvchi"><Link className="text-accent-ink hover:underline" href={`/students/${lead.student.id}`}>Profilni ochish</Link></Row>}
               {lead.note && <Row k="Izoh">{lead.note}</Row>}
             </dl>
             {manage && (
-              <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+              <div className="mt-5 flex flex-wrap gap-2 border-t border-line pt-4">
                 {open && lead.status !== "TRIAL" && (
                   <form action={setLeadStatus.bind(null, lead.id, "TRIAL")}><button className="btn-secondary">Sinov darsiga yozildi</button></form>
                 )}
@@ -83,7 +83,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                   </Modal>
                 )}
                 <form action={deleteLead.bind(null, lead.id)}>
-                  <button className="btn-secondary text-rose-600"><Trash2 className="h-4 w-4" /></button>
+                  <button className="btn-danger"><Trash2 className="h-4 w-4" /></button>
                 </form>
               </div>
             )}
@@ -112,21 +112,21 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
           )}
           <div className="card p-5">
             <h2 className="mb-4 font-semibold">Tarix ({lead.activities.length})</h2>
-            {lead.activities.length === 0 && <p className="text-sm text-slate-400">Hali hech qanday aloqa yozilmagan</p>}
+            {lead.activities.length === 0 && <p className="text-sm text-faint">Hali hech qanday aloqa yozilmagan</p>}
             <ol className="space-y-4">
               {lead.activities.map((a) => {
                 const Icon = ICONS[a.type] ?? StickyNote;
                 return (
                   <li key={a.id} className="flex gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600"><Icon className="h-4 w-4" /></div>
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink/5 text-muted"><Icon className="h-4 w-4" /></div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm">
                         <span className="font-medium">{ACTIVITY_TYPES[a.type]}</span>
-                        {a.type === "CALL" && a.result && <span className="text-slate-500"> · {CALL_RESULTS[a.result]}</span>}
-                        {a.type === "STATUS" && a.result && <span className="text-slate-500"> → {LEAD_STATUSES.find((s) => s.key === a.result)?.label}</span>}
+                        {a.type === "CALL" && a.result && <span className="text-muted"> · {CALL_RESULTS[a.result]}</span>}
+                        {a.type === "STATUS" && a.result && <span className="text-muted"> → {LEAD_STATUSES.find((s) => s.key === a.result)?.label}</span>}
                       </p>
-                      {a.text && <p className="mt-0.5 text-sm text-slate-700">{a.text}</p>}
-                      <p className="mt-0.5 text-xs text-slate-400">{stamp(a.createdAt)} · {a.user?.name ?? "Tizim"}</p>
+                      {a.text && <p className="mt-0.5 text-sm text-ink">{a.text}</p>}
+                      <p className="mt-1 font-mono text-[11px] text-faint">{stamp(a.createdAt)} · {a.user?.name ?? "Tizim"}</p>
                     </div>
                   </li>
                 );
@@ -142,7 +142,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
 function Row({ k, children }: { k: string; children: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-4">
-      <dt className="text-slate-500">{k}</dt>
+      <dt className="text-muted">{k}</dt>
       <dd className="text-right font-medium">{children}</dd>
     </div>
   );

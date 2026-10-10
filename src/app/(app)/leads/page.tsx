@@ -86,22 +86,22 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
       </PageHeader>
 
       {due.length > 0 && (
-        <div className="card mb-6 border-amber-200">
-          <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-3">
-            <AlarmClock className="h-5 w-5 text-amber-600" />
+        <div className="card mb-6 border-warning/40">
+          <div className="flex items-center gap-2 border-b border-line px-5 py-3">
+            <AlarmClock className="h-5 w-5 text-warning" />
             <h2 className="font-semibold">Bugun bog&apos;lanish kerak</h2>
-            <span className="badge bg-amber-100 text-amber-800">{due.length}</span>
+            <span className="badge bg-warning-tint text-warning">{due.length}</span>
           </div>
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-line">
             {due.slice(0, 8).map((l) => {
               const late = l.nextActionAt! < now;
               return (
-                <Link key={l.id} href={`/leads/${l.id}`} className="flex flex-wrap items-center justify-between gap-2 px-5 py-2.5 hover:bg-slate-50">
+                <Link key={l.id} href={`/leads/${l.id}`} className="flex flex-wrap items-center justify-between gap-2 px-5 py-2.5 hover:bg-ink/[.03]">
                   <div className="min-w-0">
-                    <p className="font-medium">{l.name} <span className="text-sm font-normal text-slate-500">{l.phone}</span></p>
-                    <p className="text-xs text-slate-500">{l.course?.name ?? "Kurs tanlanmagan"}{!own && ` · ${l.assignedTo?.name ?? "biriktirilmagan"}`}</p>
+                    <p className="font-medium">{l.name} <span className="text-sm font-normal text-muted">{l.phone}</span></p>
+                    <p className="text-xs text-muted">{l.course?.name ?? "Kurs tanlanmagan"}{!own && ` · ${l.assignedTo?.name ?? "biriktirilmagan"}`}</p>
                   </div>
-                  <span className={`badge ${late ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-700"}`}>
+                  <span className={`badge ${late ? "bg-danger-tint text-danger" : "bg-ink/5 text-ink"}`}>
                     {late ? "Kechikdi · " : ""}{when(l.nextActionAt!)}
                   </span>
                 </Link>
@@ -114,63 +114,63 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
       <div className="mb-4 flex flex-wrap gap-2 text-sm">
         {!own && (
           <>
-            <Link href={qs({ u: undefined })} className={`rounded-full px-3 py-1 ${!u ? "bg-brand-600 text-white" : "bg-white text-slate-600"}`}>Barcha sotuvchilar</Link>
+            <Link href={qs({ u: undefined })} className={`press rounded-full px-3 py-1 ${!u ? "bg-nav-active text-nav-active-ink" : "border border-line bg-surface text-muted hover:text-ink"}`}>Barcha sotuvchilar</Link>
             {sellers.map((s) => (
-              <Link key={s.id} href={qs({ u: String(s.id) })} className={`rounded-full px-3 py-1 ${u === String(s.id) ? "bg-brand-600 text-white" : "bg-white text-slate-600"}`}>{s.name}</Link>
+              <Link key={s.id} href={qs({ u: String(s.id) })} className={`press rounded-full px-3 py-1 ${u === String(s.id) ? "bg-nav-active text-nav-active-ink" : "border border-line bg-surface text-muted hover:text-ink"}`}>{s.name}</Link>
             ))}
-            <Link href={qs({ u: "none" })} className={`rounded-full px-3 py-1 ${u === "none" ? "bg-brand-600 text-white" : "bg-white text-slate-600"}`}>Biriktirilmagan</Link>
-            <span className="mx-1 text-slate-300">|</span>
+            <Link href={qs({ u: "none" })} className={`press rounded-full px-3 py-1 ${u === "none" ? "bg-nav-active text-nav-active-ink" : "border border-line bg-surface text-muted hover:text-ink"}`}>Biriktirilmagan</Link>
+            <span className="mx-1 text-faint">|</span>
           </>
         )}
-        <Link href={qs({ src: undefined })} className={`rounded-full px-3 py-1 ${!src ? "bg-slate-800 text-white" : "bg-white text-slate-600"}`}>Barcha manbalar</Link>
+        <Link href={qs({ src: undefined })} className={`press rounded-full px-3 py-1 ${!src ? "bg-nav-active text-nav-active-ink" : "border border-line bg-surface text-muted hover:text-ink"}`}>Barcha manbalar</Link>
         {LEAD_SOURCES.map((s) => (
-          <Link key={s} href={qs({ src: s })} className={`rounded-full px-3 py-1 ${src === s ? "bg-slate-800 text-white" : "bg-white text-slate-600"}`}>{s}</Link>
+          <Link key={s} href={qs({ src: s })} className={`press rounded-full px-3 py-1 ${src === s ? "bg-nav-active text-nav-active-ink" : "border border-line bg-surface text-muted hover:text-ink"}`}>{s}</Link>
         ))}
       </div>
 
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-4 md:mx-0 md:snap-none md:gap-4 md:px-0">
         {LEAD_STATUSES.map((status) => {
           const items = leads.filter((l) => l.status === status.key);
           return (
-            <div key={status.key} className="w-72 shrink-0">
+            <div key={status.key} className="w-[82vw] max-w-72 shrink-0 snap-start">
               <div className="mb-3 flex items-center gap-2">
                 <span className={`h-2.5 w-2.5 rounded-full ${status.color}`} />
                 <h2 className="text-sm font-semibold">{status.label}</h2>
-                <span className="badge bg-slate-200 text-slate-600">{items.length}</span>
+                <span className="font-mono text-xs text-faint">{items.length}</span>
               </div>
               <div className="space-y-3">
                 {items.map((lead) => (
-                  <div key={lead.id} className="card p-4">
-                    <Link href={`/leads/${lead.id}`} className="font-medium hover:text-brand-600">{lead.name}</Link>
-                    <a href={`tel:${lead.phone}`} className="mt-1 flex items-center gap-1 text-sm text-slate-500 hover:text-brand-600">
+                  <div key={lead.id} className="card p-4 transition-colors hover:border-line-strong">
+                    <Link href={`/leads/${lead.id}`} className="font-medium hover:underline">{lead.name}</Link>
+                    <a href={`tel:${lead.phone}`} className="mt-1 flex items-center gap-1 font-mono text-xs text-muted hover:text-ink">
                       <Phone className="h-3.5 w-3.5" /> {lead.phone}
                     </a>
                     <div className="mt-2 flex flex-wrap gap-1">
-                      {lead.course && <span className="badge bg-brand-50 text-brand-700">{lead.course.name}</span>}
-                      {lead.source && <span className="badge bg-slate-100 text-slate-600">{lead.source}</span>}
-                      {lead.lostReason && <span className="badge bg-rose-50 text-rose-700">{lead.lostReason}</span>}
+                      {lead.course && <span className="badge bg-accent-tint text-accent-ink">{lead.course.name}</span>}
+                      {lead.source && <span className="badge bg-ink/5 text-muted">{lead.source}</span>}
+                      {lead.lostReason && <span className="badge bg-danger-tint text-danger">{lead.lostReason}</span>}
                     </div>
-                    <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+                    <div className="mt-2 flex items-center justify-between text-xs text-muted">
                       {!own && <span className="flex items-center gap-1"><UserRound className="h-3.5 w-3.5" />{lead.assignedTo?.name ?? "biriktirilmagan"}</span>}
                       {lead.nextActionAt && ["NEW", "CONTACTED", "TRIAL"].includes(lead.status) && (
-                        <span className={lead.nextActionAt < now ? "font-medium text-rose-600" : ""}>⏰ {when(lead.nextActionAt)}</span>
+                        <span className={lead.nextActionAt < now ? "font-medium text-danger" : ""}>⏰ {when(lead.nextActionAt)}</span>
                       )}
                     </div>
                     {manage && ["NEW", "CONTACTED", "TRIAL"].includes(lead.status) && (
-                      <div className="mt-3 flex flex-wrap gap-1 border-t border-slate-100 pt-3">
-                        <Modal title={`${lead.name} — aloqa`} triggerClassName="rounded-md bg-brand-50 px-2 py-1 text-xs text-brand-700 hover:bg-brand-100" trigger="📞 Aloqa">
+                      <div className="mt-3 flex flex-wrap gap-1 border-t border-line pt-3">
+                        <Modal title={`${lead.name} — aloqa`} triggerClassName="press badge bg-accent-tint text-accent-ink" trigger="📞 Aloqa">
                           <ActivityForm leadId={lead.id} />
                         </Modal>
                         {lead.status !== "TRIAL" && (
                           <form action={setLeadStatus.bind(null, lead.id, "TRIAL")}>
-                            <button className="rounded-md bg-slate-100 px-2 py-1 text-xs hover:bg-slate-200">→ Sinov darsi</button>
+                            <button className="press badge bg-ink/5 text-ink hover:bg-ink/10">→ Sinov darsi</button>
                           </form>
                         )}
-                        <Modal title={`${lead.name} — rad etdi`} triggerClassName="rounded-md bg-slate-100 px-2 py-1 text-xs hover:bg-slate-200" trigger="→ Rad etdi">
+                        <Modal title={`${lead.name} — rad etdi`} triggerClassName="press badge bg-ink/5 text-ink hover:bg-ink/10" trigger="→ Rad etdi">
                           <LostForm leadId={lead.id} />
                         </Modal>
                         {convert && (
-                          <Modal title={`${lead.name} — o'quvchiga aylantirish`} triggerClassName="rounded-md bg-emerald-100 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-200" trigger="✓ Yozildi">
+                          <Modal title={`${lead.name} — o'quvchiga aylantirish`} triggerClassName="press badge bg-success-tint text-success" trigger="✓ Yozildi">
                             <form action={convertLead.bind(null, lead.id)} className="space-y-3">
                               <Field label="Guruh">
                                 <select name="groupId" className="input">
@@ -191,7 +191,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
           );
         })}
       </div>
-      <p className="text-xs text-slate-400">Yakunlangan (yozildi / rad etdi) lidlar oxirgi 60 kun uchun ko&apos;rsatiladi.</p>
+      <p className="text-xs text-faint">Yakunlangan (yozildi / rad etdi) lidlar oxirgi 60 kun uchun ko&apos;rsatiladi.</p>
     </>
   );
 }

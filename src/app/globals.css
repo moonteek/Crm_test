@@ -224,6 +224,32 @@ body {
   .table tbody tr:hover {
     @apply bg-ink/[.03];
   }
+
+  /* phones: each row becomes a card; cells show their column name from data-label */
+  @media (width < 48rem) {
+    .table-stack thead {
+      @apply hidden;
+    }
+    .table-stack,
+    .table-stack tbody,
+    .table-stack tr,
+    .table-stack td {
+      @apply block;
+    }
+    .table-stack tbody tr {
+      @apply border-b border-line px-4 py-3 last:border-b-0;
+    }
+    .table-stack td {
+      @apply flex items-center justify-between gap-4 border-0 px-0 py-1 whitespace-normal;
+    }
+    .table-stack td[data-label]::before {
+      content: attr(data-label);
+      @apply label-mono shrink-0;
+    }
+    .table-stack td:empty {
+      @apply hidden;
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -7,7 +7,7 @@ import { balance } from "@/lib/billing";
 import { date, money } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { StudentFields } from "@/components/forms";
-import { BalanceBadge, Empty, Field, PageHeader, SubmitRow } from "@/components/ui";
+import { BalanceBadge, Empty, Field, PageHeader, Segmented, SubmitRow } from "@/components/ui";
 import { createStudent } from "../actions";
 
 export default async function StudentsPage({ searchParams }: { searchParams: Promise<{ q?: string; status?: string }> }) {
@@ -56,44 +56,34 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
       </PageHeader>
 
       <div className="card">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-4">
-          <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
-            {tabs.map((t) => (
-              <Link
-                key={t.key}
-                href={`/students?status=${t.key}${q ? `&q=${encodeURIComponent(q)}` : ""}`}
-                className={`rounded-md px-3 py-1.5 text-sm ${status === t.key ? "bg-white font-medium shadow-sm" : "text-slate-600"}`}
-              >
-                {t.label}
-              </Link>
-            ))}
-          </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line p-4">
+          <Segmented options={tabs.map((t) => ({ href: `/students?status=${t.key}${q ? `&q=${encodeURIComponent(q)}` : ""}`, label: t.label, active: status === t.key }))} />
           <form className="relative w-full sm:w-72">
             <input type="hidden" name="status" value={status} />
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-            <input name="q" defaultValue={q} placeholder="Ism yoki telefon..." className="input pl-9" />
+            <Search className="absolute top-3 left-3.5 h-4 w-4 text-faint" />
+            <input name="q" defaultValue={q} placeholder="Ism yoki telefon..." className="input rounded-full pl-10" />
           </form>
         </div>
-        <div className="overflow-x-auto">
-          <table className="table">
-            <thead><tr><th>#</th><th>Ism</th><th>Telefon</th><th>Guruhlar</th>{showBalance && <th>Balans</th>}<th>Qo&apos;shilgan</th></tr></thead>
+        <div className="md:overflow-x-auto">
+          <table className="table table-stack">
+            <thead><tr><th className="max-md:hidden">#</th><th>Ism</th><th>Telefon</th><th>Guruhlar</th>{showBalance && <th>Balans</th>}<th>Qo&apos;shilgan</th></tr></thead>
             <tbody>
               {students.map((s, i) => {
                 const b = balance(s.groups, s.payments);
                 const active = s.groups.filter((g) => !g.leftAt);
                 return (
                   <tr key={s.id}>
-                    <td className="text-slate-400">{i + 1}</td>
-                    <td><Link href={`/students/${s.id}`} className="font-medium hover:text-brand-600">{s.name}</Link></td>
-                    <td>{s.phone}</td>
-                    <td>
-                      <div className="flex flex-wrap gap-1">
-                        {active.map((g) => <span key={g.id} className="badge bg-brand-50 text-brand-700">{g.group.name}</span>)}
-                        {active.length === 0 && <span className="text-slate-400">—</span>}
+                    <td className="font-mono text-faint max-md:hidden">{i + 1}</td>
+                    <td><Link href={`/students/${s.id}`} className="font-medium hover:underline max-md:text-base">{s.name}</Link></td>
+                    <td data-label="Telefon" className="font-mono text-muted">{s.phone}</td>
+                    <td data-label="Guruhlar">
+                      <div className="flex flex-wrap justify-end gap-1 md:justify-start">
+                        {active.map((g) => <span key={g.id} className="badge border border-line-strong text-ink">{g.group.name}</span>)}
+                        {active.length === 0 && <span className="text-faint">—</span>}
                       </div>
                     </td>
-                    {showBalance && <td><BalanceBadge value={b} label={money(b)} /></td>}
-                    <td>{date(s.createdAt)}</td>
+                    {showBalance && <td data-label="Balans"><BalanceBadge value={b} label={money(b)} /></td>}
+                    <td data-label="Qo'shilgan" className="text-muted">{date(s.createdAt)}</td>
                   </tr>
                 );
               })}
