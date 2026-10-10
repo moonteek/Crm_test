@@ -118,6 +118,15 @@
   --font-dot: var(--font-doto), ui-monospace, monospace;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
   --ease-smooth: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-fade: fade 200ms var(--ease-smooth);
+  --animate-sheet: sheet 240ms var(--ease-smooth);
+}
+
+@keyframes fade {
+  from { opacity: 0; }
+}
+@keyframes sheet {
+  from { transform: translateY(100%); }
 }
 
 body {
