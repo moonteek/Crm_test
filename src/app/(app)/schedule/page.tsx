@@ -3,35 +3,44 @@ import { AlertTriangle, DoorOpen, User, Users } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
 import { can, groupScope } from "@/lib/access";
-import { findClashes, fromMinutes, scheduleKeysOn, toMinutes, WEEKDAYS } from "@/lib/schedule";
+import { centreWeekday, findClashes, fromMinutes, scheduleKeysOn, toMinutes, WEEKDAYS } from "@/lib/schedule";
 import { Empty, LevelBadge, PageHeader } from "@/components/ui";
 
 const NO_ROOM = 0;
 
 export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ d?: string }> }) {
   const user = await requirePage("groups.view");
-  const today = new Date().getDay();
+  const today = centreWeekday();
   const picked = Number((await searchParams).d);
   // Sunday has no lessons, so it opens on Monday
   const day = WEEKDAYS.some((w) => w.day === picked) ? picked : today === 0 ? 1 : today;
+  const seesAll = can(user, "groups.all");
 
-  const [groups, allRooms] = await Promise.all([
+  const [groups, centreGroups, allRooms] = await Promise.all([
     db.group.findMany({
       where: { status: "ACTIVE", ...groupScope(user) },
       include: { course: true, teacher: true, assistant: true, room: true, _count: { select: { students: { where: { leftAt: null } } } } },
       orderBy: { time: "asc" },
     }),
+    // clashes are checked against every group, including ones this user can't see
+    seesAll
+      ? null
+      : db.group.findMany({
+          where: { status: "ACTIVE", days: { in: scheduleKeysOn(day) } },
+          select: { id: true, time: true, roomId: true, teacherId: true, assistantId: true, course: { select: { lessonMin: true } } },
+        }),
     db.room.findMany({ orderBy: { name: "asc" } }),
   ]);
 
   const perDay = new Map(WEEKDAYS.map((w) => [w.day, groups.filter((g) => scheduleKeysOn(w.day).includes(g.days))]));
-  const lessons = (perDay.get(day) ?? []).map((g) => {
+  const withTimes = <G extends { time: string; course: { lessonMin: number } }>(g: G) => {
     const start = toMinutes(g.time);
     return { ...g, start, end: start + g.course.lessonMin };
-  });
+  };
+  const lessons = (perDay.get(day) ?? []).map(withTimes);
   const clashes = findClashes(
-    lessons.map((l) => ({
-      id: l.id, time: l.time, lessonMin: l.course.lessonMin, roomId: l.roomId,
+    (centreGroups?.map(withTimes) ?? lessons).map((l) => ({
+      id: l.id, start: l.start, end: l.end, roomId: l.roomId,
       teacherIds: [l.teacherId, l.assistantId].filter((t): t is number => t !== null),
     })),
   );
@@ -39,10 +48,20 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   // whole-centre view shows every room; a teacher only sees the rooms they teach in
   const usedRoomIds = new Set(lessons.map((l) => l.roomId ?? NO_ROOM));
   const rooms = [
-    ...(can(user, "groups.all") ? allRooms : allRooms.filter((r) => usedRoomIds.has(r.id))),
+    ...(seesAll ? allRooms : allRooms.filter((r) => usedRoomIds.has(r.id))),
     ...(usedRoomIds.has(NO_ROOM) ? [{ id: NO_ROOM, name: "Xona belgilanmagan", capacity: 0 }] : []),
   ];
   const startTimes = [...new Set(lessons.map((l) => l.start))].sort((a, b) => a - b);
+  // grid cells keyed by "start:room": lessons starting there, and lessons still running from an earlier row
+  const cell = (t: number, roomId: number) => `${t}:${roomId}`;
+  const starting = new Map<string, typeof lessons>();
+  const ongoing = new Map<string, typeof lessons>();
+  const push = (m: Map<string, typeof lessons>, k: string, l: (typeof lessons)[number]) => m.set(k, [...(m.get(k) ?? []), l]);
+  for (const l of lessons) {
+    const room = l.roomId ?? NO_ROOM;
+    push(starting, cell(l.start, room), l);
+    for (const t of startTimes) if (t > l.start && t < l.end) push(ongoing, cell(t, room), l);
+  }
   const totalStudents = lessons.reduce((s, l) => s + l._count.students, 0);
   const dayLabel = WEEKDAYS.find((w) => w.day === day)!.label;
 
@@ -96,9 +115,16 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                     {rooms.map((r) => (
                       <td key={r.id} className="px-2 py-2">
                         <div className="space-y-2">
-                          {lessons
-                            .filter((l) => l.start === t && (l.roomId ?? NO_ROOM) === r.id)
-                            .map((l) => <LessonCard key={l.id} lesson={l} clash={clashes.get(l.id)} />)}
+                          {ongoing.get(cell(t, r.id))?.map((l) => (
+                            <Link
+                              key={`cont-${l.id}`}
+                              href={`/groups/${l.id}`}
+                              className="block truncate rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-1.5 text-xs text-slate-500 hover:border-brand-500"
+                            >
+                              ↳ {l.name} · {fromMinutes(l.end)} gacha
+                            </Link>
+                          ))}
+                          {starting.get(cell(t, r.id))?.map((l) => <LessonCard key={l.id} lesson={l} clash={clashes.get(l.id)} />)}
                         </div>
                       </td>
                     ))}

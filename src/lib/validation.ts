@@ -18,7 +18,8 @@ const toDate = (v: unknown) => {
   return typeof t === "string" ? new Date(t) : t;
 };
 
-const keys = (record: Record<string, unknown>) => Object.keys(record) as [string, ...string[]];
+const keys = (options: readonly string[] | Record<string, unknown>) =>
+  (Array.isArray(options) ? [...options] : Object.keys(options)) as [string, ...string[]];
 
 const passwordRule = () =>
   z.string({ error: "Parol kiritilmagan" }).min(6, "Parol kamida 6 belgidan iborat bo'lishi kerak")
@@ -46,9 +47,9 @@ export const v = {
   optId: () => z.preprocess(toNumber, z.number().int().positive().nullable().default(null)),
   /** Date or date-time input; blank becomes null. */
   optDate: () => z.preprocess(toDate, z.date({ error: "Sana noto'g'ri" }).nullable().default(null)),
-  /** One of the record's keys; blank becomes `fallback` (required when there is none). */
-  oneOf: <F extends string | null = never>(record: Record<string, unknown>, fallback?: F) => {
-    const e = z.enum(keys(record), { error: "Noto'g'ri qiymat" });
+  /** One of the list's values or the record's keys; blank becomes `fallback` (required when there is none). */
+  oneOf: <F extends string | null = never>(options: readonly string[] | Record<string, unknown>, fallback?: F) => {
+    const e = z.enum(keys(options), { error: "Noto'g'ri qiymat" });
     return z.preprocess(clean, fallback === undefined ? e : e.nullable().default(fallback as string)) as z.ZodType<string | F>;
   },
   /** HH:MM */

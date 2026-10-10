@@ -26,6 +26,7 @@ export const GROUP_DAYS: Record<string, string> = {
 
 /** Group levels, lowest first. */
 export const GROUP_LEVELS = ["HTML", "CSS", "JS", "TS", "React", "Node.JS"] as const;
+export type GroupLevel = (typeof GROUP_LEVELS)[number];
 
 export const PAYMENT_METHODS: Record<string, string> = {
   CASH: "Naqd",

@@ -262,7 +262,7 @@ const GROUP_STATUSES = { ACTIVE: "Faol", FINISHED: "Tugagan" };
 
 const groupSchema = z.object({
   name: v.text("Guruh nomi", 80),
-  level: v.oneOf(Object.fromEntries(GROUP_LEVELS.map((l) => [l, l])), null),
+  level: v.oneOf(GROUP_LEVELS, null),
   courseId: v.id("Kurs"),
   teacherId: v.optId(),
   assistantId: v.optId(),
