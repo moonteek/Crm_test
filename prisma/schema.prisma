@@ -42,6 +42,7 @@ model User {
   leadActivities LeadActivity[]
   kpiTargets KpiTarget[]
   sales     Sale[]
+  membershipEvents MembershipEvent[]
 }
 
 // Personal access tokens used by MCP clients. Only a SHA-256 hash is stored.
@@ -125,8 +126,37 @@ model GroupStudent {
   student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
   joinedAt  DateTime  @default(now())
   leftAt    DateTime?
+  // TRIAL | ACTIVE | FROZEN | LEFT — the result of the last event; kept in sync by src/lib/membership-db.ts
+  status    String    @default("ACTIVE")
+  events    MembershipEvent[]
 
   @@unique([groupId, studentId])
+}
+
+/// One step in a student's life in a group; billing replays these (src/lib/billing.ts).
+model MembershipEvent {
+  id             Int          @id @default(autoincrement())
+  groupStudentId Int
+  groupStudent   GroupStudent @relation(fields: [groupStudentId], references: [id], onDelete: Cascade)
+  type           String // TRIAL | ACTIVATE | FREEZE | UNFREEZE | BACK_TO_TRIAL | LEAVE
+  date           DateTime // calendar date, UTC midnight
+  reasonId       Int?
+  reason         Reason?      @relation(fields: [reasonId], references: [id], onDelete: SetNull)
+  comment        String?
+  userId         Int?
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt      DateTime     @default(now())
+
+  @@index([groupStudentId, date])
+}
+
+/// Why a student froze or left a group; managed in Settings → Sabablar.
+model Reason {
+  id        Int               @id @default(autoincrement())
+  name      String
+  active    Boolean           @default(true)
+  createdAt DateTime          @default(now())
+  events    MembershipEvent[]
 }
 
 model Attendance {

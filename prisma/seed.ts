@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { DEFAULT_ROLES } from "../src/lib/permissions";
 import { lessonDates } from "../src/lib/format";
 import { salariesForMonth } from "../src/lib/salary";
+import { migrateStatuses } from "./migrate-statuses";
 
 const db = new PrismaClient();
 
@@ -144,6 +145,9 @@ async function main() {
   }
   for (let i = 0; i < attendance.length; i += 500) await db.attendance.createMany({ data: attendance.slice(i, i + 500) });
   for (let i = 0; i < grades.length; i += 500) await db.grade.createMany({ data: grades.slice(i, i + 500) });
+
+  // statuses: every seeded membership gets its ACTIVATE (and LEAVE) event, plus the default reasons
+  await migrateStatuses(db);
 
   // exams every two months for each group
   for (const g of groups) {

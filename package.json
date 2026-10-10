@@ -11,7 +11,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "setup": "prisma db push && tsx prisma/seed.ts",
     "test": "tsx --test \"src/**/*.test.ts\"",
-    "check:colors": "node scripts/check-colors.mjs"
+    "check:colors": "node scripts/check-colors.mjs",
+    "db:migrate-statuses": "tsx prisma/migrate-statuses.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
