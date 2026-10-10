@@ -63,16 +63,16 @@ export default async function GroupPage({
 
   return (
     <>
-      <Link href="/groups" className="text-sm text-slate-500 hover:text-brand-600">← Guruhlar</Link>
+      <Link href="/groups" className="label-mono hover:text-ink">← Guruhlar</Link>
       <div className="card mt-3 p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold">{group.name}</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-semibold tracking-tight md:text-[28px]">{group.name}</h1>
               <LevelBadge level={group.level} />
-              {group.status === "FINISHED" && <span className="badge bg-slate-100 text-slate-600">Tugagan</span>}
+              {group.status === "FINISHED" && <span className="badge bg-ink/5 text-muted">Tugagan</span>}
             </div>
-            <p className="text-brand-600">{group.course.name} · {money(group.course.price)} / oy</p>
+            <p className="mt-1 text-muted">{group.course.name} · {money(group.course.price)} / oy</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {allow.edit && <Modal title="Guruhni tahrirlash" triggerClassName="btn-secondary" trigger={<><Pencil className="h-4 w-4" /> Tahrirlash</>}>
@@ -83,12 +83,12 @@ export default async function GroupPage({
             </Modal>}
             {allow.remove && (
               <form action={deleteGroup.bind(null, group.id)}>
-                <button className="btn-secondary text-rose-600"><Trash2 className="h-4 w-4" /> O&apos;chirish</button>
+                <button className="btn-danger"><Trash2 className="h-4 w-4" /> O&apos;chirish</button>
               </form>
             )}
           </div>
         </div>
-        <div className={`mt-4 grid gap-3 text-sm ${group.assistant ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
+        <div className={`mt-5 grid grid-cols-2 gap-2.5 text-sm ${group.assistant ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
           <Info k="O'qituvchi" v={group.teacher?.name ?? "—"} />
           {group.assistant && <Info k="Yordamchi o'qituvchi" v={group.assistant.name} />}
           <Info k="Jadval" v={`${GROUP_DAYS[group.days]} · ${group.time}`} />
@@ -97,14 +97,14 @@ export default async function GroupPage({
         </div>
       </div>
 
-      <div className="card mt-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 pt-3">
+      <div className="card mt-4 md:mt-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 pt-3">
           <div className="flex gap-1">
             {TABS.map((t) => (
               <Link
                 key={t.key}
                 href={`/groups/${id}?tab=${t.key}${m ? `&m=${m}` : ""}`}
-                className={`border-b-2 px-3 py-2.5 text-sm font-medium ${tab === t.key ? "border-brand-600 text-brand-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+                className={`border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${tab === t.key ? "border-ink text-ink" : "border-transparent text-muted hover:text-ink"}`}
               >
                 {t.label}
               </Link>
@@ -114,7 +114,7 @@ export default async function GroupPage({
             {tab !== "exams" && (
               <>
                 <Link href={`/groups/${id}?tab=${tab}&m=${ym(prev)}`} className="btn-secondary px-2"><ChevronLeft className="h-4 w-4" /></Link>
-                <span className="w-32 text-center text-sm font-medium">{MONTHS[month]} {year}</span>
+                <span className="w-32 text-center text-sm font-medium">{MONTHS[month]} <span className="font-mono text-muted">{year}</span></span>
                 <Link href={`/groups/${id}?tab=${tab}&m=${ym(next)}`} className="btn-secondary px-2"><ChevronRight className="h-4 w-4" /></Link>
               </>
             )}
@@ -126,7 +126,7 @@ export default async function GroupPage({
                     <Field label="Sana"><input name="date" type="date" className="input" defaultValue={isoDate(new Date())} /></Field>
                     <Field label="Maksimal ball"><input name="maxScore" type="number" min={1} className="input" defaultValue={100} /></Field>
                   </div>
-                  <div className="max-h-[45vh] space-y-2 overflow-y-auto rounded-lg border border-slate-200 p-3">
+                  <div className="max-h-[45vh] space-y-2 overflow-y-auto rounded-lg border border-line p-3">
                     {group.students.map(({ student }) => (
                       <label key={student.id} className="flex items-center justify-between gap-3 text-sm">
                         <span>{student.name}</span>
@@ -153,19 +153,19 @@ export default async function GroupPage({
           </div>
         </div>
 
-        {tab === "attendance" && allow.attendance && <p className="px-5 pt-3 text-xs text-slate-500">Katakchani bosing: <span className="text-emerald-600">✓ keldi</span> → <span className="text-rose-600">✗ kelmadi</span> → bo&apos;sh</p>}
-        {tab === "grades" && <p className="px-5 pt-3 text-xs text-slate-500">Har bir dars uchun 1–5 baho. {allow.grades ? "Katakchani bosib baho tanlang." : ""}</p>}
+        {tab === "attendance" && allow.attendance && <p className="px-5 pt-3 text-xs text-muted">Katakchani bosing: <span className="text-success">✓ keldi</span> → <span className="text-danger">✗ kelmadi</span> → bo&apos;sh</p>}
+        {tab === "grades" && <p className="px-5 pt-3 text-xs text-muted">Har bir dars uchun 1–5 baho. {allow.grades ? "Katakchani bosib baho tanlang." : ""}</p>}
 
         {tab !== "exams" ? (
           <div className="overflow-x-auto pt-2">
             <table className="table">
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-10 min-w-48 bg-slate-50">O&apos;quvchi</th>
+                  <th className="sticky left-0 z-10 min-w-48 bg-surface">O&apos;quvchi</th>
                   {tab === "attendance" && allow.balance && <th>Balans</th>}
                   <th className="text-center">{tab === "attendance" ? "Davomat" : "O'rtacha"}</th>
                   {days.map((d) => (
-                    <th key={d.toISOString()} className={`px-1 text-center ${isoDate(d) === today ? "text-brand-600" : ""}`}>{d.getUTCDate()}</th>
+                    <th key={d.toISOString()} className={`px-1 text-center ${isoDate(d) === today ? "text-accent-ink" : ""}`}>{d.getUTCDate()}</th>
                   ))}
                   <th></th>
                 </tr>
@@ -177,9 +177,9 @@ export default async function GroupPage({
                   const scores = days.map((d) => gradeMap.get(`${student.id}:${isoDate(d)}`)).filter((v): v is number => v !== undefined);
                   return (
                     <tr key={student.id}>
-                      <td className="sticky left-0 z-10 bg-white">
-                        <Link href={`/students/${student.id}`} className="font-medium hover:text-brand-600">{student.name}</Link>
-                        <p className="text-xs text-slate-500">{student.phone}</p>
+                      <td className="sticky left-0 z-10 bg-surface">
+                        <Link href={`/students/${student.id}`} className="font-medium hover:underline">{student.name}</Link>
+                        <p className="font-mono text-xs text-faint">{student.phone}</p>
                       </td>
                       {tab === "attendance" && allow.balance && <td><BalanceBadge value={b} label={money(b)} /></td>}
                       <td className="text-center font-semibold">
@@ -202,10 +202,10 @@ export default async function GroupPage({
                             <form action={toggleAttendance.bind(null, id, student.id, key)}>
                               <button
                                 disabled={!allow.attendance}
-                                className={`h-7 w-7 rounded-md border text-sm font-bold ${
-                                  v === true ? "border-emerald-200 bg-emerald-100 text-emerald-700"
-                                  : v === false ? "border-rose-200 bg-rose-100 text-rose-700"
-                                  : "border-slate-200 bg-white text-slate-300 hover:border-brand-500"
+                                className={`press h-7 w-7 rounded-full border text-sm font-bold ${
+                                  v === true ? "border-success/40 bg-success-tint text-success"
+                                  : v === false ? "border-danger/40 bg-danger-tint text-danger"
+                                  : "border-line bg-raised text-faint hover:border-ink"
                                 }`}
                               >
                                 {v === true ? "✓" : v === false ? "✗" : "·"}
@@ -216,7 +216,7 @@ export default async function GroupPage({
                       })}
                       <td>
                         {allow.students && <form action={removeStudentFromGroup.bind(null, id, student.id)}>
-                          <button className="text-xs text-rose-600 hover:underline">Chiqarish</button>
+                          <button className="text-xs text-danger hover:underline">Chiqarish</button>
                         </form>}
                       </td>
                     </tr>
@@ -231,7 +231,7 @@ export default async function GroupPage({
             <table className="table">
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-10 min-w-48 bg-slate-50">O&apos;quvchi</th>
+                  <th className="sticky left-0 z-10 min-w-48 bg-surface">O&apos;quvchi</th>
                   <th className="text-center">O&apos;rtacha</th>
                   {exams.map((e) => (
                     <th key={e.id} className="text-center normal-case">
@@ -239,11 +239,11 @@ export default async function GroupPage({
                         <span title={e.title} className="max-w-32 truncate">{e.title}</span>
                         {allow.grades && (
                           <form action={deleteExam.bind(null, e.id)}>
-                            <button className="text-slate-400 hover:text-rose-600" aria-label="Imtihonni o'chirish"><Trash2 className="h-3.5 w-3.5" /></button>
+                            <button className="text-faint hover:text-danger" aria-label="Imtihonni o'chirish"><Trash2 className="h-3.5 w-3.5" /></button>
                           </form>
                         )}
                       </div>
-                      <div className="font-normal text-slate-400">{date(e.date)} · {e.maxScore} ball</div>
+                      <div className="font-normal text-faint">{date(e.date)} · {e.maxScore} ball</div>
                     </th>
                   ))}
                 </tr>
@@ -257,11 +257,11 @@ export default async function GroupPage({
                   const avg = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : null;
                   return (
                     <tr key={student.id}>
-                      <td className="sticky left-0 z-10 bg-white font-medium">{student.name}</td>
+                      <td className="sticky left-0 z-10 bg-surface font-medium">{student.name}</td>
                       <td className="text-center font-semibold">{avg === null ? "—" : <ScoreBadge pct={avg} />}</td>
                       {exams.map((e) => {
                         const r = e.results.find((x) => x.studentId === student.id);
-                        return <td key={e.id} className="text-center">{r ? <>{r.score} <span className="text-xs text-slate-400">/ {e.maxScore}</span></> : <span className="text-slate-300">—</span>}</td>;
+                        return <td key={e.id} className="text-center">{r ? <>{r.score} <span className="text-xs text-faint">/ {e.maxScore}</span></> : <span className="text-faint">—</span>}</td>;
                       })}
                     </tr>
                   );
@@ -283,15 +283,15 @@ const TABS = [
 ];
 
 function ScoreBadge({ pct }: { pct: number }) {
-  const cls = pct >= 85 ? "bg-emerald-100 text-emerald-700" : pct >= 60 ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700";
+  const cls = pct >= 85 ? "bg-success-tint text-success" : pct >= 60 ? "bg-warning-tint text-warning" : "bg-danger-tint text-danger";
   return <span className={`badge ${cls}`}>{pct}%</span>;
 }
 
 function Info({ k, v }: { k: string; v: string }) {
   return (
-    <div className="rounded-lg bg-slate-50 p-3">
-      <p className="text-xs text-slate-500">{k}</p>
-      <p className="font-medium">{v}</p>
+    <div className="min-w-0 rounded-xl border border-line bg-raised p-3">
+      <p className="label-mono">{k}</p>
+      <p className="mt-1 truncate font-medium">{v}</p>
     </div>
   );
 }

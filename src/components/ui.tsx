@@ -45,6 +45,24 @@ export function StatCard({
   return href ? <Link href={href} className="block">{body}</Link> : body;
 }
 
+/** Pill switcher between a few views of a page, each a link. */
+export function Segmented({ options }: { options: { href: string; label: string; active: boolean }[] }) {
+  return (
+    <div className="flex gap-0.5 rounded-full border border-line bg-surface p-0.5">
+      {options.map((o) => (
+        <Link
+          key={o.href}
+          href={o.href}
+          aria-current={o.active ? "page" : undefined}
+          className={`press rounded-full px-3.5 py-1.5 text-sm font-medium ${o.active ? "bg-nav-active text-nav-active-ink" : "text-muted hover:text-ink"}`}
+        >
+          {o.label}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 /** Glyph-style row of dots: `value` of `max` lit in amber. */
 export function DotMeter({ value, max, size = "sm", label }: { value: number; max: number; size?: "sm" | "md"; label?: string }) {
   const { total, filled } = dotCounts(value, max);
