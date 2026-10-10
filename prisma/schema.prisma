@@ -43,6 +43,7 @@ model User {
   kpiTargets KpiTarget[]
   sales     Sale[]
   membershipEvents MembershipEvent[]
+  teachingHistory GroupTeacher[] @relation("TeachingHistory")
 }
 
 // Personal access tokens used by MCP clients. Only a SHA-256 hash is stored.
@@ -102,6 +103,22 @@ model Group {
   grades    Grade[]
   exams     Exam[]
   prices    GroupPrice[]
+  teachers  GroupTeacher[]
+}
+
+/// Who taught a group from a date on (TEACHER or ASSISTANT); lessons before keep the earlier person.
+/// Groups with no rows use Group.teacherId / assistantId for every lesson (src/lib/teachers-history.ts).
+model GroupTeacher {
+  id        Int      @id @default(autoincrement())
+  groupId   Int
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId    Int?
+  user      User?    @relation("TeachingHistory", fields: [userId], references: [id], onDelete: SetNull)
+  role      String // TEACHER | ASSISTANT
+  from      DateTime // calendar date, UTC midnight
+  createdAt DateTime @default(now())
+
+  @@unique([groupId, role, from])
 }
 
 /// A group's monthly price from a month on (1st of the month, UTC); earlier months keep earlier rows.

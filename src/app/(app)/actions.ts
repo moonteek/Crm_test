@@ -14,6 +14,7 @@ import { ALL_PERMISSIONS } from "@/lib/permissions";
 import { logAction } from "@/lib/audit";
 import { centreDay, recordEvent, startMembership } from "@/lib/membership-db";
 import { nextMonthStart, priceNextMonth, schedulePrice } from "@/lib/prices-db";
+import { changeTeacher } from "@/lib/teachers-db";
 import { menuActions, systemLeaveDate, type EventType, type Status } from "@/lib/membership";
 import {
   ACTIVITY_TYPES, isoDate, CALL_RESULTS, EXPENSE_CATEGORIES, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES,
@@ -341,8 +342,22 @@ export async function createGroup(f: FormData) {
 export async function updateGroup(id: number, f: FormData) {
   const user = await requirePermission("groups.manage");
   await assertGroupAccess(user, id);
-  const data = parseForm(groupSchema.extend({ status: v.oneOf(GROUP_STATUSES, "ACTIVE") }), f);
-  const before = await db.group.findUniqueOrThrow({ where: { id }, include: { course: true } });
+  const { teacherFrom, ...data } = parseForm(groupSchema.extend({ status: v.oneOf(GROUP_STATUSES, "ACTIVE"), teacherFrom: v.optDate() }), f);
+  const before = await db.group.findUniqueOrThrow({ where: { id }, include: { course: true, teacher: true, assistant: true } });
+  // a new teacher / assistant takes over from the chosen day; earlier lessons stay with the previous person
+  const from = teacherFrom ?? centreDay();
+  const changes: string[] = [];
+  await db.$transaction(async (tx) => {
+    if (data.teacherId !== before.teacherId) {
+      await changeTeacher(tx, id, "TEACHER", before.teacherId, data.teacherId, from);
+      changes.push("o'qituvchi");
+    }
+    if (data.assistantId !== before.assistantId) {
+      await changeTeacher(tx, id, "ASSISTANT", before.assistantId, data.assistantId, from);
+      changes.push("yordamchi");
+    }
+  });
+  if (changes.length) await logAction(user, "group.teacher", `${before.name}: ${changes.join(" va ")} ${isoDate(from)} dan almashtirildi`);
   // a new price (own, or the new course's) starts next month; past months keep what they were charged
   const target = data.price ?? (await db.course.findUniqueOrThrow({ where: { id: data.courseId } })).price;
   const current = before.price ?? before.course.price;
@@ -364,6 +379,16 @@ export async function updateGroup(id: number, f: FormData) {
   }
   await db.group.update({ where: { id }, data });
   revalidatePath(`/groups/${id}`);
+}
+
+/** The group edit dialog: same as updateGroup, but returns the refusal reason to show in the dialog. */
+export async function saveGroup(_: MemberActionState, f: FormData): Promise<MemberActionState> {
+  try {
+    await updateGroup(check(v.id(), f.get("groupId")), f);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
 
 export async function deleteGroup(id: number) {

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { db } from "@/lib/db";
 import { centreDay } from "@/lib/membership-db";
 import { requirePage } from "@/lib/auth";
@@ -10,13 +10,13 @@ import { upcomingPrice } from "@/lib/prices";
 import { membershipInclude } from "@/lib/billing-include";
 import { date, GROUP_DAYS, isoDate, lessonDates, money, MONTHS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
-import { GroupFields } from "@/components/GroupFields";
+import { EditGroupDialog } from "@/components/EditGroupDialog";
 import { BalanceBadge, Empty, Field, LevelBadge, SubmitRow } from "@/components/ui";
 import { GradeCell } from "@/components/GradeCell";
 import { MemberMenu } from "@/components/members/MemberMenu";
 import { StatusBadge, StatusLegend } from "@/components/members/StatusBadge";
 import { toMemberData, toMemberGroup } from "@/components/members/types";
-import { addStudentToGroup, createExam, deleteExam, deleteGroup, toggleAttendance, updateGroup } from "../../actions";
+import { addStudentToGroup, createExam, deleteExam, deleteGroup, toggleAttendance } from "../../actions";
 
 export default async function GroupPage({
   params, searchParams,
@@ -86,12 +86,7 @@ export default async function GroupPage({
             <p className="mt-1 text-muted">{group.course.name} · {money(priceNow(group))} / oy{upcoming && <span className="label-mono ml-2">{date(upcoming.from)} dan: {money(upcoming.price)}</span>}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {allow.edit && <Modal title="Guruhni tahrirlash" triggerClassName="btn-secondary" trigger={<><Pencil className="h-4 w-4" /> Tahrirlash</>}>
-              <form action={updateGroup.bind(null, group.id)} className="space-y-3">
-                <GroupFields courses={courses} teachers={teachers} rooms={rooms} g={group} />
-                <SubmitRow />
-              </form>
-            </Modal>}
+            {allow.edit && <EditGroupDialog group={group} courses={courses} teachers={teachers} rooms={rooms} />}
             {allow.remove && (
               <form action={deleteGroup.bind(null, group.id)}>
                 <button className="btn-danger"><Trash2 className="h-4 w-4" /> O&apos;chirish</button>

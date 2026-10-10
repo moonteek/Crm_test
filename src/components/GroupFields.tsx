@@ -37,6 +37,12 @@ export function GroupFields({
         <input name="price" type="number" min={1} className="input" defaultValue={g?.price ?? ""} placeholder="Kurs narxi" />
         <span className="mt-1 block text-xs text-muted">Narx o&apos;zgarsa, yangi narx keyingi oyning 1-sanasidan amal qiladi</span>
       </Field>
+      {g && (
+        <Field label="O'qituvchi yoki yordamchi almashsa — qaysi kundan">
+          <input name="teacherFrom" type="date" className="input" />
+          <span className="mt-1 block text-xs text-muted">Bo&apos;sh qoldirilsa — bugundan. Shu kungacha bo&apos;lgan darslar oldingi o&apos;qituvchiga hisoblanadi</span>
+        </Field>
+      )}
       <Field label="Yordamchi o'qituvchi (ixtiyoriy)">
         <select name="assistantId" className="input" defaultValue={g?.assistantId ?? ""}>
           <option value="">—</option>
