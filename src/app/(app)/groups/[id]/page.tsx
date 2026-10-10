@@ -8,7 +8,7 @@ import { balance } from "@/lib/billing";
 import { date, GROUP_DAYS, isoDate, lessonDates, money, MONTHS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { GroupFields } from "@/components/GroupFields";
-import { BalanceBadge, Empty, Field, SubmitRow } from "@/components/ui";
+import { BalanceBadge, Empty, Field, LevelBadge, SubmitRow } from "@/components/ui";
 import { GradeCell } from "@/components/GradeCell";
 import { addStudentToGroup, createExam, deleteExam, deleteGroup, removeStudentFromGroup, toggleAttendance, updateGroup } from "../../actions";
 
@@ -69,6 +69,7 @@ export default async function GroupPage({
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold">{group.name}</h1>
+              <LevelBadge level={group.level} />
               {group.status === "FINISHED" && <span className="badge bg-slate-100 text-slate-600">Tugagan</span>}
             </div>
             <p className="text-brand-600">{group.course.name} · {money(group.course.price)} / oy</p>

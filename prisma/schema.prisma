@@ -87,6 +87,7 @@ model Group {
   assistant User?             @relation("GroupAssistant", fields: [assistantId], references: [id])
   roomId    Int?
   room      Room?             @relation(fields: [roomId], references: [id])
+  level     String? // one of GROUP_LEVELS in src/lib/format.ts
   days      String // "ODD" (Du-Chor-Ju) | "EVEN" (Se-Pay-Sha) | "DAILY"
   time      String // "14:00"
   startDate DateTime

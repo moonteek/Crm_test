@@ -35,6 +35,21 @@ export function StatCard({
   return href ? <Link href={href}>{body}</Link> : body;
 }
 
+const LEVEL_TONES: Record<string, string> = {
+  HTML: "bg-orange-100 text-orange-700",
+  CSS: "bg-sky-100 text-sky-700",
+  JS: "bg-yellow-100 text-yellow-800",
+  TS: "bg-blue-100 text-blue-700",
+  React: "bg-cyan-100 text-cyan-800",
+  "Node.JS": "bg-emerald-100 text-emerald-700",
+};
+
+/** A group's level; renders nothing when the group has none. */
+export function LevelBadge({ level }: { level: string | null }) {
+  if (!level) return null;
+  return <span className={`badge ${LEVEL_TONES[level] ?? "bg-slate-100 text-slate-600"}`}>{level}</span>;
+}
+
 export function Empty({ text }: { text: string }) {
   return <p className="px-4 py-10 text-center text-sm text-slate-400">{text}</p>;
 }

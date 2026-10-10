@@ -24,6 +24,9 @@ export const GROUP_DAYS: Record<string, string> = {
   DAILY: "Har kuni",
 };
 
+/** Group levels, lowest first. */
+export const GROUP_LEVELS = ["HTML", "CSS", "JS", "TS", "React", "Node.JS"] as const;
+
 export const PAYMENT_METHODS: Record<string, string> = {
   CASH: "Naqd",
   CARD: "Karta",

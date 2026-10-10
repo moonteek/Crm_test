@@ -1,4 +1,4 @@
-import { GROUP_DAYS, isoDate } from "@/lib/format";
+import { GROUP_DAYS, GROUP_LEVELS, isoDate } from "@/lib/format";
 import { Field } from "./ui";
 
 type Opt = { id: number; name: string };
@@ -7,11 +7,19 @@ export function GroupFields({
   courses, teachers, rooms, g,
 }: {
   courses: Opt[]; teachers: Opt[]; rooms: Opt[];
-  g?: { name: string; courseId: number; teacherId: number | null; assistantId: number | null; roomId: number | null; days: string; time: string; status: string; startDate: Date };
+  g?: { name: string; level: string | null; courseId: number; teacherId: number | null; assistantId: number | null; roomId: number | null; days: string; time: string; status: string; startDate: Date };
 }) {
   return (
     <>
-      <Field label="Guruh nomi"><input name="name" className="input" required defaultValue={g?.name} placeholder="Frontend-12" /></Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Guruh nomi"><input name="name" className="input" required defaultValue={g?.name} placeholder="Frontend-12" /></Field>
+        <Field label="Daraja">
+          <select name="level" className="input" defaultValue={g?.level ?? ""}>
+            <option value="">—</option>
+            {GROUP_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
+          </select>
+        </Field>
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Kurs">
           <select name="courseId" className="input" required defaultValue={g?.courseId}>

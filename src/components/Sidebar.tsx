@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
-  BookOpen, DoorOpen, LayoutDashboard, LogOut, Menu, Settings, UserPlus,
+  BookOpen, CalendarDays, DoorOpen, LayoutDashboard, LogOut, Menu, Settings, UserPlus,
   Users, UsersRound, Wallet, X, GraduationCap, Receipt, AlertCircle, BarChart3, Banknote, History, Target, ShoppingBag,
 } from "lucide-react";
 import { logout } from "@/app/login/actions";
@@ -16,6 +16,7 @@ export const NAV = [
   { href: "/sales", label: "Sotuv va KPI", icon: Target, perm: "sales.view" },
   { href: "/students", label: "O'quvchilar", icon: Users, perm: "students.view" },
   { href: "/groups", label: "Guruhlar", icon: UsersRound, perm: "groups.view" },
+  { href: "/schedule", label: "Dars jadvali", icon: CalendarDays, perm: "groups.view" },
   { href: "/teachers", label: "O'qituvchilar", icon: GraduationCap, perm: "teachers.view" },
   { href: "/courses", label: "Kurslar", icon: BookOpen, perm: "courses.view" },
   { href: "/payments", label: "To'lovlar", icon: Wallet, perm: "payments.view" },

@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { can, firstAllowedPage, groupScope, studentScope } from "@/lib/access";
 import { balance } from "@/lib/billing";
+import { scheduleKeysOn } from "@/lib/schedule";
 import { date, money, MONTHS, PAYMENT_METHODS, LEAD_STATUSES } from "@/lib/format";
 import { PageHeader, StatCard, Empty } from "@/components/ui";
 
@@ -32,7 +33,7 @@ export default async function Dashboard() {
     db.payment.findMany({ take: 6, orderBy: { date: "desc" }, include: { student: true } }),
     db.lead.groupBy({ by: ["status"], _count: true }),
     db.group.findMany({
-      where: { status: "ACTIVE", days: { in: todayDays(now.getDay()) }, ...groupScope(user) },
+      where: { status: "ACTIVE", days: { in: scheduleKeysOn(now.getDay()) }, ...groupScope(user) },
       include: { course: true, teacher: true, room: true, _count: { select: { students: { where: { leftAt: null } } } } },
       orderBy: { time: "asc" },
     }),
@@ -133,11 +134,6 @@ export default async function Dashboard() {
       </div>}
     </>
   );
-}
-
-function todayDays(weekday: number) {
-  if (weekday === 0) return [];
-  return [weekday % 2 === 1 ? "ODD" : "EVEN", "DAILY"];
 }
 
 function Metric({ label, value, cls }: { label: string; value: string; cls: string }) {

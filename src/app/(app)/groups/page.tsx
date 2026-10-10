@@ -6,7 +6,7 @@ import { can, groupScope } from "@/lib/access";
 import { date, GROUP_DAYS, money } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { GroupFields } from "@/components/GroupFields";
-import { Empty, PageHeader, SubmitRow } from "@/components/ui";
+import { Empty, LevelBadge, PageHeader, SubmitRow } from "@/components/ui";
 import { createGroup } from "../actions";
 
 export default async function GroupsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
@@ -50,7 +50,10 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
           <Link key={g.id} href={`/groups/${g.id}`} className="card block p-5 transition hover:border-brand-500 hover:shadow-md">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <h3 className="truncate text-lg font-semibold">{g.name}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="truncate text-lg font-semibold">{g.name}</h3>
+                  <LevelBadge level={g.level} />
+                </div>
                 <p className="text-sm text-brand-600">{g.course.name}</p>
               </div>
               <span className="badge bg-brand-50 text-brand-700">{g._count.students} o&apos;quvchi</span>

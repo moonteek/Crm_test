@@ -13,7 +13,7 @@ import { shiftMonth } from "@/lib/month";
 import { ALL_PERMISSIONS } from "@/lib/permissions";
 import { logAction } from "@/lib/audit";
 import {
-  ACTIVITY_TYPES, CALL_RESULTS, EXPENSE_CATEGORIES, GROUP_DAYS, KPI_METRICS, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES,
+  ACTIVITY_TYPES, CALL_RESULTS, EXPENSE_CATEGORIES, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES,
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
 import { check, parseForm, v } from "@/lib/validation";
@@ -262,6 +262,7 @@ const GROUP_STATUSES = { ACTIVE: "Faol", FINISHED: "Tugagan" };
 
 const groupSchema = z.object({
   name: v.text("Guruh nomi", 80),
+  level: v.oneOf(Object.fromEntries(GROUP_LEVELS.map((l) => [l, l])), null),
   courseId: v.id("Kurs"),
   teacherId: v.optId(),
   assistantId: v.optId(),
