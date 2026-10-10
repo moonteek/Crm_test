@@ -3,7 +3,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
-const PALETTE = "slate|brand|sidebar|rose|emerald|sky|amber|gray|blue|red|green|yellow";
+const PALETTE = "slate|gray|zinc|neutral|stone|brand|sidebar|red|rose|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink";
 const PREFIX = "bg|text|border|ring|fill|stroke|from|to|divide|outline|accent";
 const CLASS_RE = new RegExp(`\\b(?:${PREFIX})-(?:${PALETTE})(?:-\\d{2,3})?\\b`, "g");
 const HEX_RE = /#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b(?![0-9a-fA-F])/g;

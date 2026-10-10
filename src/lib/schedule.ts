@@ -18,9 +18,24 @@ export function scheduleKeysOn(weekday: number) {
 const CENTRE_TZ = "Asia/Tashkent";
 const WEEKDAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
-/** Weekday (0 = Sunday) at the centre, whatever timezone the server runs in. */
-export function centreWeekday(d = new Date()) {
-  return WEEKDAY_INDEX[new Intl.DateTimeFormat("en-US", { timeZone: CENTRE_TZ, weekday: "short" }).format(d)];
+const CENTRE_PARTS = new Intl.DateTimeFormat("en-US", {
+  timeZone: CENTRE_TZ, weekday: "short", day: "numeric", month: "numeric", year: "numeric", hour: "numeric", hourCycle: "h23",
+});
+
+/** The date and hour at the centre (month is 1-based), whatever timezone the server runs in. */
+export function centreToday(d = new Date()) {
+  const p = Object.fromEntries(CENTRE_PARTS.formatToParts(d).map((x) => [x.type, x.value]));
+  return { weekday: WEEKDAY_INDEX[p.weekday], day: Number(p.day), month: Number(p.month), year: Number(p.year), hour: Number(p.hour) };
+}
+
+/** Weekday (0 = Sunday) at the centre. */
+export const centreWeekday = (d = new Date()) => centreToday(d).weekday;
+
+export function greeting(hour: number) {
+  if (hour >= 5 && hour < 12) return "Xayrli tong";
+  if (hour >= 12 && hour < 18) return "Xayrli kun";
+  if (hour >= 18 && hour < 23) return "Xayrli kech";
+  return "Xayrli tun";
 }
 
 export const toMinutes = (time: string) => {

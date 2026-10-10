@@ -1,59 +1,81 @@
 import Link from "next/link";
-import type { GroupLevel } from "@/lib/format";
+import { dotCounts } from "@/lib/dots";
 
-export function PageHeader({ title, subtitle, children }: { title: string; subtitle?: string; children?: React.ReactNode }) {
+export function PageHeader({
+  title, subtitle, eyebrow, children,
+}: { title: string; subtitle?: string; eyebrow?: string; children?: React.ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+      <div className="min-w-0">
+        {eyebrow && <p className="label-mono mb-1.5">{eyebrow}</p>}
+        <h1 className="truncate text-2xl font-semibold tracking-tight md:text-[28px]">{title}</h1>
+        {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
       </div>
       <div className="flex flex-wrap gap-2">{children}</div>
     </div>
   );
 }
 
-export function StatCard({
-  label, value, icon, tone = "brand", href,
-}: {
-  label: string; value: string | number; icon: React.ReactNode; tone?: "brand" | "green" | "amber" | "rose"; href?: string;
-}) {
-  const tones = {
-    brand: "bg-brand-50 text-brand-600",
-    green: "bg-emerald-50 text-emerald-600",
-    amber: "bg-amber-50 text-amber-600",
-    rose: "bg-rose-50 text-rose-600",
-  };
-  const body = (
-    <div className="card flex items-center gap-4 p-5 transition hover:shadow-md">
-      <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${tones[tone]}`}>{icon}</div>
-      <div className="min-w-0">
-        <p className="text-sm text-slate-500">{label}</p>
-        <p className="truncate text-xl font-bold text-slate-900">{value}</p>
-      </div>
-    </div>
-  );
-  return href ? <Link href={href}>{body}</Link> : body;
-}
-
-// typed by GroupLevel so a new level can't be added without a colour
-const LEVEL_TONES: Record<GroupLevel, string> = {
-  HTML: "bg-orange-100 text-orange-700",
-  CSS: "bg-sky-100 text-sky-700",
-  JS: "bg-yellow-100 text-yellow-800",
-  TS: "bg-blue-100 text-blue-700",
-  React: "bg-cyan-100 text-cyan-800",
-  "Node.JS": "bg-emerald-100 text-emerald-700",
+const TONES = {
+  brand: "text-ink",
+  green: "text-success",
+  amber: "text-warning",
+  rose: "text-danger",
 };
 
-/** A group's level; renders nothing when the group has none. */
+/** A key number. `hero` makes it the page's one highlighted figure. */
+export function StatCard({
+  label, value, icon, tone = "brand", href, hero = false,
+}: {
+  label: string; value: string | number; icon: React.ReactNode; tone?: keyof typeof TONES; href?: string; hero?: boolean;
+}) {
+  const body = (
+    <div
+      className={`press flex h-full flex-col justify-between gap-4 rounded-[14px] border p-4 md:p-5 ${
+        hero ? "border-transparent bg-hero" : "border-line bg-surface hover:border-line-strong"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className={`label-mono ${hero ? "text-hero-label" : ""}`}>{label}</p>
+        <span className={`[&>svg]:h-[18px] [&>svg]:w-[18px] ${hero ? "text-hero-ink" : TONES[tone]}`}>{icon}</span>
+      </div>
+      <p className={`truncate font-dot text-[34px] leading-none font-black md:text-[40px] ${hero ? "text-hero-ink" : "text-ink"}`}>{value}</p>
+    </div>
+  );
+  return href ? <Link href={href} className="block">{body}</Link> : body;
+}
+
+/** Glyph-style row of dots: `value` of `max` lit in amber. */
+export function DotMeter({ value, max, size = "sm", label }: { value: number; max: number; size?: "sm" | "md"; label?: string }) {
+  const { total, filled } = dotCounts(value, max);
+  const dot = size === "md" ? "h-2 w-2" : "h-1.5 w-1.5";
+  return (
+    <span className="inline-flex items-center gap-[3px]" role="img" aria-label={label ?? `${value} / ${max}`}>
+      {Array.from({ length: total }, (_, i) => (
+        <i key={i} className={`${dot} rounded-full ${i < filled ? "bg-accent" : "bg-line-strong"}`} />
+      ))}
+    </span>
+  );
+}
+
+/** A group's level as an outline pill; renders nothing when the group has none. */
 export function LevelBadge({ level }: { level: string | null }) {
   if (!level) return null;
-  return <span className={`badge ${LEVEL_TONES[level as GroupLevel] ?? "bg-slate-100 text-slate-600"}`}>{level}</span>;
+  return (
+    <span className="badge border border-line-strong text-ink">
+      <i className="h-1.5 w-1.5 rounded-full bg-accent" />
+      {level}
+    </span>
+  );
 }
 
 export function Empty({ text }: { text: string }) {
-  return <p className="px-4 py-10 text-center text-sm text-slate-400">{text}</p>;
+  return (
+    <div className="flex flex-col items-center gap-3 px-4 py-10 text-center">
+      <DotMeter value={0} max={5} />
+      <p className="text-sm text-faint">{text}</p>
+    </div>
+  );
 }
 
 export function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -74,6 +96,6 @@ export function SubmitRow({ text = "Saqlash" }: { text?: string }) {
 }
 
 export function BalanceBadge({ value, label }: { value: number; label: string }) {
-  const cls = value < 0 ? "bg-rose-100 text-rose-700" : value > 0 ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600";
+  const cls = value < 0 ? "bg-danger-tint text-danger" : value > 0 ? "bg-success-tint text-success" : "bg-ink/5 text-muted";
   return <span className={`badge ${cls}`}>{label}</span>;
 }
