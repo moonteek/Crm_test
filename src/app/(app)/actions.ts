@@ -12,8 +12,10 @@ import { pickAssignee } from "@/lib/sales";
 import { shiftMonth } from "@/lib/month";
 import { ALL_PERMISSIONS } from "@/lib/permissions";
 import { logAction } from "@/lib/audit";
+import { centreDay, recordEvent, startMembership } from "@/lib/membership-db";
+import type { EventType } from "@/lib/membership";
 import {
-  ACTIVITY_TYPES, CALL_RESULTS, EXPENSE_CATEGORIES, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES,
+  ACTIVITY_TYPES, isoDate, CALL_RESULTS, EXPENSE_CATEGORIES, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES,
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
 import { check, parseForm, v } from "@/lib/validation";
@@ -125,9 +127,9 @@ export async function convertLead(id: number, f: FormData) {
       name: lead.name,
       phone: lead.phone,
       note: lead.note,
-      groups: groupId ? { create: { groupId } } : undefined,
     },
   });
+  if (groupId) await db.$transaction((tx) => startMembership(tx, { groupId, studentId: student.id, mode: "TRIAL", date: centreDay(), userId: user.id }));
   await db.lead.update({ where: { id }, data: { status: "WON", wonAt: new Date(), studentId: student.id, nextActionAt: null } });
   await db.leadActivity.create({ data: { leadId: id, userId: user.id, type: "STATUS", result: "WON" } });
   await logAction(user, "lead.convert", `Lid o'quvchiga aylantirildi: ${lead.name}`);
@@ -201,8 +203,9 @@ export async function createStudent(f: FormData) {
   const { groupId, ...data } = parseForm(studentSchema.extend({ groupId: v.optId() }), f);
   if (groupId) await assertGroupAccess(user, groupId);
   const student = await db.student.create({
-    data: { ...data, groups: groupId ? { create: { groupId } } : undefined },
+    data,
   });
+  if (groupId) await db.$transaction((tx) => startMembership(tx, { groupId, studentId: student.id, mode: "TRIAL", date: centreDay(), userId: user.id }));
   await logAction(user, "student.create", `Yangi o'quvchi: ${student.name}`);
   redirect(`/students/${student.id}`);
 }
@@ -226,35 +229,93 @@ export async function deleteStudent(id: number) {
   redirect("/students");
 }
 
-const joinSchema = z.object({ studentId: v.id("O'quvchi"), groupId: v.id("Guruh"), joinedAt: v.optDate() });
+const MODES = { TRIAL: "Sinov darsi", ACTIVE: "Faol" };
+const joinSchema = z.object({ studentId: v.id("O'quvchi"), groupId: v.id("Guruh"), joinedAt: v.optDate(), mode: v.oneOf(MODES, "TRIAL") });
 
 export async function addStudentToGroup(f: FormData) {
   const user = await requirePermission("students.manage");
-  const { studentId, groupId, joinedAt: picked } = parseForm(joinSchema, f);
+  const { studentId, groupId, joinedAt, mode } = parseForm(joinSchema, f);
   await assertGroupAccess(user, groupId);
-  const joinedAt = picked ?? new Date();
-  const gs = await db.groupStudent.upsert({
-    where: { groupId_studentId: { groupId, studentId } },
-    create: { groupId, studentId, joinedAt },
-    update: { joinedAt, leftAt: null },
-    include: { student: true, group: true },
-  });
-  await logAction(user, "student.join", `${gs.student.name} → ${gs.group.name} guruhiga qo'shildi`);
+  const date = joinedAt ?? centreDay();
+  await db.$transaction((tx) => startMembership(tx, { groupId, studentId, mode: mode as "TRIAL" | "ACTIVE", date, userId: user.id }));
+  const [student, group] = await Promise.all([db.student.findUniqueOrThrow({ where: { id: studentId } }), db.group.findUniqueOrThrow({ where: { id: groupId } })]);
+  await logAction(user, "student.join", `${student.name} → ${group.name} (${MODES[mode as keyof typeof MODES].toLowerCase()}, ${isoDate(date)})`);
   revalidatePath(`/students/${studentId}`);
   revalidatePath(`/groups/${groupId}`);
 }
 
+/** Temporary: the old "Chiqarish" buttons (replaced by the member menu in the next step). */
 export async function removeStudentFromGroup(groupId: number, studentId: number) {
   const user = await requirePermission("students.manage");
   await assertGroupAccess(user, groupId);
-  const gs = await db.groupStudent.update({
-    where: { groupId_studentId: { groupId, studentId } },
-    data: { leftAt: new Date() },
-    include: { student: true, group: true },
-  });
+  const gs = await db.groupStudent.findUniqueOrThrow({ where: { groupId_studentId: { groupId, studentId } }, include: { student: true, group: true } });
+  await db.$transaction((tx) => recordEvent(tx, gs.id, { type: "LEAVE", date: centreDay(), userId: user.id, system: true }));
   await logAction(user, "student.leave", `${gs.student.name} ${gs.group.name} guruhidan chiqarildi`);
   revalidatePath(`/students/${studentId}`);
   revalidatePath(`/groups/${groupId}`);
+}
+
+export type MemberActionState = { error?: string; ok?: boolean } | null;
+
+const MEMBER_ACTIONS = { ACTIVATE: "faollashtirildi", FREEZE: "muzlatildi", UNFREEZE: "muzlatishdan chiqarildi", BACK_TO_TRIAL: "sinov darsiga qaytarildi", LEAVE: "guruhdan chiqarildi" };
+const memberActionSchema = z.object({
+  groupStudentId: v.id(),
+  type: v.oneOf(MEMBER_ACTIONS),
+  date: v.optDate(),
+  reasonId: v.optId(),
+  comment: v.optText(300),
+});
+
+/** Activate, freeze, unfreeze, return to trial or remove — one dialog, one action. */
+export async function memberAction(_: MemberActionState, f: FormData): Promise<MemberActionState> {
+  try {
+    const user = await requirePermission("students.manage");
+    const d = parseForm(memberActionSchema, f);
+    const gs = await db.groupStudent.findUniqueOrThrow({ where: { id: d.groupStudentId }, include: { student: true, group: true } });
+    await assertGroupAccess(user, gs.groupId);
+    const date = d.date ?? centreDay();
+    await db.$transaction((tx) => recordEvent(tx, gs.id, { type: d.type as EventType, date, reasonId: d.reasonId, comment: d.comment, userId: user.id }));
+    const reason = d.reasonId ? (await db.reason.findUnique({ where: { id: d.reasonId } }))?.name : null;
+    await logAction(user, `student.${d.type.toLowerCase()}`, `${gs.student.name} — ${gs.group.name}: ${MEMBER_ACTIONS[d.type as keyof typeof MEMBER_ACTIONS]} (${isoDate(date)}${reason ? `, ${reason}` : ""})`);
+    revalidatePath(`/groups/${gs.groupId}`);
+    revalidatePath(`/students/${gs.studentId}`);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+const transferSchema = z.object({
+  groupStudentId: v.id(),
+  toGroupId: v.id("Yangi guruh"),
+  date: v.optDate(),
+  reasonId: v.optId(),
+  mode: v.oneOf(MODES, "ACTIVE"),
+});
+
+/** Leaves the current group on a date and starts in another from the same date; the balance carries over. */
+export async function transferStudent(_: MemberActionState, f: FormData): Promise<MemberActionState> {
+  try {
+    const user = await requirePermission("students.manage");
+    const d = parseForm(transferSchema, f);
+    const gs = await db.groupStudent.findUniqueOrThrow({ where: { id: d.groupStudentId }, include: { student: true, group: true } });
+    if (gs.groupId === d.toGroupId) return { error: "O'quvchi allaqachon shu guruhda" };
+    await assertGroupAccess(user, gs.groupId);
+    await assertGroupAccess(user, d.toGroupId);
+    const date = d.date ?? centreDay();
+    const to = await db.group.findUniqueOrThrow({ where: { id: d.toGroupId } });
+    await db.$transaction(async (tx) => {
+      await recordEvent(tx, gs.id, { type: "LEAVE", date, reasonId: d.reasonId, comment: `${to.name} guruhiga o'tkazildi`, userId: user.id });
+      await startMembership(tx, { groupId: d.toGroupId, studentId: gs.studentId, mode: d.mode as "TRIAL" | "ACTIVE", date, userId: user.id });
+    });
+    await logAction(user, "student.transfer", `${gs.student.name}: ${gs.group.name} → ${to.name} (${isoDate(date)})`);
+    revalidatePath(`/groups/${gs.groupId}`);
+    revalidatePath(`/groups/${d.toGroupId}`);
+    revalidatePath(`/students/${gs.studentId}`);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
 
 // ---------- Groups ----------
@@ -285,8 +346,11 @@ export async function updateGroup(id: number, f: FormData) {
   const data = parseForm(groupSchema.extend({ status: v.oneOf(GROUP_STATUSES, "ACTIVE") }), f);
   const before = await db.group.findUniqueOrThrow({ where: { id } });
   if (before.status !== "FINISHED" && data.status === "FINISHED") {
-    // students graduate: stop monthly charges from today
-    await db.groupStudent.updateMany({ where: { groupId: id, leftAt: null }, data: { leftAt: new Date() } });
+    // students graduate: charges stop today for everyone still in the group (trial and frozen too)
+    const members = await db.groupStudent.findMany({ where: { groupId: id, status: { not: "LEFT" } } });
+    await db.$transaction(async (tx) => {
+      for (const m of members) await recordEvent(tx, m.id, { type: "LEAVE", date: centreDay(), userId: user.id, system: true, comment: "Guruh yakunlandi" });
+    });
     await logAction(user, "group.finish", `Guruh yakunlandi: ${before.name}`);
   }
   await db.group.update({ where: { id }, data });
