@@ -143,7 +143,8 @@ model Attendance {
 model Payment {
   id        Int      @id @default(autoincrement())
   studentId Int
-  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  // Restrict: payments are financial history, so a student who has paid can't be deleted.
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Restrict)
   groupId   Int?
   group     Group?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
   amount    Int

@@ -79,11 +79,16 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                   <SubmitRow />
                 </form>
               </Modal>}
-              {allow.remove && (
+              {allow.remove && (student.payments.length ? (
+                // payments are financial history and can't be deleted with the student
+                <button disabled className="btn-secondary cursor-not-allowed opacity-50" title="To'lovlari bor o'quvchini o'chirib bo'lmaydi. Uni guruhlardan chiqaring">
+                  <Trash2 className="h-4 w-4" /> O&apos;chirish
+                </button>
+              ) : (
                 <form action={deleteStudent.bind(null, student.id)}>
                   <button className="btn-secondary text-rose-600"><Trash2 className="h-4 w-4" /> O&apos;chirish</button>
                 </form>
-              )}
+              ))}
             </div>
           </div>
 
