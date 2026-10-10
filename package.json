@@ -9,7 +9,9 @@
     "lint": "tsc --noEmit",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
-    "setup": "prisma db push && tsx prisma/seed.ts"
+    "setup": "prisma db push && tsx prisma/seed.ts",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "check:colors": "node scripts/check-colors.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

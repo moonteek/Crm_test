@@ -1,57 +1,207 @@
 @import "tailwindcss";
 
-@theme {
-  --color-brand-50: #eef4ff;
-  --color-brand-100: #dbe6ff;
-  --color-brand-500: #3b6cf6;
-  --color-brand-600: #2952e3;
-  --color-brand-700: #1f41b8;
-  --color-sidebar: #0f1b3d;
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+/*
+ * Colours are semantic tokens. Light values live on :root; dark values apply when the user picks
+ * Dark (data-theme="dark") or when they are on Auto and the device is dark.
+ */
+:root {
+  --page: #f4f2ee;
+  --surface: #ffffff;
+  --raised: #ffffff;
+  --nav: #ffffff;
+  --nav-active: #161817;
+  --nav-active-ink: #f4f2ee;
+  --ink: #161817;
+  --muted: #77736b;
+  --faint: #8a867e;
+  --line: #e4e1da;
+  --line-strong: #d3cfc6;
+  --accent: #ffbe00;
+  --on-accent: #161817;
+  --accent-tint: #fff1c2;
+  --accent-ink: #7a5a00;
+  --success: #1f7a4d;
+  --success-tint: #e3f3ea;
+  --danger: #b42318;
+  --danger-tint: #fde8e6;
+  --warning: #8a5a00;
+  --warning-tint: #fff4d6;
+  --dot: rgb(22 24 23 / 0.09);
+  --hero: #161817;
+  --hero-ink: #ffbe00;
+  --hero-label: #9a968e;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --page: #000000;
+  --surface: #0e0e0e;
+  --raised: #141414;
+  --nav: #0e0e0e;
+  --nav-active: #ffbe00;
+  --nav-active-ink: #161817;
+  --ink: #edebe6;
+  --muted: #8a8780;
+  --faint: #77736b;
+  --line: #262626;
+  --line-strong: #333333;
+  --accent-tint: #2a2000;
+  --accent-ink: #ffd34d;
+  --success: #5dd39e;
+  --success-tint: #0e2a1d;
+  --danger: #ff7a6e;
+  --danger-tint: #2e0f0c;
+  --warning: #ffc94d;
+  --warning-tint: #2a2000;
+  --dot: rgb(255 255 255 / 0.07);
+  --hero: #ffbe00;
+  --hero-ink: #161817;
+  --hero-label: #5c4700;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #000000;
+    --surface: #0e0e0e;
+    --raised: #141414;
+    --nav: #0e0e0e;
+    --nav-active: #ffbe00;
+    --nav-active-ink: #161817;
+    --ink: #edebe6;
+    --muted: #8a8780;
+    --faint: #77736b;
+    --line: #262626;
+    --line-strong: #333333;
+    --accent-tint: #2a2000;
+    --accent-ink: #ffd34d;
+    --success: #5dd39e;
+    --success-tint: #0e2a1d;
+    --danger: #ff7a6e;
+    --danger-tint: #2e0f0c;
+    --warning: #ffc94d;
+    --warning-tint: #2a2000;
+    --dot: rgb(255 255 255 / 0.07);
+    --hero: #ffbe00;
+    --hero-ink: #161817;
+    --hero-label: #5c4700;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-nav: var(--nav);
+  --color-nav-active: var(--nav-active);
+  --color-nav-active-ink: var(--nav-active-ink);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-accent-tint: var(--accent-tint);
+  --color-accent-ink: var(--accent-ink);
+  --color-success: var(--success);
+  --color-success-tint: var(--success-tint);
+  --color-danger: var(--danger);
+  --color-danger-tint: var(--danger-tint);
+  --color-warning: var(--warning);
+  --color-warning-tint: var(--warning-tint);
+  --color-hero: var(--hero);
+  --color-hero-ink: var(--hero-ink);
+  --color-hero-label: var(--hero-label);
+  --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  --font-dot: var(--font-doto), ui-monospace, monospace;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+  --ease-smooth: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 body {
-  @apply bg-slate-100 text-slate-800 antialiased;
+  @apply bg-page font-sans text-ink antialiased;
+}
+
+/* added for ~300ms by ThemeToggle so a theme switch cross-fades instead of snapping */
+.theme-fade,
+.theme-fade * {
+  transition: background-color 200ms var(--ease-smooth), color 200ms var(--ease-smooth), border-color 200ms var(--ease-smooth) !important;
+}
+
+@utility dot-grid {
+  background-image: radial-gradient(var(--dot) 1px, transparent 1.2px);
+  background-size: 8px 8px;
+}
+
+@utility press {
+  @apply transition duration-150 ease-smooth active:scale-[.98];
 }
 
 @utility input {
-  @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100;
+  @apply w-full rounded-xl border border-line bg-raised px-3.5 py-2.5 text-sm text-ink outline-none transition duration-150 ease-smooth placeholder:text-faint focus:border-ink focus:ring-4 focus:ring-accent/25;
 }
 
 @utility label {
-  @apply mb-1 block text-xs font-medium text-slate-600;
+  @apply mb-1.5 block text-xs font-medium text-muted;
 }
 
+@utility label-mono {
+  @apply font-mono text-[10.5px] font-medium tracking-[.08em] text-faint uppercase;
+}
+
+@utility btn {
+  @apply press inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-medium whitespace-nowrap disabled:opacity-50;
+}
 @utility btn-primary {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50 bg-brand-600 text-white hover:bg-brand-700;
+  @apply btn bg-accent font-semibold text-on-accent hover:brightness-95;
 }
 @utility btn-secondary {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50 border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+  @apply btn border border-line-strong bg-raised text-ink hover:border-ink;
+}
+@utility btn-ghost {
+  @apply btn text-muted hover:bg-ink/5 hover:text-ink;
 }
 @utility btn-danger {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50 bg-rose-600 text-white hover:bg-rose-700;
+  @apply btn border border-danger/40 bg-danger-tint text-danger hover:border-danger;
 }
 
 @utility card {
-  @apply rounded-xl border border-slate-200 bg-white shadow-sm;
-}
-
-
-@layer components {
-.table {
-  @apply w-full text-left text-sm;
-}
-.table th {
-  @apply whitespace-nowrap border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500;
-}
-.table td {
-  @apply border-b border-slate-100 px-4 py-3 whitespace-nowrap;
-}
-.table tbody tr:hover {
-  @apply bg-slate-50;
-}
+  @apply rounded-[14px] border border-line bg-surface;
 }
 
 @utility badge {
-  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+  @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap;
+}
+
+@layer components {
+  .table {
+    @apply w-full text-left text-sm;
+  }
+  .table th {
+    @apply label-mono border-b border-line px-4 py-3 whitespace-nowrap;
+  }
+  .table td {
+    @apply border-b border-line px-4 py-3 whitespace-nowrap;
+  }
+  .table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+  .table tbody tr {
+    @apply transition-colors duration-150;
+  }
+  .table tbody tr:hover {
+    @apply bg-ink/[.03];
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
