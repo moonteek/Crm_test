@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { centreDay } from "@/lib/membership-db";
 import { requirePage } from "@/lib/auth";
 import { can, canSeeBalances, groupScope, studentScope } from "@/lib/access";
-import { balance } from "@/lib/billing";
+import { balance, groupPrice } from "@/lib/billing";
 import { statement } from "@/lib/statement";
 import { membershipInclude } from "@/lib/billing-include";
 import { date, GROUP_DAYS, isoDate, money } from "@/lib/format";
@@ -147,12 +147,12 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <Link href={`/groups/${gs.groupId}`} className="block truncate font-semibold hover:underline">{gs.group.name}</Link>
-                        <p className="truncate text-sm text-muted">{gs.group.course.name} · {money(gs.group.course.price)} / oy</p>
+                        <p className="truncate text-sm text-muted">{gs.group.course.name} · {money(groupPrice(gs.group))} / oy</p>
                       </div>
                       <MemberMenu
                         member={toMemberData(gs, { id: student.id, name: student.name })}
                         reasons={reasons}
-                        groups={allGroups.map((g) => ({ id: g.id, name: g.name, days: g.days, course: { name: g.course.name, price: g.course.price } }))}
+                        groups={allGroups.map((g) => ({ id: g.id, name: g.name, days: g.days, price: g.price, course: { name: g.course.name, price: g.course.price } }))}
                         balance={allow.balance ? b : null}
                         canManage={allow.manage}
                         canPay={allow.pay}

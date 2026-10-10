@@ -320,6 +320,7 @@ const GROUP_STATUSES = { ACTIVE: "Faol", FINISHED: "Tugagan" };
 const groupSchema = z.object({
   name: v.text("Guruh nomi", 80),
   level: v.oneOf(GROUP_LEVELS, null),
+  price: v.optInt("Guruh narxi", { min: 1 }),
   courseId: v.id("Kurs"),
   teacherId: v.optId(),
   assistantId: v.optId(),

@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { balance } from "@/lib/billing";
+import { balance, groupPrice } from "@/lib/billing";
 import { studentBillingInclude } from "@/lib/billing-include";
 import {
   assertGroupAccess, assertLeadAccess, assertStudentAccess, can, canSeeBalances, groupScope, leadScope, studentScope, type CurrentUser,
@@ -116,7 +116,7 @@ export function buildServer(user: CurrentUser) {
       id: s.id, name: s.name, phone: s.phone, parent_phone: s.parentPhone,
       birth_date: s.birthDate && isoDate(s.birthDate), note: s.note,
       groups: s.groups.map((g) => ({
-        group_id: g.groupId, name: g.group.name, course: g.group.course.name, monthly_price: g.group.course.price,
+        group_id: g.groupId, name: g.group.name, course: g.group.course.name, monthly_price: groupPrice(g.group),
         joined: isoDate(g.joinedAt), left: g.leftAt && isoDate(g.leftAt),
       })),
       attendance: { lessons_marked: s.attendance.length, present, absent: s.attendance.length - present },

@@ -89,6 +89,8 @@ model Group {
   roomId    Int?
   room      Room?             @relation(fields: [roomId], references: [id])
   level     String? // one of GROUP_LEVELS in src/lib/format.ts
+  // the group's own monthly price; empty = the course price (src/lib/billing.ts groupPrice)
+  price     Int?
   days      String // "ODD" (Du-Chor-Ju) | "EVEN" (Se-Pay-Sha) | "DAILY"
   time      String // "14:00"
   startDate DateTime
@@ -145,6 +147,8 @@ model MembershipEvent {
   comment        String?
   userId         Int?
   user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  // copied from before statuses existed; only months with nothing but migrated history keep the full-month rule
+  migrated       Boolean      @default(false)
   createdAt      DateTime     @default(now())
 
   @@index([groupStudentId, date])

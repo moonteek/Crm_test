@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { groupPrice } from "./billing";
 import { EXPENSE_CATEGORIES, LEAD_STATUSES, PAYMENT_METHODS } from "./format";
 import { salariesForMonth } from "./salary";
 
@@ -65,7 +66,7 @@ export async function getAnalytics(period: Period, now = new Date()) {
   const activeDuring = (e: (typeof enrollments)[number], a: Date, b: Date) =>
     e.joinedAt < b && e.joinedAt < now && (!e.leftAt || e.leftAt >= a);
   const charged = (a: Date, b: Date, filter: (e: (typeof enrollments)[number]) => boolean = () => true) =>
-    sum(enrollments.filter((e) => filter(e) && activeDuring(e, a, b)).map((e) => e.group.course.price));
+    sum(enrollments.filter((e) => filter(e) && activeDuring(e, a, b)).map((e) => groupPrice(e.group)));
   const activeStudentsAt = (t: Date) =>
     new Set(enrollments.filter((e) => e.joinedAt < t && (!e.leftAt || e.leftAt >= t)).map((e) => e.studentId)).size;
   const firstJoin = new Map<number, Date>();
@@ -168,7 +169,7 @@ export async function getAnalytics(period: Period, now = new Date()) {
   enrollments.forEach((e) => {
     const end = e.leftAt && e.leftAt < now ? e.leftAt : now;
     const months = end < e.joinedAt ? 0 : (end.getFullYear() - e.joinedAt.getFullYear()) * 12 + end.getMonth() - e.joinedAt.getMonth() + 1;
-    chargedAllTime.set(e.studentId, (chargedAllTime.get(e.studentId) ?? 0) + months * e.group.course.price);
+    chargedAllTime.set(e.studentId, (chargedAllTime.get(e.studentId) ?? 0) + months * groupPrice(e.group));
   });
   const debtors = [...chargedAllTime]
     .map(([id, c]) => ({ id, debt: c - (paidMap.get(id) ?? 0) }))

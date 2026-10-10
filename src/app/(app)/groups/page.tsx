@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Clock, DoorOpen, Plus, User } from "lucide-react";
 import { db } from "@/lib/db";
+import { groupPrice } from "@/lib/billing";
 import { requirePage } from "@/lib/auth";
 import { can, groupScope } from "@/lib/access";
 import { date, GROUP_DAYS, money } from "@/lib/format";
@@ -64,7 +65,7 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
             </div>
             <div className="label-mono mt-4 flex justify-between border-t border-line pt-3">
               <span>Boshlangan: {date(g.startDate)}</span>
-              <span>{money(g.course.price)}</span>
+              <span>{money(groupPrice(g))}</span>
             </div>
           </Link>
         ))}

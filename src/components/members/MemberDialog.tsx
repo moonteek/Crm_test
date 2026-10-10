@@ -32,13 +32,6 @@ const ddmm = (d: Date) => `${String(d.getUTCDate()).padStart(2, "0")}.${String(d
 function PreviewLine({ kind, member, date }: { kind: Exclude<MemberDialogKind, "TRANSFER">; member: MemberData; date: Date }) {
   const p = previewCharge(toBillable(member), { type: kind as EventType, date });
   const month = MONTHS[p.month];
-  if (p.legacy) {
-    return (
-      <p className="text-sm text-muted">
-        {month}: 1-noyabrgacha eski qoida — oy to&apos;liq hisoblanadi: <b className="text-ink">{money(p.amount)}</b>. Darsbay hisob 1-noyabrdan.
-      </p>
-    );
-  }
   if (!p.billable) return <p className="text-sm text-muted">{month}: bu guruhda dars hisoblanmaydi — <b className="text-ink">0 so&apos;m</b></p>;
   return STARTS.includes(kind) ? (
     <p className="text-sm text-muted">
@@ -76,7 +69,7 @@ export function MemberDialog({
   const now = new Date();
   let delta = chargeChangeIf(toBillable(member), { type: kind === "TRANSFER" ? "LEAVE" : (kind as EventType), date }, now);
   if (kind === "TRANSFER" && target && mode === "ACTIVE") {
-    delta += totalCharges([toBillable({ events: [{ type: "ACTIVATE", date: date.toISOString() }], group: target })], now);
+    delta += totalCharges([toBillable({ events: [{ type: "ACTIVATE", date: date.toISOString(), migrated: false }], group: target })], now);
   }
 
   return (

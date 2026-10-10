@@ -43,6 +43,9 @@ export const v = {
     return z.preprocess(toNumber, fallback === undefined ? n : n.default(fallback));
   },
   id: (label = "ID") => z.preprocess(toNumber, z.number({ error: `${label} tanlanmagan` }).int().positive()),
+  /** Optional whole number (e.g. a price); blank becomes null. */
+  optInt: (label: string, { min = 0 }: { min?: number } = {}) =>
+    z.preprocess(toNumber, z.number({ error: `${label}: son kiriting` }).int(`${label}: butun son kiriting`).min(min, `${label} ${min} dan kam bo'lmasligi kerak`).nullable().default(null)),
   /** Optional id; blank becomes null. */
   optId: () => z.preprocess(toNumber, z.number().int().positive().nullable().default(null)),
   /** Date or date-time input; blank becomes null. */

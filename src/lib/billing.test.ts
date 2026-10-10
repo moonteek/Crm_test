@@ -108,10 +108,11 @@ test("previewCharge for activating mid-month", () => {
   assert.deepEqual([p.from, p.to], [nov(10), nov(28)]);
 });
 
-test("previewCharge says when a month still uses the old full-month rule", () => {
+test("a preview is always per lesson, because the action being previewed is itself new", () => {
+  // EVEN October: lessons up to the 12th are 1,3,6,8,10 → 5 of 14
   const p = previewCharge(even(["ACTIVATE", d(2026, 9, 1)]), { type: "FREEZE", date: d(2026, 10, 12) });
-  assert.equal(p.legacy, true);
-  assert.equal(p.amount, 600_000);
+  assert.equal(p.legacy, false);
+  assert.equal(p.amount, Math.round((600_000 * 5) / 14));
 });
 
 test("billedStudentCount: only students charged at least one lesson that month count", () => {
@@ -135,4 +136,44 @@ test("chargeChangeIf: a late freeze also cancels the months after it, up to now"
 test("a membership with no events yet (not migrated) is billed from joinedAt / leftAt", () => {
   const m = { ...even(), joinedAt: d(2026, 9, 3), leftAt: null };
   assert.equal(totalCharges([m], NOW), 600_000 * 2 + 600_000);
+});
+
+// October 2026: EVEN has 14 lessons (1,3,6,8,10,13,15,17,20,22,24,27,29,31); ODD has 13 (2,5,7,9,12,14,16,19,21,23,26,28,30)
+const oct = (day: number) => d(2026, 10, day);
+
+test("a group's own price overrides the course price", () => {
+  const m = even(["ACTIVATE", nov(1)]);
+  m.group.price = 500_000;
+  assert.equal(novCharge(m), 500_000);
+  m.group.price = null;
+  assert.equal(novCharge(m), 600_000);
+});
+
+test("a transfer made in the new screens in October is split per lesson in both groups", () => {
+  const old: BillableMembership = { groupId: 1, group: { name: "ROBO-3", days: "EVEN", course: { price: 450_000 } }, events: [
+    { type: "ACTIVATE", date: d(2026, 9, 1), migrated: true },
+    { type: "LEAVE", date: oct(20), migrated: false },
+  ] };
+  const next: BillableMembership = { groupId: 2, group: { name: "FE-14", days: "ODD", course: { price: 600_000 } }, events: [
+    { type: "ACTIVATE", date: oct(20), migrated: false },
+  ] };
+  const now = d(2026, 11, 15);
+  assert.deepEqual(chargeLines(old, now).map((l) => [l.month, l.amount, l.legacy]), [[8, 450_000, true], [9, 289_286, false]]);
+  assert.deepEqual(chargeLines(next, now).map((l) => [l.month, l.amount, l.legacy]), [[9, 230_769, false], [10, 600_000, false]]);
+});
+
+test("months with only migrated history keep the full-month rule", () => {
+  const m: BillableMembership = { groupId: 1, group: { name: "G", days: "EVEN", course: { price: 450_000 } }, events: [
+    { type: "ACTIVATE", date: d(2026, 9, 1), migrated: true },
+    { type: "LEAVE", date: oct(20), migrated: true },
+  ] };
+  assert.equal(chargeLines(m, d(2026, 11, 15)).find((l) => l.month === 9)?.amount, 450_000);
+});
+
+test("previewing an action in October shows the per-lesson amount", () => {
+  const m: BillableMembership = { groupId: 1, group: { name: "G", days: "EVEN", course: { price: 450_000 } }, events: [
+    { type: "ACTIVATE", date: d(2026, 9, 1), migrated: true },
+  ] };
+  const p = previewCharge(m, { type: "FREEZE", date: oct(20) });
+  assert.deepEqual([p.legacy, p.billable, p.amount], [false, 9, 289_286]);
 });

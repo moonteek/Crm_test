@@ -24,7 +24,7 @@ export async function recordEvent(tx: Tx, groupStudentId: number, e: MemberEvent
   });
   // a row from before statuses existed (migration not run yet): give it its history first, never overwrite it
   if (!gs.events.length && gs.status !== "LEFT") {
-    await tx.membershipEvent.createMany({ data: eventsFromLegacy(gs.joinedAt, gs.leftAt).map((x) => ({ ...x, groupStudentId })) });
+    await tx.membershipEvent.createMany({ data: eventsFromLegacy(gs.joinedAt, gs.leftAt).map((x) => ({ ...x, groupStudentId, migrated: true })) });
     gs = await tx.groupStudent.update({
       where: { id: groupStudentId },
       data: { status: gs.leftAt ? "LEFT" : "ACTIVE" },

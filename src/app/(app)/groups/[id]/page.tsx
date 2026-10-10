@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { centreDay } from "@/lib/membership-db";
 import { requirePage } from "@/lib/auth";
 import { can, canSeeBalances, groupScope } from "@/lib/access";
-import { balance } from "@/lib/billing";
+import { balance, groupPrice } from "@/lib/billing";
 import { membershipInclude } from "@/lib/billing-include";
 import { date, GROUP_DAYS, isoDate, lessonDates, money, MONTHS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
@@ -60,9 +60,9 @@ export default async function GroupPage({
     db.room.findMany({ orderBy: { name: "asc" } }),
     db.student.findMany({ where: { groups: { none: { groupId: id, leftAt: null } } }, orderBy: { name: "asc" } }),
     db.reason.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    db.group.findMany({ where: { status: "ACTIVE", NOT: { id }, ...groupScope(user) }, select: { id: true, name: true, days: true, course: { select: { name: true, price: true } } }, orderBy: { name: "asc" } }),
+    db.group.findMany({ where: { status: "ACTIVE", NOT: { id }, ...groupScope(user) }, select: { id: true, name: true, days: true, price: true, course: { select: { name: true, price: true } } }, orderBy: { name: "asc" } }),
   ]);
-  const thisGroup = { id: group.id, name: group.name, days: group.days, course: group.course };
+  const thisGroup = { id: group.id, name: group.name, days: group.days, price: group.price, course: group.course };
   const mark = new Map(attendance.map((a) => [`${a.studentId}:${isoDate(a.date)}`, a.present]));
   const gradeMap = new Map(grades.map((g) => [`${g.studentId}:${isoDate(g.date)}`, g.score]));
   const prev = new Date(year, month - 1, 1);
@@ -81,7 +81,7 @@ export default async function GroupPage({
               <LevelBadge level={group.level} />
               {group.status === "FINISHED" && <span className="badge bg-ink/5 text-muted">Tugagan</span>}
             </div>
-            <p className="mt-1 text-muted">{group.course.name} · {money(group.course.price)} / oy</p>
+            <p className="mt-1 text-muted">{group.course.name} · {money(groupPrice(group))} / oy</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {allow.edit && <Modal title="Guruhni tahrirlash" triggerClassName="btn-secondary" trigger={<><Pencil className="h-4 w-4" /> Tahrirlash</>}>

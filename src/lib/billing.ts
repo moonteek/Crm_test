@@ -5,9 +5,11 @@ import { eventsFromLegacy } from "./membership-legacy";
 /**
  * What a student is charged for being in a group, worked out by replaying the membership's events.
  *
- * - Before PER_LESSON_FROM (the old rule): the full course price for every calendar month that overlaps a
- *   period between ACTIVATE and LEAVE. Trial time before the first activation is free; freezes are ignored.
- * - From PER_LESSON_FROM: price × (lessons the student was active for) ÷ (lessons in that month), rounded
+ * - Before PER_LESSON_FROM (the old rule): the full price for every calendar month that overlaps a period
+ *   between ACTIVATE and LEAVE. Trial time before the first activation is free; freezes are ignored. This only
+ *   applies to months whose history was migrated from before statuses existed: a month in which staff did
+ *   anything in the new screens (an event with migrated: false) is charged per lesson like later months.
+ * - Per lesson: price × (lessons the student was active for) ÷ (lessons in that month), rounded
  *   once per month. Start and end days are both charged: activating, freezing or leaving on a lesson day
  *   includes that lesson.
  *
@@ -18,8 +20,10 @@ export const PER_LESSON_FROM = new Date(Date.UTC(2026, 10, 1));
 
 export type BillableMembership = {
   groupId: number;
-  events: { type: EventType | string; date: Date }[];
-  group: { name: string; days: string; course: { price: number } };
+  /** migrated: true for history copied from before statuses existed; absent counts as migrated */
+  events: { type: EventType | string; date: Date; migrated?: boolean }[];
+  /** price: the group's own monthly price; when empty the course price applies */
+  group: { name: string; days: string; price?: number | null; course: { price: number } };
   /** used only when the membership has no events yet (database not migrated) */
   joinedAt?: Date;
   leftAt?: Date | null;
@@ -27,7 +31,10 @@ export type BillableMembership = {
 
 export type ChargeLine = { year: number; month: number; lessons: number; billable: number; amount: number; legacy: boolean };
 
-type Ev = { type: EventType; date: Date };
+type Ev = { type: EventType; date: Date; migrated?: boolean };
+
+/** The monthly price students of this group pay. */
+export const groupPrice = (g: { price?: number | null; course: { price: number } }) => g.price ?? g.course.price;
 
 const time = (d: Date) => d.getTime();
 const monthKey = (y: number, m: number) => y * 12 + m;
@@ -38,7 +45,7 @@ function sorted(m: BillableMembership): Ev[] {
   // never bill a membership as "nothing" just because its history hasn't been migrated yet
   const events = !m.events.length && m.joinedAt ? eventsFromLegacy(m.joinedAt, m.leftAt ?? null) : m.events;
   // events are stored in order; a stable sort by date keeps same-day events in that order
-  return [...events].map((e) => ({ type: e.type as EventType, date: e.date })).sort((a, b) => time(a.date) - time(b.date));
+  return [...events].map((e) => ({ type: e.type as EventType, date: e.date, migrated: (e as Ev).migrated })).sort((a, b) => time(a.date) - time(b.date));
 }
 
 /**
@@ -73,9 +80,12 @@ function enrolledDuringMonth(events: Ev[], y: number, m: number) {
 }
 
 function lineFor(m: BillableMembership, events: Ev[], y: number, mo: number): ChargeLine & { days: Date[] } {
-  const price = m.group.course.price;
+  const price = groupPrice(m.group);
   const lessons = lessonDates(m.group.days, y, mo);
-  if (monthKey(y, mo) < PER_LESSON_KEY) {
+  const first = Date.UTC(y, mo, 1);
+  const next = Date.UTC(y, mo + 1, 1);
+  const touchedInApp = events.some((e) => e.migrated === false && time(e.date) >= first && time(e.date) < next);
+  if (monthKey(y, mo) < PER_LESSON_KEY && !touchedInApp) {
     const on = enrolledDuringMonth(events, y, mo);
     return { year: y, month: mo, lessons: lessons.length, billable: on ? lessons.length : 0, amount: on ? price : 0, legacy: true, days: on ? lessons : [] };
   }
@@ -126,13 +136,13 @@ export function billedStudentCount(memberships: BillableMembership[], year: numb
 
 /** How much the student's total charges (up to `now`) would change if `extra` were added: + owes more, − owes less. */
 export function chargeChangeIf(m: BillableMembership, extra: { type: EventType; date: Date }, now = new Date()) {
-  const withExtra = { ...m, events: [...sorted(m), extra] };
+  const withExtra = { ...m, events: [...sorted(m), { ...extra, migrated: false }] };
   return totalCharges([withExtra], now) - totalCharges([m], now);
 }
 
 /** What the month of `extra.date` would cost if `extra` were added, with the first and last charged lesson. */
 export function previewCharge(m: BillableMembership, extra: { type: EventType; date: Date }) {
-  const events = [...sorted(m), { type: extra.type, date: extra.date }];
+  const events = [...sorted(m), { type: extra.type, date: extra.date, migrated: false }];
   const y = extra.date.getUTCFullYear();
   const mo = extra.date.getUTCMonth();
   const { days, ...line } = lineFor(m, events, y, mo);
