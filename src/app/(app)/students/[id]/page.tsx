@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { centreDay } from "@/lib/membership-db";
 import { requirePage } from "@/lib/auth";
 import { can, canSeeBalances, groupScope, studentScope } from "@/lib/access";
-import { balance, groupPrice } from "@/lib/billing";
+import { balance, priceNow } from "@/lib/billing";
 import { statement } from "@/lib/statement";
 import { membershipInclude } from "@/lib/billing-include";
 import { date, GROUP_DAYS, isoDate, money } from "@/lib/format";
@@ -14,7 +14,7 @@ import { PaymentForm, StudentFields } from "@/components/forms";
 import { Empty, Field, SubmitRow } from "@/components/ui";
 import { MemberMenu } from "@/components/members/MemberMenu";
 import { StatusBadge } from "@/components/members/StatusBadge";
-import { toMemberData } from "@/components/members/types";
+import { toMemberData, toMemberGroup } from "@/components/members/types";
 import { addStudentToGroup, deletePayment, deleteStudent, updateStudent } from "../../actions";
 
 export default async function StudentPage({ params }: { params: Promise<{ id: string }> }) {
@@ -24,7 +24,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     db.student.findFirst({
       where: { id, ...studentScope(user) },
       include: {
-        groups: { include: { events: { ...membershipInclude.events, include: { reason: true } }, group: { include: { course: true, teacher: true } } }, orderBy: { joinedAt: "desc" } },
+        groups: { include: { events: { ...membershipInclude.events, include: { reason: true } }, group: { include: { course: true, teacher: true, prices: true } } }, orderBy: { joinedAt: "desc" } },
         payments: { include: { group: true }, orderBy: { date: "desc" } },
         attendance: true,
         grades: { select: { score: true } },
@@ -32,7 +32,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
         purchases: { include: { items: { include: { product: true } } }, orderBy: { date: "desc" } },
       },
     }),
-    db.group.findMany({ where: { status: "ACTIVE", ...groupScope(user) }, include: { course: true }, orderBy: { name: "asc" } }),
+    db.group.findMany({ where: { status: "ACTIVE", ...groupScope(user) }, include: { course: true, prices: true }, orderBy: { name: "asc" } }),
   ]);
   const reasons = await db.reason.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } });
   if (!student) notFound();
@@ -147,12 +147,12 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <Link href={`/groups/${gs.groupId}`} className="block truncate font-semibold hover:underline">{gs.group.name}</Link>
-                        <p className="truncate text-sm text-muted">{gs.group.course.name} · {money(groupPrice(gs.group))} / oy</p>
+                        <p className="truncate text-sm text-muted">{gs.group.course.name} · {money(priceNow(gs.group))} / oy</p>
                       </div>
                       <MemberMenu
                         member={toMemberData(gs, { id: student.id, name: student.name })}
                         reasons={reasons}
-                        groups={allGroups.map((g) => ({ id: g.id, name: g.name, days: g.days, price: g.price, course: { name: g.course.name, price: g.course.price } }))}
+                        groups={allGroups.map((g) => toMemberGroup(g))}
                         balance={allow.balance ? b : null}
                         canManage={allow.manage}
                         canPay={allow.pay}

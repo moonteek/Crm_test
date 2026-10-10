@@ -35,6 +35,7 @@ export function GroupFields({
       </div>
       <Field label="Guruh narxi, so'm / oy (bo'sh qoldirilsa — kurs narxi)">
         <input name="price" type="number" min={1} className="input" defaultValue={g?.price ?? ""} placeholder="Kurs narxi" />
+        <span className="mt-1 block text-xs text-muted">Narx o&apos;zgarsa, yangi narx keyingi oyning 1-sanasidan amal qiladi</span>
       </Field>
       <Field label="Yordamchi o'qituvchi (ixtiyoriy)">
         <select name="assistantId" className="input" defaultValue={g?.assistantId ?? ""}>

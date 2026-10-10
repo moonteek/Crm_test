@@ -5,7 +5,8 @@ import { db } from "@/lib/db";
 import { centreDay } from "@/lib/membership-db";
 import { requirePage } from "@/lib/auth";
 import { can, canSeeBalances, groupScope } from "@/lib/access";
-import { balance, groupPrice } from "@/lib/billing";
+import { balance, priceNow } from "@/lib/billing";
+import { upcomingPrice } from "@/lib/prices";
 import { membershipInclude } from "@/lib/billing-include";
 import { date, GROUP_DAYS, isoDate, lessonDates, money, MONTHS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
@@ -14,7 +15,7 @@ import { BalanceBadge, Empty, Field, LevelBadge, SubmitRow } from "@/components/
 import { GradeCell } from "@/components/GradeCell";
 import { MemberMenu } from "@/components/members/MemberMenu";
 import { StatusBadge, StatusLegend } from "@/components/members/StatusBadge";
-import { toMemberData } from "@/components/members/types";
+import { toMemberData, toMemberGroup } from "@/components/members/types";
 import { addStudentToGroup, createExam, deleteExam, deleteGroup, toggleAttendance, updateGroup } from "../../actions";
 
 export default async function GroupPage({
@@ -39,7 +40,7 @@ export default async function GroupPage({
   const group = await db.group.findFirst({
     where: { id, ...groupScope(user) },
     include: {
-      course: true, teacher: true, assistant: true, room: true,
+      course: true, teacher: true, assistant: true, room: true, prices: true,
       students: {
         where: { leftAt: null },
         include: { events: membershipInclude.events, student: { include: { payments: { select: { amount: true } }, groups: { include: membershipInclude } } } },
@@ -60,9 +61,10 @@ export default async function GroupPage({
     db.room.findMany({ orderBy: { name: "asc" } }),
     db.student.findMany({ where: { groups: { none: { groupId: id, leftAt: null } } }, orderBy: { name: "asc" } }),
     db.reason.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    db.group.findMany({ where: { status: "ACTIVE", NOT: { id }, ...groupScope(user) }, select: { id: true, name: true, days: true, price: true, course: { select: { name: true, price: true } } }, orderBy: { name: "asc" } }),
+    db.group.findMany({ where: { status: "ACTIVE", NOT: { id }, ...groupScope(user) }, select: { id: true, name: true, days: true, price: true, course: { select: { name: true, price: true } }, prices: { select: { price: true, from: true } } }, orderBy: { name: "asc" } }),
   ]);
-  const thisGroup = { id: group.id, name: group.name, days: group.days, price: group.price, course: group.course };
+  const thisGroup = { id: group.id, name: group.name, days: group.days, price: group.price, course: group.course, prices: group.prices };
+  const upcoming = upcomingPrice(group.prices, now);
   const mark = new Map(attendance.map((a) => [`${a.studentId}:${isoDate(a.date)}`, a.present]));
   const gradeMap = new Map(grades.map((g) => [`${g.studentId}:${isoDate(g.date)}`, g.score]));
   const prev = new Date(year, month - 1, 1);
@@ -81,7 +83,7 @@ export default async function GroupPage({
               <LevelBadge level={group.level} />
               {group.status === "FINISHED" && <span className="badge bg-ink/5 text-muted">Tugagan</span>}
             </div>
-            <p className="mt-1 text-muted">{group.course.name} · {money(groupPrice(group))} / oy</p>
+            <p className="mt-1 text-muted">{group.course.name} · {money(priceNow(group))} / oy{upcoming && <span className="label-mono ml-2">{date(upcoming.from)} dan: {money(upcoming.price)}</span>}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {allow.edit && <Modal title="Guruhni tahrirlash" triggerClassName="btn-secondary" trigger={<><Pencil className="h-4 w-4" /> Tahrirlash</>}>
@@ -207,7 +209,7 @@ export default async function GroupPage({
                           <MemberMenu
                             member={toMemberData({ ...gs, group: thisGroup }, { id: student.id, name: student.name })}
                             reasons={reasons}
-                            groups={transferGroups.map((g) => ({ ...g }))}
+                            groups={transferGroups.map((g) => toMemberGroup(g))}
                             balance={allow.balance ? b : null}
                             canManage={allow.students}
                             canPay={allow.pay}

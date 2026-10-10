@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Clock, DoorOpen, Plus, User } from "lucide-react";
 import { db } from "@/lib/db";
-import { groupPrice } from "@/lib/billing";
+import { priceNow } from "@/lib/billing";
 import { requirePage } from "@/lib/auth";
 import { can, groupScope } from "@/lib/access";
 import { date, GROUP_DAYS, money } from "@/lib/format";
@@ -16,7 +16,7 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
   const [groups, courses, teachers, rooms] = await Promise.all([
     db.group.findMany({
       where: { status, ...groupScope(user) },
-      include: { course: true, teacher: true, assistant: true, room: true, _count: { select: { students: { where: { leftAt: null } } } } },
+      include: { course: true, teacher: true, assistant: true, room: true, prices: true, _count: { select: { students: { where: { leftAt: null } } } } },
       orderBy: [{ days: "asc" }, { time: "asc" }],
     }),
     db.course.findMany({ orderBy: { name: "asc" } }),
@@ -65,7 +65,7 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
             </div>
             <div className="label-mono mt-4 flex justify-between border-t border-line pt-3">
               <span>Boshlangan: {date(g.startDate)}</span>
-              <span>{money(groupPrice(g))}</span>
+              <span>{money(priceNow(g))}</span>
             </div>
           </Link>
         ))}

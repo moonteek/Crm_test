@@ -13,6 +13,7 @@ import { shiftMonth } from "@/lib/month";
 import { ALL_PERMISSIONS } from "@/lib/permissions";
 import { logAction } from "@/lib/audit";
 import { centreDay, recordEvent, startMembership } from "@/lib/membership-db";
+import { nextMonthStart, priceNextMonth, schedulePrice } from "@/lib/prices-db";
 import { menuActions, systemLeaveDate, type EventType, type Status } from "@/lib/membership";
 import {
   ACTIVITY_TYPES, isoDate, CALL_RESULTS, EXPENSE_CATEGORIES, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES,
@@ -341,7 +342,16 @@ export async function updateGroup(id: number, f: FormData) {
   const user = await requirePermission("groups.manage");
   await assertGroupAccess(user, id);
   const data = parseForm(groupSchema.extend({ status: v.oneOf(GROUP_STATUSES, "ACTIVE") }), f);
-  const before = await db.group.findUniqueOrThrow({ where: { id } });
+  const before = await db.group.findUniqueOrThrow({ where: { id }, include: { course: true } });
+  // a new price (own, or the new course's) starts next month; past months keep what they were charged
+  const target = data.price ?? (await db.course.findUniqueOrThrow({ where: { id: data.courseId } })).price;
+  const current = before.price ?? before.course.price;
+  const repriced = await db.$transaction(async (tx) => {
+    if (target === (await priceNextMonth(tx, id, current))) return false;
+    await schedulePrice(tx, id, target, current, user.id);
+    return true;
+  });
+  if (repriced) await logAction(user, "group.price", `${before.name} narxi ${isoDate(nextMonthStart())} dan: ${money(target)}`);
   if (before.status !== "FINISHED" && data.status === "FINISHED") {
     // students graduate: charges stop today for everyone still in the group (trial and frozen too)
     const members = await db.groupStudent.findMany({ where: { groupId: id, status: { not: "LEFT" } }, include: { events: { orderBy: [{ date: "asc" }, { id: "asc" }] } } });
@@ -396,7 +406,14 @@ export async function updateCourse(id: number, f: FormData) {
   const data = parseForm(courseSchema, f);
   const before = await db.course.findUniqueOrThrow({ where: { id } });
   if (before.price !== data.price) {
-    await logAction(user, "course.price", `${before.name} narxi: ${money(before.price)} → ${money(data.price)}`);
+    // groups that follow the course price get the new price from next month; groups with their own price don't
+    const following = await db.group.findMany({ where: { courseId: id, price: null } });
+    await db.$transaction(async (tx) => {
+      for (const g of following) {
+        if (data.price !== (await priceNextMonth(tx, g.id, before.price))) await schedulePrice(tx, g.id, data.price, before.price, user.id);
+      }
+    });
+    await logAction(user, "course.price", `${before.name} narxi ${isoDate(nextMonthStart())} dan: ${money(before.price)} → ${money(data.price)}`);
   }
   await db.course.update({ where: { id }, data });
   revalidatePath("/courses");

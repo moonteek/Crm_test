@@ -1,6 +1,7 @@
 import { lessonDates } from "./format";
 import type { EventType } from "./membership";
 import { eventsFromLegacy } from "./membership-legacy";
+import { priceAt, type PriceRow } from "./prices";
 
 /**
  * What a student is charged for being in a group, worked out by replaying the membership's events.
@@ -23,7 +24,7 @@ export type BillableMembership = {
   /** migrated: true for history copied from before statuses existed; absent counts as migrated */
   events: { type: EventType | string; date: Date; migrated?: boolean }[];
   /** price: the group's own monthly price; when empty the course price applies */
-  group: { name: string; days: string; price?: number | null; course: { price: number } };
+  group: { name: string; days: string; price?: number | null; course: { price: number }; prices?: PriceRow[] };
   /** used only when the membership has no events yet (database not migrated) */
   joinedAt?: Date;
   leftAt?: Date | null;
@@ -33,8 +34,12 @@ export type ChargeLine = { year: number; month: number; lessons: number; billabl
 
 type Ev = { type: EventType; date: Date; migrated?: boolean };
 
-/** The monthly price students of this group pay. */
+/** The group's current price setting (own price, else the course price) — history aside. */
 export const groupPrice = (g: { price?: number | null; course: { price: number } }) => g.price ?? g.course.price;
+
+/** The price the group charges in the month of `now`, history included. */
+export const priceNow = (g: { price?: number | null; course: { price: number }; prices?: PriceRow[] }, now = new Date()) =>
+  priceAt(g.prices ?? [], groupPrice(g), now.getUTCFullYear(), now.getUTCMonth());
 
 const time = (d: Date) => d.getTime();
 const monthKey = (y: number, m: number) => y * 12 + m;
@@ -80,7 +85,7 @@ function enrolledDuringMonth(events: Ev[], y: number, m: number) {
 }
 
 function lineFor(m: BillableMembership, events: Ev[], y: number, mo: number): ChargeLine & { days: Date[] } {
-  const price = groupPrice(m.group);
+  const price = priceAt(m.group.prices ?? [], groupPrice(m.group), y, mo);
   const lessons = lessonDates(m.group.days, y, mo);
   const first = Date.UTC(y, mo, 1);
   const next = Date.UTC(y, mo + 1, 1);

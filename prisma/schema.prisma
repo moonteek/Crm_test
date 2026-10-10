@@ -101,6 +101,21 @@ model Group {
   payments  Payment[]
   grades    Grade[]
   exams     Exam[]
+  prices    GroupPrice[]
+}
+
+/// A group's monthly price from a month on (1st of the month, UTC); earlier months keep earlier rows.
+/// Groups with no rows charge their current price (src/lib/prices.ts).
+model GroupPrice {
+  id        Int      @id @default(autoincrement())
+  groupId   Int
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  price     Int
+  from      DateTime
+  userId    Int?
+  createdAt DateTime @default(now())
+
+  @@unique([groupId, from])
 }
 
 model Student {

@@ -177,3 +177,10 @@ test("previewing an action in October shows the per-lesson amount", () => {
   const p = previewCharge(m, { type: "FREEZE", date: oct(20) });
   assert.deepEqual([p.legacy, p.billable, p.amount], [false, 9, 289_286]);
 });
+
+test("price history: October keeps the old price, November uses the new one", () => {
+  const m = even(["ACTIVATE", d(2026, 10, 1)]);
+  m.group.prices = [{ price: 450_000, from: new Date(0) }, { price: 500_000, from: nov(1) }];
+  const lines = chargeLines(m, NOW);
+  assert.deepEqual(lines.map((l) => [l.month, l.amount]), [[9, 450_000], [10, 500_000]]);
+});
