@@ -244,17 +244,6 @@ export async function addStudentToGroup(f: FormData) {
   revalidatePath(`/groups/${groupId}`);
 }
 
-/** Temporary: the old "Chiqarish" buttons (replaced by the member menu in the next step). */
-export async function removeStudentFromGroup(groupId: number, studentId: number) {
-  const user = await requirePermission("students.manage");
-  await assertGroupAccess(user, groupId);
-  const gs = await db.groupStudent.findUniqueOrThrow({ where: { groupId_studentId: { groupId, studentId } }, include: { student: true, group: true } });
-  await db.$transaction((tx) => recordEvent(tx, gs.id, { type: "LEAVE", date: centreDay(), userId: user.id, system: true }));
-  await logAction(user, "student.leave", `${gs.student.name} ${gs.group.name} guruhidan chiqarildi`);
-  revalidatePath(`/students/${studentId}`);
-  revalidatePath(`/groups/${groupId}`);
-}
-
 export type MemberActionState = { error?: string; ok?: boolean } | null;
 
 const MEMBER_ACTIONS = { ACTIVATE: "faollashtirildi", FREEZE: "muzlatildi", UNFREEZE: "muzlatishdan chiqarildi", BACK_TO_TRIAL: "sinov darsiga qaytarildi", LEAVE: "guruhdan chiqarildi" };

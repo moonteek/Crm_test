@@ -4,13 +4,17 @@ import { Pencil, Phone, Plus, Trash2, Wallet } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
 import { can, canSeeBalances, groupScope, studentScope } from "@/lib/access";
-import { balance, chargeLines } from "@/lib/billing";
+import { balance } from "@/lib/billing";
+import { statement } from "@/lib/statement";
 import { membershipInclude } from "@/lib/billing-include";
-import { date, GROUP_DAYS, isoDate, money, PAYMENT_METHODS } from "@/lib/format";
+import { date, GROUP_DAYS, isoDate, money } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { PaymentForm, StudentFields } from "@/components/forms";
 import { Empty, Field, SubmitRow } from "@/components/ui";
-import { addStudentToGroup, deletePayment, deleteStudent, removeStudentFromGroup, updateStudent } from "../../actions";
+import { MemberMenu } from "@/components/members/MemberMenu";
+import { StatusBadge } from "@/components/members/StatusBadge";
+import { toMemberData } from "@/components/members/types";
+import { addStudentToGroup, deletePayment, deleteStudent, updateStudent } from "../../actions";
 
 export default async function StudentPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requirePage("students.view");
@@ -19,7 +23,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     db.student.findFirst({
       where: { id, ...studentScope(user) },
       include: {
-        groups: { include: { events: membershipInclude.events, group: { include: { course: true, teacher: true } } }, orderBy: { joinedAt: "desc" } },
+        groups: { include: { events: { ...membershipInclude.events, include: { reason: true } }, group: { include: { course: true, teacher: true } } }, orderBy: { joinedAt: "desc" } },
         payments: { include: { group: true }, orderBy: { date: "desc" } },
         attendance: true,
         grades: { select: { score: true } },
@@ -29,6 +33,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     }),
     db.group.findMany({ where: { status: "ACTIVE", ...groupScope(user) }, include: { course: true }, orderBy: { name: "asc" } }),
   ]);
+  const reasons = await db.reason.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } });
   if (!student) notFound();
 
   const b = balance(student.groups, student.payments);
@@ -38,6 +43,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     ? Math.round(student.examResults.reduce((s, r) => s + (r.score / r.exam.maxScore) * 100, 0) / student.examResults.length)
     : null;
   const activeGroups = student.groups.filter((g) => !g.leftAt).map((g) => g.group);
+  const rows = statement(student.groups, student.payments);
   const allow = {
     manage: can(user, "students.manage"),
     remove: can(user, "students.delete"),
@@ -117,66 +123,93 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                       {allGroups.map((g) => <option key={g.id} value={g.id}>{g.name} — {g.course.name} ({g.time})</option>)}
                     </select>
                   </Field>
-                  <Field label="Qo'shilish sanasi"><input type="date" name="joinedAt" className="input" defaultValue={isoDate(new Date())} /></Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Holati">
+                      <select name="mode" className="input" defaultValue="TRIAL">
+                        <option value="TRIAL">Sinov darsi (bepul)</option>
+                        <option value="ACTIVE">Faol (to&apos;lovli)</option>
+                      </select>
+                    </Field>
+                    <Field label="Qaysi kundan"><input type="date" name="joinedAt" className="input" defaultValue={isoDate(new Date())} /></Field>
+                  </div>
                   <SubmitRow />
                 </form>
               </Modal>}
             </div>
-            <div className="overflow-x-auto">
-              <table className="table">
-                <thead><tr><th>Guruh</th><th>Kurs</th><th>Jadval</th><th>Oylar</th><th>Holat</th><th></th></tr></thead>
-                <tbody>
-                  {student.groups.map((gs) => (
-                    <tr key={gs.id}>
-                      <td><Link href={`/groups/${gs.groupId}`} className="font-medium hover:underline">{gs.group.name}</Link></td>
-                      <td>{gs.group.course.name}<p className="text-xs text-muted">{money(gs.group.course.price)} / oy</p></td>
-                      <td>{GROUP_DAYS[gs.group.days]}<p className="text-xs text-muted">{gs.group.time}</p></td>
-                      <td>{chargeLines(gs).length}</td>
-                      <td>
-                        {gs.leftAt
-                          ? <span className="badge bg-ink/5 text-muted">Chiqgan {date(gs.leftAt)}</span>
-                          : <span className="badge bg-success-tint text-success">Faol · {date(gs.joinedAt)}</span>}
-                      </td>
-                      <td>
-                        {allow.manage && !gs.leftAt && (
-                          <form action={removeStudentFromGroup.bind(null, gs.groupId, student.id)}>
-                            <button className="text-xs text-danger hover:underline">Chiqarish</button>
-                          </form>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {student.groups.length === 0 && <Empty text="Guruhga biriktirilmagan" />}
+            <div className="grid grid-cols-1 gap-3 px-4 pb-4 md:grid-cols-2 md:px-5 md:pb-5">
+              {student.groups.map((gs) => {
+                const first = (t: string) => gs.events.find((e) => e.type === t);
+                const last = gs.events.at(-1);
+                const activated = first("ACTIVATE");
+                return (
+                  <div key={gs.id} className={`rounded-xl border p-4 ${gs.status === "LEFT" ? "border-line opacity-70" : "border-line-strong bg-raised"}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <Link href={`/groups/${gs.groupId}`} className="block truncate font-semibold hover:underline">{gs.group.name}</Link>
+                        <p className="truncate text-sm text-muted">{gs.group.course.name} · {money(gs.group.course.price)} / oy</p>
+                      </div>
+                      <MemberMenu
+                        member={toMemberData(gs, { id: student.id, name: student.name })}
+                        reasons={reasons}
+                        groups={allGroups.map((g) => ({ id: g.id, name: g.name, days: g.days, course: { name: g.course.name, price: g.course.price } }))}
+                        balance={allow.balance ? b : null}
+                        canManage={allow.manage}
+                        canPay={allow.pay}
+                      />
+                    </div>
+                    <div className="mt-3"><StatusBadge status={gs.status} /></div>
+                    <dl className="mt-3 space-y-1 text-sm">
+                      <Row k="Jadval">{GROUP_DAYS[gs.group.days]} · <span className="font-mono">{gs.group.time}</span></Row>
+                      <Row k="Qo'shilgan">{date(gs.events[0]?.date ?? gs.joinedAt)}</Row>
+                      {activated && <Row k="Faollashtirilgan">{date(activated.date)}</Row>}
+                      {(gs.status === "FROZEN" || gs.status === "LEFT") && last && (
+                        <Row k={gs.status === "FROZEN" ? "Muzlatilgan" : "Chiqgan"}>
+                          {date(last.date)}{last.reason ? ` · ${last.reason.name}` : ""}
+                        </Row>
+                      )}
+                    </dl>
+                  </div>
+                );
+              })}
             </div>
+            {student.groups.length === 0 && <Empty text="Guruhga biriktirilmagan" />}
           </div>
 
           {allow.payments && <div className="card">
-            <h2 className="px-5 py-4 font-semibold">To&apos;lovlar tarixi</h2>
-            <div className="overflow-x-auto">
-              <table className="table">
-                <thead><tr><th>Sana</th><th>Summa</th><th>Turi</th><th>Guruh</th><th>Izoh</th>{allow.deletePayment && <th></th>}</tr></thead>
+            <div className="flex items-center justify-between px-5 py-4">
+              <h2 className="font-semibold">To&apos;lovlar va hisob</h2>
+              {allow.balance && <span className={`font-semibold ${b < 0 ? "text-danger" : "text-success"}`}>{money(b)}</span>}
+            </div>
+            <div className="md:overflow-x-auto">
+              <table className="table table-stack">
+                <thead><tr><th>Sana</th><th>Amal</th><th>Guruh</th><th className="text-right">Summa</th>{allow.balance && <th className="text-right">Balans</th>}{allow.deletePayment && <th></th>}</tr></thead>
                 <tbody>
-                  {student.payments.map((p) => (
-                    <tr key={p.id}>
-                      <td>{date(p.date)}</td>
-                      <td className="font-semibold text-success">{money(p.amount)}</td>
-                      <td>{PAYMENT_METHODS[p.method]}</td>
-                      <td>{p.group?.name ?? "—"}</td>
-                      <td className="text-muted">{p.note ?? ""}</td>
+                  {rows.map((r, i) => (
+                    <tr key={i}>
+                      <td data-label="Sana" className="text-muted">{date(r.date)}</td>
+                      <td className="max-md:order-first whitespace-normal">
+                        <span className={r.kind === "event" ? "text-muted" : "font-medium"}>{r.label}</span>
+                        {r.lessons && <span className="label-mono ml-2">{r.lessons}</span>}
+                      </td>
+                      <td data-label="Guruh">{r.groupName ?? "—"}</td>
+                      <td data-label="Summa" className={`text-right font-semibold ${r.amount > 0 ? "text-success" : r.amount < 0 ? "text-danger" : "text-faint"}`}>
+                        {r.amount === 0 ? "—" : `${r.amount > 0 ? "+" : "−"}${money(Math.abs(r.amount))}`}
+                      </td>
+                      {allow.balance && <td data-label="Balans" className="text-right font-mono text-xs">{money(r.balance)}</td>}
                       {allow.deletePayment && (
                         <td>
-                          <form action={deletePayment.bind(null, p.id)}>
-                            <button className="text-faint hover:text-danger" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
-                          </form>
+                          {r.paymentId && (
+                            <form action={deletePayment.bind(null, r.paymentId)}>
+                              <button className="text-faint hover:text-danger" aria-label="To'lovni o'chirish"><Trash2 className="h-4 w-4" /></button>
+                            </form>
+                          )}
                         </td>
                       )}
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {student.payments.length === 0 && <Empty text="To'lovlar yo'q" />}
+              {rows.length === 0 && <Empty text="To'lovlar va hisoblar yo'q" />}
             </div>
           </div>}
 
