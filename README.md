@@ -102,6 +102,18 @@ npm run setup             # bazani yaratadi va demo ma'lumotlarni qo'shadi
 npm run dev               # http://localhost:3000
 ```
 
+**Ishlab turgan bazani yangilashda** (yangi versiya chiqqanda), sxemani yangilagandan keyin bir marta
+o'quvchilar tarixini to'ldiring — aks holda eski guruh a'zolari uchun hisob-kitob vaqtincha qo'shilish
+sanasidan hisoblanadi:
+
+```bash
+npm run db:push
+npm run db:migrate-statuses   # qayta ishga tushirish xavfsiz: allaqachon to'ldirilganlarini o'tkazib yuboradi
+```
+
+**Darsbay hisob:** 2026-yil 1-noyabrdan boshlab oylik to'lov o'quvchi faol bo'lgan darslar soniga qarab
+hisoblanadi (narx × faol darslar ÷ oydagi darslar). Undan oldingi oylar eski qoida bo'yicha — to'liq oy.
+
 Demo kirish (parol hammasida `admin123`, productionda darhol o'zgartiring):
 
 | Rol | Telefon |

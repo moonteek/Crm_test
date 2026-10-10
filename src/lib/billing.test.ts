@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { balance, billableLessonsIn, billedStudentCount, chargeLines, previewCharge, totalCharges, type BillableMembership } from "./billing";
+import { balance, billableLessonsIn, billedStudentCount, chargeChangeIf, chargeLines, previewCharge, totalCharges, type BillableMembership } from "./billing";
 import type { EventType } from "./membership";
 
 // November 2026: EVEN (Tue/Thu/Sat) has 12 lessons — 3,5,7,10,12,14,17,19,21,24,26,28;
@@ -123,4 +123,16 @@ test("billedStudentCount: only students charged at least one lesson that month c
   ];
   assert.equal(billedStudentCount(ms, 2026, 10, NOW), 2);
   assert.equal(billedStudentCount(ms, 2026, 9, NOW), 1);
+});
+
+test("chargeChangeIf: a late freeze also cancels the months after it, up to now", () => {
+  const m = odd(["ACTIVATE", d(2026, 9, 1)]);
+  m.group.course.price = 600_000;
+  // ODD: 13 lessons in Nov, freeze on 20 Nov keeps 9 of them; December (13 lessons) is no longer charged
+  assert.equal(chargeChangeIf(m, { type: "FREEZE", date: nov(20) }, d(2026, 12, 5)), -184_615 - 600_000);
+});
+
+test("a membership with no events yet (not migrated) is billed from joinedAt / leftAt", () => {
+  const m = { ...even(), joinedAt: d(2026, 9, 3), leftAt: null };
+  assert.equal(totalCharges([m], NOW), 600_000 * 2 + 600_000);
 });

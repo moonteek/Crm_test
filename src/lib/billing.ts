@@ -1,5 +1,6 @@
 import { lessonDates } from "./format";
 import type { EventType } from "./membership";
+import { eventsFromLegacy } from "./membership-legacy";
 
 /**
  * What a student is charged for being in a group, worked out by replaying the membership's events.
@@ -19,6 +20,9 @@ export type BillableMembership = {
   groupId: number;
   events: { type: EventType | string; date: Date }[];
   group: { name: string; days: string; course: { price: number } };
+  /** used only when the membership has no events yet (database not migrated) */
+  joinedAt?: Date;
+  leftAt?: Date | null;
 };
 
 export type ChargeLine = { year: number; month: number; lessons: number; billable: number; amount: number; legacy: boolean };
@@ -31,8 +35,10 @@ const startsActive = (t: EventType) => t === "ACTIVATE" || t === "UNFREEZE";
 const PER_LESSON_KEY = monthKey(PER_LESSON_FROM.getUTCFullYear(), PER_LESSON_FROM.getUTCMonth());
 
 function sorted(m: BillableMembership): Ev[] {
+  // never bill a membership as "nothing" just because its history hasn't been migrated yet
+  const events = !m.events.length && m.joinedAt ? eventsFromLegacy(m.joinedAt, m.leftAt ?? null) : m.events;
   // events are stored in order; a stable sort by date keeps same-day events in that order
-  return [...m.events].map((e) => ({ type: e.type as EventType, date: e.date })).sort((a, b) => time(a.date) - time(b.date));
+  return [...events].map((e) => ({ type: e.type as EventType, date: e.date })).sort((a, b) => time(a.date) - time(b.date));
 }
 
 /**
@@ -116,6 +122,12 @@ export function billableLessonsIn(m: BillableMembership, year: number, month: nu
 /** How many of these memberships were charged at least one lesson in the month — per-student salaries use it. */
 export function billedStudentCount(memberships: BillableMembership[], year: number, month: number, now = new Date()) {
   return memberships.filter((m) => billableLessonsIn(m, year, month, now) > 0).length;
+}
+
+/** How much the student's total charges (up to `now`) would change if `extra` were added: + owes more, − owes less. */
+export function chargeChangeIf(m: BillableMembership, extra: { type: EventType; date: Date }, now = new Date()) {
+  const withExtra = { ...m, events: [...sorted(m), extra] };
+  return totalCharges([withExtra], now) - totalCharges([m], now);
 }
 
 /** What the month of `extra.date` would cost if `extra` were added, with the first and last charged lesson. */

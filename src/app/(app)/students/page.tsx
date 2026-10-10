@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { Plus, Search } from "lucide-react";
 import { db } from "@/lib/db";
+import { centreDay } from "@/lib/membership-db";
 import { requirePage } from "@/lib/auth";
 import { can, canSeeBalances, groupScope, studentScope } from "@/lib/access";
 import { balance } from "@/lib/billing";
 import { membershipInclude } from "@/lib/billing-include";
-import { date, money } from "@/lib/format";
+import { date, isoDate, money } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { StudentFields } from "@/components/forms";
 import { BalanceBadge, Empty, Field, PageHeader, Segmented, SubmitRow } from "@/components/ui";
@@ -51,6 +52,15 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
                 {groups.map((g) => <option key={g.id} value={g.id}>{g.name} — {g.course.name}</option>)}
               </select>
             </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Holati">
+                <select name="mode" className="input" defaultValue="TRIAL">
+                  <option value="TRIAL">Sinov darsi (bepul)</option>
+                  <option value="ACTIVE">Faol (to&apos;lovli)</option>
+                </select>
+              </Field>
+              <Field label="Qaysi kundan"><input type="date" name="joinedAt" className="input" defaultValue={isoDate(centreDay())} /></Field>
+            </div>
             <SubmitRow />
           </form>
         </Modal>}

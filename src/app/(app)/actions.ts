@@ -13,7 +13,7 @@ import { shiftMonth } from "@/lib/month";
 import { ALL_PERMISSIONS } from "@/lib/permissions";
 import { logAction } from "@/lib/audit";
 import { centreDay, recordEvent, startMembership } from "@/lib/membership-db";
-import type { EventType } from "@/lib/membership";
+import { menuActions, systemLeaveDate, type EventType, type Status } from "@/lib/membership";
 import {
   ACTIVITY_TYPES, isoDate, CALL_RESULTS, EXPENSE_CATEGORIES, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES,
 } from "@/lib/format";
@@ -198,14 +198,19 @@ const studentSchema = z.object({
   note: v.optText(),
 });
 
+/** How a student starts in a group: free trial or charged from the given date. */
+const MODES = { TRIAL: "Sinov darsi", ACTIVE: "Faol" };
+
 export async function createStudent(f: FormData) {
   const user = await requirePermission("students.manage");
-  const { groupId, ...data } = parseForm(studentSchema.extend({ groupId: v.optId() }), f);
+  const { groupId, mode, joinedAt, ...data } = parseForm(studentSchema.extend({ groupId: v.optId(), mode: v.oneOf(MODES, "TRIAL"), joinedAt: v.optDate() }), f);
   if (groupId) await assertGroupAccess(user, groupId);
   const student = await db.student.create({
     data,
   });
-  if (groupId) await db.$transaction((tx) => startMembership(tx, { groupId, studentId: student.id, mode: "TRIAL", date: centreDay(), userId: user.id }));
+  if (groupId) {
+    await db.$transaction((tx) => startMembership(tx, { groupId, studentId: student.id, mode: mode as "TRIAL" | "ACTIVE", date: joinedAt ?? centreDay(), userId: user.id }));
+  }
   await logAction(user, "student.create", `Yangi o'quvchi: ${student.name}`);
   redirect(`/students/${student.id}`);
 }
@@ -229,7 +234,6 @@ export async function deleteStudent(id: number) {
   redirect("/students");
 }
 
-const MODES = { TRIAL: "Sinov darsi", ACTIVE: "Faol" };
 const joinSchema = z.object({ studentId: v.id("O'quvchi"), groupId: v.id("Guruh"), joinedAt: v.optDate(), mode: v.oneOf(MODES, "TRIAL") });
 
 export async function addStudentToGroup(f: FormData) {
@@ -262,6 +266,9 @@ export async function memberAction(_: MemberActionState, f: FormData): Promise<M
     const d = parseForm(memberActionSchema, f);
     const gs = await db.groupStudent.findUniqueOrThrow({ where: { id: d.groupStudentId }, include: { student: true, group: true } });
     await assertGroupAccess(user, gs.groupId);
+    if (!menuActions(gs.status as Status).includes(d.type as EventType)) {
+      return { error: gs.status === "LEFT" ? "O'quvchi bu guruhdan chiqqan — qayta qo'shish uchun \"Guruhga qo'shish\"dan foydalaning" : "Bu amalni bajarib bo'lmaydi" };
+    }
     const date = d.date ?? centreDay();
     await db.$transaction((tx) => recordEvent(tx, gs.id, { type: d.type as EventType, date, reasonId: d.reasonId, comment: d.comment, userId: user.id }));
     const reason = d.reasonId ? (await db.reason.findUnique({ where: { id: d.reasonId } }))?.name : null;
@@ -336,9 +343,11 @@ export async function updateGroup(id: number, f: FormData) {
   const before = await db.group.findUniqueOrThrow({ where: { id } });
   if (before.status !== "FINISHED" && data.status === "FINISHED") {
     // students graduate: charges stop today for everyone still in the group (trial and frozen too)
-    const members = await db.groupStudent.findMany({ where: { groupId: id, status: { not: "LEFT" } } });
+    const members = await db.groupStudent.findMany({ where: { groupId: id, status: { not: "LEFT" } }, include: { events: { orderBy: [{ date: "asc" }, { id: "asc" }] } } });
     await db.$transaction(async (tx) => {
-      for (const m of members) await recordEvent(tx, m.id, { type: "LEAVE", date: centreDay(), userId: user.id, system: true, comment: "Guruh yakunlandi" });
+      for (const m of members) {
+        await recordEvent(tx, m.id, { type: "LEAVE", date: systemLeaveDate(m.events, centreDay()), userId: user.id, system: true, comment: "Guruh yakunlandi" });
+      }
     });
     await logAction(user, "group.finish", `Guruh yakunlandi: ${before.name}`);
   }

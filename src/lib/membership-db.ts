@@ -1,7 +1,7 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
 import { applyEvent, type EventType, type Status } from "./membership";
-import { dayOf } from "./membership-legacy";
+import { dayOf, eventsFromLegacy } from "./membership-legacy";
 import { centreToday } from "./schedule";
 
 type Tx = Prisma.TransactionClient;
@@ -18,10 +18,19 @@ export function centreDay(d = new Date()) {
  * GroupStudent.status / joinedAt / leftAt in sync. Throws a readable Uzbek message when the step is refused.
  */
 export async function recordEvent(tx: Tx, groupStudentId: number, e: MemberEventInput): Promise<Status> {
-  const gs = await tx.groupStudent.findUniqueOrThrow({
+  let gs = await tx.groupStudent.findUniqueOrThrow({
     where: { id: groupStudentId },
     include: { events: { orderBy: [{ date: "asc" }, { id: "asc" }] } },
   });
+  // a row from before statuses existed (migration not run yet): give it its history first, never overwrite it
+  if (!gs.events.length && gs.status !== "LEFT") {
+    await tx.membershipEvent.createMany({ data: eventsFromLegacy(gs.joinedAt, gs.leftAt).map((x) => ({ ...x, groupStudentId })) });
+    gs = await tx.groupStudent.update({
+      where: { id: groupStudentId },
+      data: { status: gs.leftAt ? "LEFT" : "ACTIVE" },
+      include: { events: { orderBy: [{ date: "asc" }, { id: "asc" }] } },
+    });
+  }
   const date = dayOf(e.date);
   const events = gs.events.map((x) => ({ type: x.type as EventType, date: x.date }));
   const res = applyEvent(events, { ...e, date });

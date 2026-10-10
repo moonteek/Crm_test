@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Pencil, Phone, Plus, Trash2, Wallet } from "lucide-react";
 import { db } from "@/lib/db";
+import { centreDay } from "@/lib/membership-db";
 import { requirePage } from "@/lib/auth";
 import { can, canSeeBalances, groupScope, studentScope } from "@/lib/access";
 import { balance } from "@/lib/billing";
@@ -130,7 +131,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                         <option value="ACTIVE">Faol (to&apos;lovli)</option>
                       </select>
                     </Field>
-                    <Field label="Qaysi kundan"><input type="date" name="joinedAt" className="input" defaultValue={isoDate(new Date())} /></Field>
+                    <Field label="Qaysi kundan"><input type="date" name="joinedAt" className="input" defaultValue={isoDate(centreDay())} /></Field>
                   </div>
                   <SubmitRow />
                 </form>

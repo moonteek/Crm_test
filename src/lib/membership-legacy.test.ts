@@ -21,3 +21,10 @@ test("times of day are dropped", () => {
     { type: "LEAVE", date: d("2026-09-19T00:00:00Z") },
   ]);
 });
+
+test("a legacy row that left before it joined becomes a free trial that left, as the old code charged nothing", () => {
+  assert.deepEqual(eventsFromLegacy(d("2026-09-20T00:00:00Z"), d("2026-09-10T00:00:00Z")), [
+    { type: "TRIAL", date: d("2026-09-20T00:00:00Z") },
+    { type: "LEAVE", date: d("2026-09-20T00:00:00Z") },
+  ]);
+});

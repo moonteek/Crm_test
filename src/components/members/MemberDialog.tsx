@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useState } from "react";
-import { chargeLines, previewCharge } from "@/lib/billing";
+import { chargeChangeIf, previewCharge, totalCharges } from "@/lib/billing";
 import { money, MONTHS } from "@/lib/format";
 import type { EventType } from "@/lib/membership";
 import { centreToday } from "@/lib/schedule";
@@ -28,11 +28,6 @@ const today = () => {
   return `${t.year}-${String(t.month).padStart(2, "0")}-${String(t.day).padStart(2, "0")}`;
 };
 const ddmm = (d: Date) => `${String(d.getUTCDate()).padStart(2, "0")}.${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-
-/** This month's charge for the membership as it stands (to show how an action changes the balance). */
-function currentCharge(m: MemberData, y: number, mo: number) {
-  return chargeLines(toBillable(m), new Date(Date.UTC(y, mo, 15))).find((l) => l.year === y && l.month === mo)?.amount ?? 0;
-}
 
 function PreviewLine({ kind, member, date }: { kind: Exclude<MemberDialogKind, "TRANSFER">; member: MemberData; date: Date }) {
   const p = previewCharge(toBillable(member), { type: kind as EventType, date });
@@ -77,17 +72,11 @@ export function MemberDialog({
   const date = useMemo(() => new Date(`${dateStr || today()}T00:00:00Z`), [dateStr]);
   const target = groups.find((g) => g.id === toGroupId) ?? null;
 
-  // how the balance moves: only for the current month or earlier (later months are not charged yet)
-  const t = centreToday();
-  const inPast = date.getUTCFullYear() * 12 + date.getUTCMonth() <= t.year * 12 + (t.month - 1);
-  const y = date.getUTCFullYear();
-  const mo = date.getUTCMonth();
-  let delta = 0;
-  if (kind === "TRANSFER") {
-    delta += previewCharge(toBillable(member), { type: "LEAVE", date }).amount - currentCharge(member, y, mo);
-    if (target && mode === "ACTIVE") delta += previewCharge(toBillable({ events: [], group: target }), { type: "ACTIVATE", date }).amount;
-  } else {
-    delta = previewCharge(toBillable(member), { type: kind as EventType, date }).amount - currentCharge(member, y, mo);
+  // how the balance moves: every month from the action up to today can change (a late freeze cancels later months too)
+  const now = new Date();
+  let delta = chargeChangeIf(toBillable(member), { type: kind === "TRANSFER" ? "LEAVE" : (kind as EventType), date }, now);
+  if (kind === "TRANSFER" && target && mode === "ACTIVE") {
+    delta += totalCharges([toBillable({ events: [{ type: "ACTIVATE", date: date.toISOString() }], group: target })], now);
   }
 
   return (
@@ -145,7 +134,7 @@ export function MemberDialog({
           ) : (
             <PreviewLine kind={kind} member={member} date={date} />
           )}
-          {balance !== null && inPast && (
+          {balance !== null && (
             <p className="label-mono pt-1">
               Balans: {money(balance)} → <span className={balance - delta < 0 ? "text-danger" : "text-success"}>{money(balance - delta)}</span>
             </p>

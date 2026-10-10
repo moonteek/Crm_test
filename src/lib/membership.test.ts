@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { allowedActions, applyEvent, statusAfter, type EventType } from "./membership";
+import { allowedActions, applyEvent, menuActions, statusAfter, systemLeaveDate, type EventType } from "./membership";
 
 const day = (n: number) => new Date(Date.UTC(2026, 10, n));
 const history = (...types: EventType[]) => types.map((type, i) => ({ type, date: day(i + 1) }));
@@ -59,4 +59,16 @@ test("freezing and leaving need a reason, unless the system does it (group finis
 test("a student who left can join again; history is kept", () => {
   assert.deepEqual(applyEvent(history("ACTIVATE", "LEAVE"), { type: "ACTIVATE", date: day(9) }), { ok: true, status: "ACTIVE" });
   assert.deepEqual(applyEvent(history("ACTIVATE", "LEAVE"), { type: "TRIAL", date: day(9) }), { ok: true, status: "TRIAL" });
+});
+
+test("the menu offers activation only to trial students; left members re-join via 'add to group'", () => {
+  assert.deepEqual(menuActions("TRIAL"), ["ACTIVATE", "LEAVE"]);
+  assert.deepEqual(menuActions("ACTIVE"), ["FREEZE", "BACK_TO_TRIAL", "LEAVE"]);
+  assert.deepEqual(menuActions("FROZEN"), ["UNFREEZE", "LEAVE"]);
+  assert.deepEqual(menuActions("LEFT"), []);
+});
+
+test("finishing a group never dates the leave before a member's last step", () => {
+  assert.deepEqual(systemLeaveDate([{ date: day(20) }], day(10)), day(20));
+  assert.deepEqual(systemLeaveDate([{ date: day(2) }], day(10)), day(10));
 });

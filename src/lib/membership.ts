@@ -40,6 +40,19 @@ export function statusAfter(events: { type: EventType }[]): Status | null {
 
 export const allowedActions = (status: Status | null) => ALLOWED[status ?? "NONE"];
 
+/**
+ * What staff may do from a student's ⋯ menu. Narrower than allowedActions: activation is only for trial
+ * students, and a student who left joins again through "add to group" (which asks trial or active).
+ */
+export const menuActions = (status: Status | null): EventType[] =>
+  status === "LEFT" || status === null ? [] : allowedActions(status);
+
+/** Date for an automatic leave (group finished): today, or the member's last step if that is later. */
+export function systemLeaveDate(events: { date: Date }[], today: Date) {
+  const last = events.at(-1)?.date;
+  return last && last > today ? last : today;
+}
+
 /** Checks that `next` may follow `events` (oldest first) and returns the resulting status. */
 export function applyEvent(
   events: { type: EventType; date: Date }[],

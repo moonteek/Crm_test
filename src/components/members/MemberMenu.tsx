@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeftRight, CircleDollarSign, LogOut, MoreHorizontal, Pause, Play, RotateCcw, UserCheck } from "lucide-react";
-import { allowedActions, type Status } from "@/lib/membership";
+import { menuActions, type Status } from "@/lib/membership";
 import { PaymentForm } from "../forms";
 import { DialogFrame } from "../Modal";
 import { MemberDialog, type MemberDialogKind } from "./MemberDialog";
@@ -45,7 +45,7 @@ export function MemberMenu({
     };
   }, [open]);
 
-  const allowed = new Set<string>(allowedActions(member.status as Status));
+  const allowed = new Set<string>(menuActions(member.status as Status));
   const items = canManage
     ? ITEMS.filter((i) => (i.kind === "TRANSFER" ? member.status !== "LEFT" : allowed.has(i.kind)))
     : [];
