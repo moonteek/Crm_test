@@ -1,6 +1,8 @@
 import { db } from "./db";
 import { monthBounds } from "./month";
 import { salesStats } from "./sales";
+import { billedStudentCount } from "./billing";
+import { membershipInclude } from "./billing-include";
 
 export const SALARY_TYPES: Record<string, { label: string; unit: string }> = {
   NONE: { label: "Belgilanmagan", unit: "" },
@@ -55,10 +57,13 @@ export async function salariesForMonth(month: string, { allActive = false } = {}
       base = sum._sum.amount ?? 0;
       accrued = Math.round((base * u.salaryAmount) / 100);
     } else if (u.salaryType === "PER_STUDENT") {
-      // students enrolled in this teacher's groups at any point during the month
-      base = await db.groupStudent.count({
+      // students charged at least one lesson in this teacher's groups that month (not trial-only, not frozen all month)
+      const memberships = await db.groupStudent.findMany({
         where: { group: { OR: [{ teacherId: u.id }, { assistantId: u.id }] }, joinedAt: { lt: to }, OR: [{ leftAt: null }, { leftAt: { gte: from } }] },
+        include: membershipInclude,
       });
+      const [y, m] = month.split("-").map(Number);
+      base = billedStudentCount(memberships, y, m - 1);
       accrued = base * u.salaryAmount;
     }
     const paid = payouts.find((p) => p.userId === u.id)?._sum.amount ?? 0;

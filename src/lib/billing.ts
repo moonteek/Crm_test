@@ -113,6 +113,11 @@ export function billableLessonsIn(m: BillableMembership, year: number, month: nu
   return chargeLines(m, now).find((l) => l.year === year && l.month === month)?.billable ?? 0;
 }
 
+/** How many of these memberships were charged at least one lesson in the month — per-student salaries use it. */
+export function billedStudentCount(memberships: BillableMembership[], year: number, month: number, now = new Date()) {
+  return memberships.filter((m) => billableLessonsIn(m, year, month, now) > 0).length;
+}
+
 /** What the month of `extra.date` would cost if `extra` were added, with the first and last charged lesson. */
 export function previewCharge(m: BillableMembership, extra: { type: EventType; date: Date }) {
   const events = [...sorted(m), { type: extra.type, date: extra.date }];

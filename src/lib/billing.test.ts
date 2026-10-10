@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { balance, billableLessonsIn, chargeLines, previewCharge, totalCharges, type BillableMembership } from "./billing";
+import { balance, billableLessonsIn, billedStudentCount, chargeLines, previewCharge, totalCharges, type BillableMembership } from "./billing";
 import type { EventType } from "./membership";
 
 // November 2026: EVEN (Tue/Thu/Sat) has 12 lessons — 3,5,7,10,12,14,17,19,21,24,26,28;
@@ -112,4 +112,15 @@ test("previewCharge says when a month still uses the old full-month rule", () =>
   const p = previewCharge(even(["ACTIVATE", d(2026, 9, 1)]), { type: "FREEZE", date: d(2026, 10, 12) });
   assert.equal(p.legacy, true);
   assert.equal(p.amount, 600_000);
+});
+
+test("billedStudentCount: only students charged at least one lesson that month count", () => {
+  const ms = [
+    even(["ACTIVATE", nov(1)]), // full month
+    even(["ACTIVATE", nov(1)], ["FREEZE", nov(10)]), // partial: counts
+    even(["TRIAL", nov(3)]), // trial only: free, does not count
+    even(["ACTIVATE", d(2026, 9, 1)], ["FREEZE", d(2026, 10, 20)]), // frozen all November: does not count
+  ];
+  assert.equal(billedStudentCount(ms, 2026, 10, NOW), 2);
+  assert.equal(billedStudentCount(ms, 2026, 9, NOW), 1);
 });
