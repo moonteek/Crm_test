@@ -28,12 +28,12 @@ export function SaleForm({ products, students }: { products: P[]; students: { id
       action={action}
       className="space-y-4"
     >
-      <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
+      <div className="max-h-80 divide-y divide-line overflow-y-auto rounded-lg border border-line">
         {products.map((p) => (
           <div key={p.id} className="flex items-center justify-between gap-3 px-3 py-2">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{p.name}</p>
-              <p className="text-xs text-slate-500">{sum(p.price)} · omborda {p.stock}</p>
+              <p className="text-xs text-muted">{sum(p.price)} · omborda {p.stock}</p>
             </div>
             <div className="flex items-center gap-1">
               <button type="button" onClick={() => set(p.id, (qty[p.id] ?? 0) - 1, p.stock)} className="btn-secondary h-8 w-8 p-0" aria-label="Kamaytirish"><Minus className="h-4 w-4" /></button>
@@ -46,7 +46,7 @@ export function SaleForm({ products, students }: { products: P[]; students: { id
             </div>
           </div>
         ))}
-        {products.length === 0 && <p className="p-4 text-center text-sm text-slate-400">Sotuvga mahsulot yo&apos;q</p>}
+        {products.length === 0 && <p className="p-4 text-center text-sm text-faint">Sotuvga mahsulot yo&apos;q</p>}
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
@@ -71,12 +71,12 @@ export function SaleForm({ products, students }: { products: P[]; students: { id
           </select>
         </label>
         <div className="text-right">
-          <p className="text-xs text-slate-500">Jami</p>
+          <p className="label-mono">Jami</p>
           <p className="text-2xl font-semibold">{sum(total)}</p>
         </div>
       </div>
-      {state?.error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{state.error}</p>}
-      {state?.ok && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">Sotuv saqlandi</p>}
+      {state?.error && <p className="rounded-lg bg-danger-tint px-3 py-2 text-sm text-danger">{state.error}</p>}
+      {state?.ok && <p className="rounded-lg bg-success-tint px-3 py-2 text-sm text-success">Sotuv saqlandi</p>}
       <button className="btn-primary w-full" disabled={pending || total === 0}>{pending ? "Saqlanmoqda..." : "Sotish"}</button>
     </form>
   );

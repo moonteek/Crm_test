@@ -39,40 +39,40 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       <PageHeader title="To'lovlar" subtitle="To'lovlar o'quvchi sahifasidan qabul qilinadi">
         <div className="flex items-center gap-2">
           <Link href={q({ m: ym(new Date(year, month - 1, 1)) })} className="btn-secondary px-2"><ChevronLeft className="h-4 w-4" /></Link>
-          <span className="w-32 text-center text-sm font-medium">{MONTHS[month]} {year}</span>
+          <span className="w-32 text-center text-sm font-medium tabular-nums">{MONTHS[month]} {year}</span>
           <Link href={q({ m: ym(new Date(year, month + 1, 1)) })} className="btn-secondary px-2"><ChevronRight className="h-4 w-4" /></Link>
         </div>
       </PageHeader>
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-4">
-        <Link href={q({ method: undefined })} className={`card p-4 ${!method ? "ring-2 ring-brand-500" : ""}`}>
-          <p className="text-sm text-slate-500">Jami</p>
-          <p className="text-lg font-bold text-emerald-600">{money(total)}</p>
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4 md:mb-6 md:gap-4">
+        <Link href={q({ method: undefined })} className={`card press block min-w-0 p-4 ${!method ? "border-ink" : "hover:border-line-strong"}`}>
+          <p className="label-mono">Jami</p>
+          <p className="mt-2 truncate text-lg font-semibold text-success">{money(total)}</p>
         </Link>
         {byMethod.map(({ k, sum }) => (
-          <Link key={k} href={q({ method: k })} className={`card p-4 ${method === k ? "ring-2 ring-brand-500" : ""}`}>
-            <p className="text-sm text-slate-500">{PAYMENT_METHODS[k]}</p>
-            <p className="text-lg font-bold">{money(sum)}</p>
+          <Link key={k} href={q({ method: k })} className={`card press block min-w-0 p-4 ${method === k ? "border-ink" : "hover:border-line-strong"}`}>
+            <p className="label-mono">{PAYMENT_METHODS[k]}</p>
+            <p className="mt-2 truncate text-lg font-semibold">{money(sum)}</p>
           </Link>
         ))}
       </div>
 
-      <div className="card overflow-x-auto">
-        <table className="table">
+      <div className="card md:overflow-x-auto">
+        <table className="table table-stack">
           <thead><tr><th>Sana</th><th>O&apos;quvchi</th><th>Guruh</th><th>Summa</th><th>Turi</th><th>Izoh</th>{can(user, "payments.delete") && <th></th>}</tr></thead>
           <tbody>
             {payments.map((p) => (
               <tr key={p.id}>
-                <td>{date(p.date)}</td>
-                <td><Link href={`/students/${p.studentId}`} className="font-medium hover:text-brand-600">{p.student.name}</Link></td>
-                <td>{p.group?.name ?? "—"}</td>
-                <td className="font-semibold text-emerald-600">{money(p.amount)}</td>
-                <td>{PAYMENT_METHODS[p.method]}</td>
-                <td className="text-slate-500">{p.note ?? ""}</td>
+                <td data-label="Sana" className="text-muted">{date(p.date)}</td>
+                <td className="max-md:order-first max-md:text-base"><Link href={`/students/${p.studentId}`} className="font-medium hover:underline">{p.student.name}</Link></td>
+                <td data-label="Guruh">{p.group?.name ?? "—"}</td>
+                <td data-label="Summa" className="font-semibold text-success">{money(p.amount)}</td>
+                <td data-label="Turi">{PAYMENT_METHODS[p.method]}</td>
+                <td data-label="Izoh" className="text-muted">{p.note ?? ""}</td>
                 {can(user, "payments.delete") && (
                   <td>
                     <form action={deletePayment.bind(null, p.id)}>
-                      <button className="text-slate-400 hover:text-rose-600" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
+                      <button className="text-faint hover:text-danger" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
                     </form>
                   </td>
                 )}

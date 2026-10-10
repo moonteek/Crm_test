@@ -32,15 +32,15 @@ export default async function SalariesPage({ searchParams }: { searchParams: Pro
       <PageHeader title="Ish haqi" subtitle="Hisoblangan, to'langan va qolgan ish haqi">
         <div className="flex items-center gap-2">
           <Link href={`/salaries?m=${shift(month, -1)}`} className="btn-secondary px-2"><ChevronLeft className="h-4 w-4" /></Link>
-          <span className="w-32 text-center text-sm font-medium">{MONTHS[mm - 1]} {y}</span>
+          <span className="w-32 text-center text-sm font-medium tabular-nums">{MONTHS[mm - 1]} {y}</span>
           <Link href={`/salaries?m=${shift(month, 1)}`} className="btn-secondary px-2"><ChevronRight className="h-4 w-4" /></Link>
         </div>
       </PageHeader>
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <div className="card p-5"><p className="text-sm text-slate-500">Hisoblangan</p><p className="text-xl font-bold">{money(total("accrued"))}</p></div>
-        <div className="card p-5"><p className="text-sm text-slate-500">To&apos;langan</p><p className="text-xl font-bold text-emerald-600">{money(total("paid"))}</p></div>
-        <div className="card p-5"><p className="text-sm text-slate-500">Qolgan</p><p className="text-xl font-bold text-rose-600">{money(total("remaining"))}</p></div>
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3 md:mb-6 md:gap-4">
+        <div className="card p-5"><p className="label-mono">Hisoblangan</p><p className="mt-2 text-xl font-semibold tracking-tight">{money(total("accrued"))}</p></div>
+        <div className="card p-5"><p className="label-mono">To&apos;langan</p><p className="mt-2 text-xl font-semibold tracking-tight text-success">{money(total("paid"))}</p></div>
+        <div className="card p-5"><p className="label-mono">Qolgan</p><p className="mt-2 text-xl font-semibold tracking-tight text-danger">{money(total("remaining"))}</p></div>
       </div>
 
       <div className="card mb-6 overflow-x-auto">
@@ -49,19 +49,19 @@ export default async function SalariesPage({ searchParams }: { searchParams: Pro
           <tbody>
             {rows.map((r) => (
               <tr key={r.userId}>
-                <td><p className="font-medium">{r.name}</p><p className="text-xs text-slate-500">{r.roleName}</p></td>
+                <td><p className="font-medium">{r.name}</p><p className="text-xs text-muted">{r.roleName}</p></td>
                 <td>
                   <div className="flex items-center gap-2">
                     <span>
                       {SALARY_TYPES[r.salaryType].label}
                       {r.salaryType !== "NONE" && (
-                        <span className="block text-xs text-slate-500">
+                        <span className="block text-xs text-muted">
                           {r.salaryType === "PERCENT" ? `${r.salaryAmount}%` : money(r.salaryAmount)} {r.salaryType === "PER_STUDENT" ? "/ o'quvchi" : r.salaryType === "FIXED" ? "/ oy" : ""}
                         </span>
                       )}
                     </span>
                     {manage && (
-                      <Modal title={`Ish haqi qoidasi — ${r.name}`} triggerClassName="text-slate-400 hover:text-brand-600" trigger={<Pencil className="h-4 w-4" />}>
+                      <Modal title={`Ish haqi qoidasi — ${r.name}`} triggerClassName="text-faint hover:underline" trigger={<Pencil className="h-4 w-4" />}>
                         <form action={updateSalaryRule.bind(null, r.userId)} className="space-y-3">
                           <Field label="Turi">
                             <select name="salaryType" className="input" defaultValue={r.salaryType}>
@@ -71,7 +71,7 @@ export default async function SalariesPage({ searchParams }: { searchParams: Pro
                           <Field label="Qiymati (oylik so'm / foiz / bir o'quvchi uchun so'm)">
                             <input name="salaryAmount" type="number" min={0} className="input" defaultValue={r.salaryAmount} />
                           </Field>
-                          <ul className="list-disc space-y-1 pl-5 text-xs text-slate-500">
+                          <ul className="list-disc space-y-1 pl-5 text-xs text-muted">
                             <li><b>Oylik</b> — har oy belgilangan summa.</li>
                             <li><b>Tushumdan foiz</b> — o&apos;qituvchi guruhlaridan shu oyda tushgan to&apos;lovlarning foizi.</li>
                             <li><b>Har bir o&apos;quvchi uchun</b> — shu oyda guruhlarida o&apos;qigan har bir o&apos;quvchi uchun summa.</li>
@@ -82,16 +82,16 @@ export default async function SalariesPage({ searchParams }: { searchParams: Pro
                     )}
                   </div>
                 </td>
-                <td className="text-slate-500">
+                <td className="text-muted">
                   {r.salaryType === "PERCENT" ? `${money(r.base)} tushum` : r.salaryType === "PER_STUDENT" ? `${r.base} o'quvchi` : "—"}
                 </td>
-                <td className={r.bonus ? "text-emerald-700" : "text-slate-400"}>{r.bonus ? `+${money(r.bonus)}` : "—"}</td>
+                <td className={r.bonus ? "text-success" : "text-faint"}>{r.bonus ? `+${money(r.bonus)}` : "—"}</td>
                 <td className="font-semibold">{money(r.accrued)}</td>
-                <td className="text-emerald-600">{money(r.paid)}</td>
-                <td className={r.remaining > 0 ? "font-semibold text-rose-600" : "text-slate-400"}>{money(r.remaining)}</td>
+                <td className="text-success">{money(r.paid)}</td>
+                <td className={r.remaining > 0 ? "font-semibold text-danger" : "text-faint"}>{money(r.remaining)}</td>
                 <td>
                   {manage && (r.salaryType !== "NONE" || r.accrued > 0) && (
-                    <Modal title={`Ish haqi to'lash — ${r.name}`} triggerClassName="text-sm text-brand-600 hover:underline" trigger="To'lash">
+                    <Modal title={`Ish haqi to'lash — ${r.name}`} triggerClassName="text-sm text-accent-ink hover:underline" trigger="To'lash">
                       <form action={paySalary} className="space-y-3">
                         <input type="hidden" name="userId" value={r.userId} />
                         <input type="hidden" name="month" value={month} />
@@ -100,7 +100,7 @@ export default async function SalariesPage({ searchParams }: { searchParams: Pro
                           <Field label="Sana"><input name="date" type="date" className="input" defaultValue={isoDate(new Date())} /></Field>
                         </div>
                         <Field label="Izoh"><input name="note" className="input" placeholder="Avans, bonus..." /></Field>
-                        <p className="text-xs text-slate-500">To&apos;lov Moliya bo&apos;limiga &quot;Ish haqi&quot; xarajati sifatida avtomatik yoziladi.</p>
+                        <p className="text-xs text-muted">To&apos;lov Moliya bo&apos;limiga &quot;Ish haqi&quot; xarajati sifatida avtomatik yoziladi.</p>
                         <SubmitRow text="To'lash" />
                       </form>
                     </Modal>
@@ -123,11 +123,11 @@ export default async function SalariesPage({ searchParams }: { searchParams: Pro
                 <td>{date(p.date)}</td>
                 <td className="font-medium">{p.user.name}</td>
                 <td className="font-semibold">{money(p.amount)}</td>
-                <td className="text-slate-500">{p.note ?? ""}</td>
+                <td className="text-muted">{p.note ?? ""}</td>
                 {manage && (
                   <td>
                     <form action={deleteSalaryPayment.bind(null, p.id)}>
-                      <button className="text-slate-400 hover:text-rose-600" aria-label="Bekor qilish"><Trash2 className="h-4 w-4" /></button>
+                      <button className="text-faint hover:text-danger" aria-label="Bekor qilish"><Trash2 className="h-4 w-4" /></button>
                     </form>
                   </td>
                 )}

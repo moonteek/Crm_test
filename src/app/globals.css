@@ -237,7 +237,7 @@ body {
       @apply block;
     }
     .table-stack tbody tr {
-      @apply border-b border-line px-4 py-3 last:border-b-0;
+      @apply flex flex-col border-b border-line px-4 py-3 last:border-b-0;
     }
     .table-stack td {
       @apply flex items-center justify-between gap-4 border-0 px-0 py-1 whitespace-normal;

@@ -37,7 +37,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
       <PageHeader title="Moliya" subtitle="Tushum, xarajat va foyda">
         <div className="flex items-center gap-2">
           <Link href={`/finance?y=${year - 1}`} className="btn-secondary px-2"><ChevronLeft className="h-4 w-4" /></Link>
-          <span className="w-16 text-center font-medium">{year}</span>
+          <span className="w-16 text-center font-mono font-medium">{year}</span>
           <Link href={`/finance?y=${year + 1}`} className="btn-secondary px-2"><ChevronRight className="h-4 w-4" /></Link>
         </div>
         {manage && <Modal title="Yangi xarajat" trigger={<><Plus className="h-4 w-4" /> Xarajat qo&apos;shish</>}>
@@ -57,46 +57,46 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
         </Modal>}
       </PageHeader>
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <div className="card p-5"><p className="text-sm text-slate-500">Yillik tushum</p><p className="text-xl font-bold text-emerald-600">{money(totalIn)}</p></div>
-        <div className="card p-5"><p className="text-sm text-slate-500">Yillik xarajat</p><p className="text-xl font-bold text-rose-600">{money(totalOut)}</p></div>
-        <div className="card p-5"><p className="text-sm text-slate-500">Sof foyda</p><p className="text-xl font-bold text-brand-600">{money(totalIn - totalOut)}</p></div>
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3 md:mb-6 md:gap-4">
+        <div className="card p-5"><p className="label-mono">Yillik tushum</p><p className="mt-2 text-xl font-semibold tracking-tight text-success">{money(totalIn)}</p></div>
+        <div className="card p-5"><p className="label-mono">Yillik xarajat</p><p className="mt-2 text-xl font-semibold tracking-tight text-danger">{money(totalOut)}</p></div>
+        <div className="card p-5"><p className="label-mono">Sof foyda</p><p className={`mt-2 text-xl font-semibold tracking-tight ${totalIn - totalOut < 0 ? "text-danger" : "text-ink"}`}>{money(totalIn - totalOut)}</p></div>
       </div>
 
-      <div className="card mb-6 p-5">
+      <div className="card mb-4 p-4 md:mb-6 md:p-5">
         <div className="mb-4 flex items-center gap-4 text-sm">
           <h2 className="mr-auto font-semibold">Oylar kesimida</h2>
-          <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-emerald-500" />Tushum</span>
-          <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-sm bg-rose-400" />Xarajat</span>
+          <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-ink" />Tushum</span>
+          <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-accent" />Xarajat</span>
         </div>
         <div className="flex h-56 items-end gap-2 overflow-x-auto">
           {rows.map((r) => (
             <div key={r.name} className="flex min-w-10 flex-1 flex-col items-center gap-1">
               <div className="flex h-48 w-full items-end justify-center gap-0.5">
-                <div className="w-1/2 max-w-5 rounded-t bg-emerald-500" style={{ height: `${(r.income / max) * 100}%` }} title={`Tushum: ${money(r.income)}`} />
-                <div className="w-1/2 max-w-5 rounded-t bg-rose-400" style={{ height: `${(r.expense / max) * 100}%` }} title={`Xarajat: ${money(r.expense)}`} />
+                <div className="w-1/2 max-w-4 rounded-full bg-ink transition-[height] duration-500 ease-smooth" style={{ height: `${(r.income / max) * 100}%` }} title={`Tushum: ${money(r.income)}`} />
+                <div className="w-1/2 max-w-4 rounded-full bg-accent transition-[height] duration-500 ease-smooth" style={{ height: `${(r.expense / max) * 100}%` }} title={`Xarajat: ${money(r.expense)}`} />
               </div>
-              <span className="text-xs text-slate-500">{r.name.slice(0, 3)}</span>
+              <span className="label-mono">{r.name.slice(0, 3)}</span>
             </div>
           ))}
         </div>
       </div>
 
-      <div className="card overflow-x-auto">
+      <div className="card md:overflow-x-auto">
         <h2 className="px-5 py-4 font-semibold">Xarajatlar</h2>
-        <table className="table">
+        <table className="table table-stack">
           <thead><tr><th>Sana</th><th>Nomi</th><th>Turkum</th><th>Summa</th>{manage && <th></th>}</tr></thead>
           <tbody>
             {expenses.map((e) => (
               <tr key={e.id}>
-                <td>{date(e.date)}</td>
-                <td className="font-medium">{e.title}</td>
-                <td><span className="badge bg-slate-100 text-slate-600">{EXPENSE_CATEGORIES[e.category]}</span></td>
-                <td className="font-semibold text-rose-600">{money(e.amount)}</td>
+                <td data-label="Sana" className="text-muted">{date(e.date)}</td>
+                <td className="font-medium max-md:order-first max-md:text-base">{e.title}</td>
+                <td data-label="Turkum"><span className="badge bg-ink/5 text-muted">{EXPENSE_CATEGORIES[e.category]}</span></td>
+                <td data-label="Summa" className="font-semibold text-danger">{money(e.amount)}</td>
                 {manage && (
                   <td>
                     {!e.salaryPayment && <form action={deleteExpense.bind(null, e.id)}>
-                      <button className="text-slate-400 hover:text-rose-600" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
+                      <button className="text-faint hover:text-danger" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
                     </form>}
                   </td>
                 )}
