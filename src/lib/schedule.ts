@@ -1,3 +1,5 @@
+import { GROUP_DAYS, lessonWeekdays } from "./format";
+
 /** Teaching days, Monday (1) to Saturday (6); JS `Date.getDay()` numbering. */
 export const WEEKDAYS = [
   { day: 1, label: "Dushanba", short: "Du" },
@@ -8,11 +10,17 @@ export const WEEKDAYS = [
   { day: 6, label: "Shanba", short: "Sha" },
 ];
 
-const DAYS_OF: Record<string, number[]> = { ODD: [1, 3, 5], EVEN: [2, 4, 6], DAILY: [1, 2, 3, 4, 5, 6] };
-
 /** The group `days` values that have a lesson on this weekday (none on Sunday). */
 export function scheduleKeysOn(weekday: number) {
-  return Object.keys(DAYS_OF).filter((k) => DAYS_OF[k].includes(weekday));
+  return Object.keys(GROUP_DAYS).filter((k) => lessonWeekdays(k).includes(weekday));
+}
+
+const CENTRE_TZ = "Asia/Tashkent";
+const WEEKDAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+/** Weekday (0 = Sunday) at the centre, whatever timezone the server runs in. */
+export function centreWeekday(d = new Date()) {
+  return WEEKDAY_INDEX[new Intl.DateTimeFormat("en-US", { timeZone: CENTRE_TZ, weekday: "short" }).format(d)];
 }
 
 export const toMinutes = (time: string) => {
@@ -22,7 +30,7 @@ export const toMinutes = (time: string) => {
 
 export const fromMinutes = (min: number) => `${String(Math.floor(min / 60) % 24).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 
-type Lesson = { id: number; time: string; lessonMin: number; roomId: number | null; teacherIds: number[] };
+type Lesson = { id: number; start: number; end: number; roomId: number | null; teacherIds: number[] };
 
 /**
  * Lessons that overlap in time with another lesson in the same room or with the same teacher.
@@ -39,9 +47,7 @@ export function findClashes(lessons: Lesson[]) {
     for (let j = i + 1; j < lessons.length; j++) {
       const a = lessons[i];
       const b = lessons[j];
-      const aStart = toMinutes(a.time);
-      const bStart = toMinutes(b.time);
-      if (aStart >= bStart + b.lessonMin || bStart >= aStart + a.lessonMin) continue;
+      if (a.start >= b.end || b.start >= a.end) continue;
       if (a.roomId !== null && a.roomId === b.roomId) {
         mark(a.id, "room");
         mark(b.id, "room");

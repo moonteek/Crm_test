@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { GroupLevel } from "@/lib/format";
 
 export function PageHeader({ title, subtitle, children }: { title: string; subtitle?: string; children?: React.ReactNode }) {
   return (
@@ -35,7 +36,8 @@ export function StatCard({
   return href ? <Link href={href}>{body}</Link> : body;
 }
 
-const LEVEL_TONES: Record<string, string> = {
+// typed by GroupLevel so a new level can't be added without a colour
+const LEVEL_TONES: Record<GroupLevel, string> = {
   HTML: "bg-orange-100 text-orange-700",
   CSS: "bg-sky-100 text-sky-700",
   JS: "bg-yellow-100 text-yellow-800",
@@ -47,7 +49,7 @@ const LEVEL_TONES: Record<string, string> = {
 /** A group's level; renders nothing when the group has none. */
 export function LevelBadge({ level }: { level: string | null }) {
   if (!level) return null;
-  return <span className={`badge ${LEVEL_TONES[level] ?? "bg-slate-100 text-slate-600"}`}>{level}</span>;
+  return <span className={`badge ${LEVEL_TONES[level as GroupLevel] ?? "bg-slate-100 text-slate-600"}`}>{level}</span>;
 }
 
 export function Empty({ text }: { text: string }) {
