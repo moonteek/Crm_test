@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { balance } from "@/lib/billing";
+import { studentBillingInclude } from "@/lib/billing-include";
 import {
   assertGroupAccess, assertLeadAccess, assertStudentAccess, can, canSeeBalances, groupScope, leadScope, studentScope, type CurrentUser,
 } from "@/lib/access";
@@ -16,7 +17,7 @@ import { money } from "@/lib/format";
 
 const json = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
 
-const enrollmentInclude = { groups: { include: { group: { include: { course: true } } } }, payments: { select: { amount: true } } } as const;
+const enrollmentInclude = studentBillingInclude;
 
 function monthRange(month?: string) {
   const now = new Date();

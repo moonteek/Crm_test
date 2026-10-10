@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
 import { can, studentScope } from "@/lib/access";
 import { balance } from "@/lib/billing";
+import { membershipInclude } from "@/lib/billing-include";
 import { money } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { PaymentForm } from "@/components/forms";
@@ -14,7 +15,7 @@ export default async function DebtorsPage() {
     where: studentScope(user),
     include: {
       payments: { select: { amount: true } },
-      groups: { include: { group: { include: { course: true } } } },
+      groups: { include: membershipInclude },
     },
   });
   const debtors = students

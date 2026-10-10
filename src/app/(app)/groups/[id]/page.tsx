@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
 import { can, canSeeBalances, groupScope } from "@/lib/access";
 import { balance } from "@/lib/billing";
+import { membershipInclude } from "@/lib/billing-include";
 import { date, GROUP_DAYS, isoDate, lessonDates, money, MONTHS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { GroupFields } from "@/components/GroupFields";
@@ -36,7 +37,7 @@ export default async function GroupPage({
       course: true, teacher: true, assistant: true, room: true,
       students: {
         where: { leftAt: null },
-        include: { student: { include: { payments: { select: { amount: true } }, groups: { include: { group: { include: { course: true } } } } } } },
+        include: { student: { include: { payments: { select: { amount: true } }, groups: { include: membershipInclude } } } },
         orderBy: { student: { name: "asc" } },
       },
     },

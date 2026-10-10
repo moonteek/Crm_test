@@ -4,7 +4,8 @@ import { Pencil, Phone, Plus, Trash2, Wallet } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
 import { can, canSeeBalances, groupScope, studentScope } from "@/lib/access";
-import { balance, monthsEnrolled } from "@/lib/billing";
+import { balance, chargeLines } from "@/lib/billing";
+import { membershipInclude } from "@/lib/billing-include";
 import { date, GROUP_DAYS, isoDate, money, PAYMENT_METHODS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { PaymentForm, StudentFields } from "@/components/forms";
@@ -18,7 +19,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     db.student.findFirst({
       where: { id, ...studentScope(user) },
       include: {
-        groups: { include: { group: { include: { course: true, teacher: true } } }, orderBy: { joinedAt: "desc" } },
+        groups: { include: { events: membershipInclude.events, group: { include: { course: true, teacher: true } } }, orderBy: { joinedAt: "desc" } },
         payments: { include: { group: true }, orderBy: { date: "desc" } },
         attendance: true,
         grades: { select: { score: true } },
@@ -130,7 +131,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                       <td><Link href={`/groups/${gs.groupId}`} className="font-medium hover:underline">{gs.group.name}</Link></td>
                       <td>{gs.group.course.name}<p className="text-xs text-muted">{money(gs.group.course.price)} / oy</p></td>
                       <td>{GROUP_DAYS[gs.group.days]}<p className="text-xs text-muted">{gs.group.time}</p></td>
-                      <td>{monthsEnrolled(gs.joinedAt, gs.leftAt)}</td>
+                      <td>{chargeLines(gs).length}</td>
                       <td>
                         {gs.leftAt
                           ? <span className="badge bg-ink/5 text-muted">Chiqgan {date(gs.leftAt)}</span>

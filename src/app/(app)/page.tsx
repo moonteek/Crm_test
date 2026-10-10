@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { can, firstAllowedPage, groupScope, studentScope } from "@/lib/access";
 import { balance } from "@/lib/billing";
+import { membershipInclude } from "@/lib/billing-include";
 import { centreMonthStart, centreToday, fromMinutes, greeting, scheduleKeysOn, toMinutes, WEEKDAYS } from "@/lib/schedule";
 import { date, money, MONTHS, PAYMENT_METHODS, LEAD_STATUSES } from "@/lib/format";
 import { DotMeter, Empty, PageHeader, StatCard } from "@/components/ui";
@@ -25,7 +26,7 @@ export default async function Dashboard() {
   const [students, groups, leads, monthPayments, monthExpenses, recent, leadCounts, todayGroups, monthShop] = await Promise.all([
     db.student.findMany({
       where: { AND: [{ groups: { some: { leftAt: null } } }, studentScope(user)] },
-      include: { payments: { select: { amount: true } }, groups: { include: { group: { include: { course: true } } } } },
+      include: { payments: { select: { amount: true } }, groups: { include: membershipInclude } },
     }),
     db.group.count({ where: { status: "ACTIVE", ...groupScope(user) } }),
     db.lead.count({ where: { status: { in: ["NEW", "CONTACTED", "TRIAL"] } } }),

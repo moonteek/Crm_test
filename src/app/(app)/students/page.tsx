@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
 import { can, canSeeBalances, groupScope, studentScope } from "@/lib/access";
 import { balance } from "@/lib/billing";
+import { membershipInclude } from "@/lib/billing-include";
 import { date, money } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { StudentFields } from "@/components/forms";
@@ -25,7 +26,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
       },
       include: {
         payments: { select: { amount: true } },
-        groups: { include: { group: { include: { course: true } } } },
+        groups: { include: membershipInclude },
       },
       orderBy: { name: "asc" },
     }),
