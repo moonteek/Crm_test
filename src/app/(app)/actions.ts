@@ -400,6 +400,16 @@ export async function saveGroup(_: MemberActionState, f: FormData): Promise<Memb
   }
 }
 
+/** Brings an archived (finished) group back to active. Its students stay as they are — re-add them by hand. */
+export async function restoreGroup(id: number) {
+  const user = await requirePermission("groups.manage");
+  await assertGroupAccess(user, id);
+  const group = await db.group.update({ where: { id }, data: { status: "ACTIVE" } });
+  await logAction(user, "group.restore", `Guruh arxivdan qaytarildi: ${group.name}`);
+  revalidatePath("/groups");
+  revalidatePath(`/groups/${id}`);
+}
+
 export async function deleteGroup(id: number) {
   const user = await requirePermission("groups.delete");
   const group = await db.group.delete({ where: { id } });

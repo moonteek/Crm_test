@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertCircle, UserPlus, Users, UsersRound, Wallet } from "lucide-react";
+import { AlertCircle, GraduationCap, UserPlus, Users, UsersRound, Wallet } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { can, firstAllowedPage, groupScope, studentScope } from "@/lib/access";
@@ -9,6 +9,7 @@ import { membershipInclude } from "@/lib/billing-include";
 import { centreMonthStart, centreToday, fromMinutes, greeting, scheduleKeysOn, toMinutes, WEEKDAYS } from "@/lib/schedule";
 import { date, money, MONTHS, PAYMENT_METHODS, LEAD_STATUSES } from "@/lib/format";
 import { DotMeter, Empty, PageHeader, StatCard } from "@/components/ui";
+import { alertsFor } from "@/lib/alerts-db";
 
 export default async function Dashboard() {
   const user = await requireUser();
@@ -47,6 +48,7 @@ export default async function Dashboard() {
   const expense = monthExpenses._sum.amount ?? 0;
   const totalLeads = leadCounts.reduce((s, l) => s + l._count, 0) || 1;
 
+  const courseEnds = await alertsFor(user);
   const weekday = WEEKDAYS.find((w) => w.day === today.weekday)?.label ?? "Yakshanba";
   const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -133,6 +135,25 @@ export default async function Dashboard() {
           </div>
         )}
       </div>
+
+      {courseEnds.length > 0 && (
+        <div className="card mt-4 p-4 md:mt-6 md:p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-semibold">Kursi tugayotgan guruhlar</h2>
+            <GraduationCap className="h-[18px] w-[18px] text-faint" />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {courseEnds.map((a) => (
+              <Link key={a.groupId} href={`/groups/${a.groupId}`} className="press flex items-center justify-between gap-3 rounded-xl border border-line bg-raised px-3.5 py-3 hover:border-line-strong">
+                <span className="truncate font-medium">{a.name}</span>
+                <span className={`badge shrink-0 ${a.state === "ended" ? "bg-danger-tint text-danger" : "bg-warning-tint text-warning"}`}>
+                  {a.state === "ended" ? `tugagan · ${date(a.endsOn)}` : `${date(a.endsOn)} gacha`}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {show.payments && (
         <div className="card mt-4 md:mt-6">
