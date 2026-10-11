@@ -38,3 +38,16 @@ export function lastMonth(today: Date) {
   const t = centreToday(today);
   return new Date(Date.UTC(t.year, t.month - 2, 1));
 }
+
+/**
+ * A student left on `leaveDate`: their discounts in that group end with that month and the ones that hadn't started
+ * are removed, so rejoining later doesn't silently bring an old discount back.
+ */
+export function discountsAfterLeave(discounts: (Range & { id: number })[], leaveDate: Date) {
+  const left = key(leaveDate);
+  const to = new Date(Date.UTC(leaveDate.getUTCFullYear(), leaveDate.getUTCMonth(), 1));
+  return {
+    remove: discounts.filter((d) => key(d.from) > left).map((d) => d.id),
+    trim: discounts.filter((d) => key(d.from) <= left && key(d.to) > left).map((d) => ({ id: d.id, to })),
+  };
+}

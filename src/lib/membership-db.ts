@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { applyEvent, type EventType, type Status } from "./membership";
 import { dayOf, eventsFromLegacy } from "./membership-legacy";
 import { centreToday } from "./schedule";
+import { discountsAfterLeave } from "./discounts";
 
 type Tx = Prisma.TransactionClient;
 export type MemberEventInput = { type: EventType; date: Date; reasonId?: number | null; comment?: string | null; userId?: number | null; system?: boolean };
@@ -49,6 +50,12 @@ export async function recordEvent(tx: Tx, groupStudentId: number, e: MemberEvent
   await tx.membershipEvent.create({
     data: { groupStudentId, type: e.type, date, reasonId: e.reasonId ?? null, comment: e.comment || null, userId: e.userId ?? null },
   });
+  if (res.status === "LEFT") {
+    // discounts end with the membership: a later rejoin starts without them
+    const { remove, trim } = discountsAfterLeave(await tx.discount.findMany({ where: { groupStudentId } }), date);
+    if (remove.length) await tx.discount.deleteMany({ where: { id: { in: remove } } });
+    for (const t of trim) await tx.discount.update({ where: { id: t.id }, data: { to: t.to } });
+  }
   return res.status;
 }
 

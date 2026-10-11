@@ -239,7 +239,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
                         <p className="truncate text-sm text-muted">{gs.group.course.name} · {money(priceNow(gs.group))} / oy{upcomingPrice(gs.group.prices, new Date()) && <span className="label-mono ml-2">{date(upcomingPrice(gs.group.prices, new Date())!.from)} dan: {money(upcomingPrice(gs.group.prices, new Date())!.price)}</span>}</p>
                       </div>
                       <MemberMenu
-                        member={toMemberData(gs, { id: student.id, name: student.name })}
+                        member={toMemberData(gs, { id: student.id, name: student.name }, { money: allow.balance })}
                         reasons={reasons}
                         groups={allGroups.map((g) => toMemberGroup(g))}
                         balance={allow.balance ? b : null}

@@ -20,14 +20,15 @@ type MembershipRow = {
   discounts?: { from: Date; to: Date; amount: number }[];
 };
 
-export function toMemberData(gs: MembershipRow, student: { id: number; name: string }): MemberData {
+/** `money: false` leaves the discount amounts out (they would reach the browser of staff who can't see payments). */
+export function toMemberData(gs: MembershipRow, student: { id: number; name: string }, opts: { money: boolean }): MemberData {
   return {
     id: gs.id,
     status: gs.status,
     events: gs.events.map((e) => ({ type: e.type, date: e.date.toISOString(), migrated: e.migrated })),
     group: toMemberGroup(gs.group),
     student,
-    discounts: (gs.discounts ?? []).map((d) => ({ from: d.from.toISOString(), to: d.to.toISOString(), amount: d.amount })),
+    discounts: opts.money ? (gs.discounts ?? []).map((d) => ({ from: d.from.toISOString(), to: d.to.toISOString(), amount: d.amount })) : [],
   };
 }
 

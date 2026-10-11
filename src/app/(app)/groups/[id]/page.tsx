@@ -229,7 +229,7 @@ export default async function GroupPage({
                             </p>
                           </div>
                           <MemberMenu
-                            member={toMemberData({ ...gs, group: thisGroup }, { id: student.id, name: student.name })}
+                            member={toMemberData({ ...gs, group: thisGroup }, { id: student.id, name: student.name }, { money: allow.balance })}
                             reasons={reasons}
                             groups={transferGroups.map((g) => toMemberGroup(g))}
                             balance={allow.balance ? b : null}
