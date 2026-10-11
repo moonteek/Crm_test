@@ -1,4 +1,5 @@
 import { lessonDates } from "./format";
+import { centreToday } from "./schedule";
 
 // A course is an ordered list of subjects, each so many months long. A group moves through them one level a
 // month, counted from its own start day (start 20 Oct → level 1 = 20 Oct–19 Nov). A level has however many lessons
@@ -21,6 +22,11 @@ export type Window = {
 
 const DAY = 86_400_000;
 const utcDay = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+/** The start date on the centre's calendar: older rows hold Tashkent midnight (19:00 UTC the day before). */
+const centreDate = (d: Date) => {
+  const t = centreToday(d);
+  return new Date(Date.UTC(t.year, t.month - 1, t.day));
+};
 
 /** `date` plus `n` months; a day the target month lacks (29–31) becomes that month's last day. */
 export function addMonthsClamped(date: Date, n: number) {
@@ -44,7 +50,7 @@ export function levelWindows(group: CurriculumGroup, subjects: CurriculumSubject
   if (!steps.length) return [];
   const found = steps.findIndex((x) => x.s.id === group.startSubjectId && x.levelInSubject === group.startLevel);
   const first = found < 0 ? 0 : found;
-  const start = utcDay(group.startDate);
+  const start = centreDate(group.startDate);
   return steps.slice(first).map((x, k) => {
     const from = addMonthsClamped(start, k);
     const to = new Date(addMonthsClamped(start, k + 1).getTime() - DAY);
@@ -93,6 +99,14 @@ export function levelExams(group: CurriculumGroup, subjects: CurriculumSubject[]
   return levelWindows(group, subjects)
     .filter((w) => w.lessons.length)
     .map((w) => ({ level: w.level, subject: w.subject, levelInSubject: w.levelInSubject, date: w.lessons[w.lessons.length - 1], title: `${w.subject} · ${w.levelInSubject}-daraja imtihoni` }));
+}
+
+/** Everything a group screen needs on `day`: level windows, progress and the next level exam. */
+export function curriculumOn(group: CurriculumGroup, subjects: CurriculumSubject[], day: Date) {
+  const windows = levelWindows(group, subjects);
+  const progress = progressOn(group, subjects, day);
+  const nextExam = levelExams(group, subjects).find((e) => e.date >= new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate()))) ?? null;
+  return { windows, progress, nextExam };
 }
 
 export const passed = (score: number, maxScore: number, passPercent: number) => (score / maxScore) * 100 >= passPercent;

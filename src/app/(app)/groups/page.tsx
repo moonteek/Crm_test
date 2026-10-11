@@ -5,9 +5,12 @@ import { priceNow } from "@/lib/billing";
 import { requirePage } from "@/lib/auth";
 import { can, groupScope } from "@/lib/access";
 import { date, GROUP_DAYS, money } from "@/lib/format";
+import { curriculumOn } from "@/lib/curriculum";
+import { centreDay } from "@/lib/membership-db";
 import { Modal } from "@/components/Modal";
 import { GroupFields } from "@/components/GroupFields";
-import { Empty, LevelBadge, PageHeader, Segmented, SubmitRow } from "@/components/ui";
+import { CurriculumBadge, CurriculumBar } from "@/components/CurriculumBar";
+import { Empty, PageHeader, Segmented, SubmitRow } from "@/components/ui";
 import { createGroup } from "../actions";
 
 export default async function GroupsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
@@ -16,13 +19,14 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
   const [groups, courses, teachers, rooms] = await Promise.all([
     db.group.findMany({
       where: { status, ...groupScope(user) },
-      include: { course: true, teacher: true, assistant: true, room: true, prices: true, _count: { select: { students: { where: { leftAt: null } } } } },
+      include: { course: { include: { subjects: true } }, teacher: true, assistant: true, room: true, prices: true, _count: { select: { students: { where: { leftAt: null } } } } },
       orderBy: [{ days: "asc" }, { time: "asc" }],
     }),
-    db.course.findMany({ orderBy: { name: "asc" } }),
+    db.course.findMany({ orderBy: { name: "asc" }, include: { subjects: { orderBy: { position: "asc" } } } }),
     db.user.findMany({ where: { isTeacher: true, active: true }, orderBy: { name: "asc" } }),
     db.room.findMany({ orderBy: { name: "asc" } }),
   ]);
+  const today = centreDay();
 
   return (
     <>
@@ -43,13 +47,13 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
       )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:gap-4 xl:grid-cols-3">
-        {groups.map((g) => (
+        {groups.map((g) => { const cur = curriculumOn(g, g.course.subjects, today); return (
           <Link key={g.id} href={`/groups/${g.id}`} className="card press block p-5 hover:border-line-strong">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <h3 className="truncate text-lg font-semibold">{g.name}</h3>
-                  <LevelBadge level={g.level} />
+                  <CurriculumBadge progress={cur.progress} level={g.level} />
                 </div>
                 <p className="truncate text-sm text-muted">{g.course.name}</p>
               </div>
@@ -63,12 +67,13 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
               <p className="flex min-w-0 items-center gap-2"><User className="h-4 w-4 shrink-0 text-faint" /><span className="truncate">{g.teacher?.name ?? "O'qituvchi biriktirilmagan"}{g.assistant && <span className="text-faint"> · yordamchi: {g.assistant.name}</span>}</span></p>
               <p className="flex items-center gap-2"><DoorOpen className="h-4 w-4 text-faint" />{g.room?.name ?? "Xona yo'q"}</p>
             </div>
+            {cur.windows.length > 0 && <div className="mt-4"><CurriculumBar windows={cur.windows} progress={cur.progress} mode="mini" /></div>}
             <div className="label-mono mt-4 flex justify-between border-t border-line pt-3">
               <span>Boshlangan: {date(g.startDate)}</span>
               <span>{money(priceNow(g))}</span>
             </div>
           </Link>
-        ))}
+        ); })}
       </div>
       {groups.length === 0 && <div className="card"><Empty text="Guruhlar yo'q" /></div>}
     </>

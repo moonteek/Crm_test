@@ -1,5 +1,6 @@
 "use client";
 
+import type { CourseOption } from "./CourseStartFields";
 import { useActionState, useEffect, useState } from "react";
 import { Pencil } from "lucide-react";
 import { saveGroup, type MemberActionState } from "@/app/(app)/actions";
@@ -13,7 +14,7 @@ export function EditGroupDialog({
   group, courses, teachers, rooms,
 }: {
   group: React.ComponentProps<typeof GroupFields>["g"] & { id: number };
-  courses: Opt[];
+  courses: CourseOption[];
   teachers: Opt[];
   rooms: Opt[];
 }) {

@@ -27,6 +27,11 @@ test("a start on the 31st clamps to short months without drifting", () => {
   ]);
 });
 
+test("a start stored as Tashkent midnight is that Tashkent day", () => {
+  const w = levelWindows({ ...group, startDate: new Date("2026-10-19T19:00:00.000Z") }, [HTML]);
+  assert.equal(iso(w[0].from), "2026-10-20");
+});
+
 test("a group can start part-way through its course", () => {
   const w = levelWindows({ ...group, startSubjectId: 2, startLevel: 2 }, [HTML, CSS]);
   assert.deepEqual(w.map((x) => [x.level, x.subject, x.levelInSubject]), [[3, "CSS", 2]]);

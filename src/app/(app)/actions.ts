@@ -323,6 +323,8 @@ const groupSchema = z.object({
   name: v.text("Guruh nomi", 80),
   level: v.oneOf(GROUP_LEVELS, null),
   price: v.optInt("Guruh narxi", { min: 1 }),
+  startSubjectId: v.optId(),
+  startLevel: v.int("Boshlanish darajasi", { min: 1, max: 24, fallback: 1 }),
   courseId: v.id("Kurs"),
   teacherId: v.optId(),
   assistantId: v.optId(),
@@ -331,10 +333,17 @@ const groupSchema = z.object({
   time: v.time(),
 });
 
+/** Keeps the start point inside the chosen course: another course's subject or a level past its months falls back. */
+async function startPoint(courseId: number, startSubjectId: number | null, startLevel: number) {
+  const subject = startSubjectId ? await db.subject.findFirst({ where: { id: startSubjectId, courseId } }) : null;
+  if (!subject) return { startSubjectId: null, startLevel: 1 };
+  return { startSubjectId: subject.id, startLevel: Math.min(startLevel, subject.months) };
+}
+
 export async function createGroup(f: FormData) {
   const user = await requirePermission("groups.manage");
   const { startDate, ...data } = parseForm(groupSchema.extend({ startDate: v.optDate() }), f);
-  const group = await db.group.create({ data: { ...data, startDate: startDate ?? new Date() } });
+  const group = await db.group.create({ data: { ...data, ...(await startPoint(data.courseId, data.startSubjectId, data.startLevel)), startDate: startDate ?? new Date() } });
   await logAction(user, "group.create", `Yangi guruh: ${group.name}`);
   redirect(`/groups/${group.id}`);
 }
@@ -349,6 +358,7 @@ export async function updateGroup(id: number, f: FormData) {
   // a new price (own, or the new course's) starts next month; past months keep what they were charged
   const target = data.price ?? (await db.course.findUniqueOrThrow({ where: { id: data.courseId } })).price;
   const current = before.price ?? before.course.price;
+  const start = await startPoint(data.courseId, data.startSubjectId, data.startLevel);
   const changes: string[] = [];
   // teacher history, price history and the group are saved together: all or nothing
   const repriced = await db.$transaction(async (tx) => {
@@ -361,7 +371,7 @@ export async function updateGroup(id: number, f: FormData) {
       changes.push("yordamchi");
     }
     const priced = await schedulePrice(tx, id, target, current, user.id);
-    await tx.group.update({ where: { id }, data });
+    await tx.group.update({ where: { id }, data: { ...data, ...start } });
     return priced;
   });
   if (changes.length) await logAction(user, "group.teacher", `${before.name}: ${changes.join(" va ")} ${isoDate(from)} dan almashtirildi`);

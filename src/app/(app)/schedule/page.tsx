@@ -4,7 +4,10 @@ import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
 import { can, groupScope } from "@/lib/access";
 import { centreWeekday, findClashes, fromMinutes, scheduleKeysOn, toMinutes, WEEKDAYS } from "@/lib/schedule";
-import { DotMeter, Empty, LevelBadge, PageHeader } from "@/components/ui";
+import { DotMeter, Empty, PageHeader } from "@/components/ui";
+import { CurriculumBadge } from "@/components/CurriculumBar";
+import { curriculumOn, type Progress } from "@/lib/curriculum";
+import { centreDay } from "@/lib/membership-db";
 
 const NO_ROOM = 0;
 
@@ -19,7 +22,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const [groups, centreGroups, allRooms] = await Promise.all([
     db.group.findMany({
       where: { status: "ACTIVE", ...groupScope(user) },
-      include: { course: true, teacher: true, assistant: true, room: true, _count: { select: { students: { where: { leftAt: null } } } } },
+      include: { course: { include: { subjects: true } }, teacher: true, assistant: true, room: true, _count: { select: { students: { where: { leftAt: null } } } } },
       orderBy: { time: "asc" },
     }),
     // clashes are checked against every group, including ones this user can't see
@@ -37,7 +40,12 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     const start = toMinutes(g.time);
     return { ...g, start, end: start + g.course.lessonMin };
   };
-  const lessons = (perDay.get(day) ?? []).map(withTimes);
+  // the shown weekday's date in this week (Monday first): where each group is in its course that day, and exam days
+  const shown = new Date(centreDay().getTime() + (((day + 6) % 7) - ((today + 6) % 7)) * 86_400_000);
+  const lessons = (perDay.get(day) ?? []).map(withTimes).map((l) => {
+    const cur = curriculumOn(l, l.course.subjects, shown);
+    return { ...l, progress: cur.progress, exam: cur.nextExam !== null && cur.nextExam.date.getTime() === shown.getTime() };
+  });
   const clashes = findClashes(
     (centreGroups?.map(withTimes) ?? lessons).map((l) => ({
       id: l.id, start: l.start, end: l.end, roomId: l.roomId,
@@ -140,7 +148,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 }
 
 type Lesson = {
-  id: number; name: string; level: string | null; start: number; end: number;
+  id: number; name: string; level: string | null; start: number; end: number; progress: Progress; exam: boolean;
   course: { name: string }; teacher: { name: string } | null; assistant: { name: string } | null;
   room: { name: string; capacity: number } | null; _count: { students: number };
 };
@@ -154,7 +162,10 @@ function LessonCard({ lesson: l, clash, showRoom = false }: { lesson: Lesson; cl
     >
       <div className="flex items-center justify-between gap-2">
         <span className="font-dot text-lg leading-none font-black text-ink">{fromMinutes(l.start)}<span className="label-mono ml-1.5 align-middle">→ {fromMinutes(l.end)}</span></span>
-        <LevelBadge level={l.level} />
+        <span className="flex items-center gap-1">
+          {l.exam && <span className="badge bg-accent text-on-accent">Imtihon</span>}
+          <CurriculumBadge progress={l.progress} level={l.level} />
+        </span>
       </div>
       <p className="mt-1 truncate font-medium text-ink">{l.name}</p>
       <p className="truncate text-xs text-muted">{l.course.name}</p>

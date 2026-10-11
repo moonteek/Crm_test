@@ -11,7 +11,9 @@ import { membershipInclude } from "@/lib/billing-include";
 import { date, GROUP_DAYS, isoDate, lessonDates, money, MONTHS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { EditGroupDialog } from "@/components/EditGroupDialog";
-import { BalanceBadge, Empty, Field, LevelBadge, SubmitRow } from "@/components/ui";
+import { BalanceBadge, Empty, Field, SubmitRow } from "@/components/ui";
+import { CurriculumBadge, CurriculumBar } from "@/components/CurriculumBar";
+import { curriculumOn } from "@/lib/curriculum";
 import { GradeCell } from "@/components/GradeCell";
 import { MemberMenu } from "@/components/members/MemberMenu";
 import { StatusBadge, StatusLegend } from "@/components/members/StatusBadge";
@@ -40,7 +42,7 @@ export default async function GroupPage({
   const group = await db.group.findFirst({
     where: { id, ...groupScope(user) },
     include: {
-      course: true, teacher: true, assistant: true, room: true, prices: true,
+      course: { include: { subjects: { orderBy: { position: "asc" } } } }, teacher: true, assistant: true, room: true, prices: true,
       students: {
         where: { leftAt: null },
         include: { events: membershipInclude.events, student: { include: { payments: { select: { amount: true } }, groups: { include: membershipInclude } } } },
@@ -56,7 +58,7 @@ export default async function GroupPage({
     db.attendance.findMany({ where: { groupId: id, date: range } }),
     db.grade.findMany({ where: { groupId: id, date: range } }),
     db.exam.findMany({ where: { groupId: id }, include: { results: true }, orderBy: { date: "asc" } }),
-    db.course.findMany({ orderBy: { name: "asc" } }),
+    db.course.findMany({ orderBy: { name: "asc" }, include: { subjects: { orderBy: { position: "asc" } } } }),
     db.user.findMany({ where: { isTeacher: true, active: true }, orderBy: { name: "asc" } }),
     db.room.findMany({ orderBy: { name: "asc" } }),
     db.student.findMany({ where: { groups: { none: { groupId: id, leftAt: null } } }, orderBy: { name: "asc" } }),
@@ -65,6 +67,7 @@ export default async function GroupPage({
   ]);
   const thisGroup = { id: group.id, name: group.name, days: group.days, price: group.price, course: group.course, prices: group.prices };
   const upcoming = upcomingPrice(group.prices, now);
+  const cur = curriculumOn(group, group.course.subjects, centreDay());
   const mark = new Map(attendance.map((a) => [`${a.studentId}:${isoDate(a.date)}`, a.present]));
   const gradeMap = new Map(grades.map((g) => [`${g.studentId}:${isoDate(g.date)}`, g.score]));
   const prev = new Date(year, month - 1, 1);
@@ -80,7 +83,7 @@ export default async function GroupPage({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight md:text-[28px]">{group.name}</h1>
-              <LevelBadge level={group.level} />
+              <CurriculumBadge progress={cur.progress} level={group.level} />
               {group.status === "FINISHED" && <span className="badge bg-ink/5 text-muted">Tugagan</span>}
             </div>
             <p className="mt-1 text-muted">{group.course.name} · {money(priceNow(group))} / oy{upcoming && <span className="label-mono ml-2">{date(upcoming.from)} dan: {money(upcoming.price)}</span>}</p>
@@ -101,6 +104,12 @@ export default async function GroupPage({
           <Info k="Xona" v={group.room?.name ?? "—"} />
           <Info k="Boshlangan" v={date(group.startDate)} />
         </div>
+        {cur.windows.length > 0 && (
+          <div className="mt-5 border-t border-line pt-4">
+            <CurriculumBar windows={cur.windows} progress={cur.progress} />
+            {cur.nextExam && <p className="label-mono mt-3">Keyingi imtihon: {cur.nextExam.title} · {date(cur.nextExam.date)}</p>}
+          </div>
+        )}
       </div>
 
       <div className="card mt-4 md:mt-6">
