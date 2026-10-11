@@ -1,5 +1,5 @@
 import { GROUP_DAYS, lessonWeekdays } from "./format";
-import { fromMinutes, toMinutes } from "./schedule";
+import { centreWeekday, fromMinutes, toMinutes } from "./schedule";
 
 // Teachers' weekly hours, 08:00–20:00 in 1-hour cells, on odd (Du/Chor/Ju) and even (Se/Pay/Sha) days.
 // Lessons are never stored here — they come from the active groups every time.
@@ -7,6 +7,8 @@ import { fromMinutes, toMinutes } from "./schedule";
 export type DayType = "ODD" | "EVEN";
 export const DAY_TYPES: DayType[] = ["ODD", "EVEN"];
 export const DAY_TYPE_LABEL: Record<DayType, string> = { ODD: "Toq kunlar (Du/Chor/Ju)", EVEN: "Juft kunlar (Se/Pay/Sha)" };
+/** Fits a phone-width switch. */
+export const DAY_TYPE_SHORT: Record<DayType, string> = { ODD: "Du / Chor / Ju", EVEN: "Se / Pay / Sha" };
 export const DAY_START = 8;
 export const DAY_END = 20;
 /** Cell hours: 8 = 08:00–09:00 … 19 = 19:00–20:00. */
@@ -19,6 +21,9 @@ export type LessonLike = {
 export type Clash = { kind: "teacher" | "room"; who: string; group: LessonLike };
 export type Cell = { state: "lesson"; group: string } | { state: "free" } | { state: "busy" } | { state: "unset" };
 type Slot = { dayType: string; hour: number; free: boolean };
+
+/** Today's day type: Tue/Thu/Sat are even days; Mon/Wed/Fri and Sunday show odd days. */
+export const todayDayType = (d = new Date()): DayType => ([2, 4, 6].includes(centreWeekday(d)) ? "EVEN" : "ODD");
 
 export const dayTypesOf = (days: string): DayType[] => (days === "ODD" ? ["ODD"] : days === "EVEN" ? ["EVEN"] : ["ODD", "EVEN"]);
 

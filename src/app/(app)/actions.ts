@@ -21,7 +21,7 @@ import {
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
-import { busyMarkWarnings, clashMessage, fitsDay, groupClashes, needsClashCheck, type LessonLike } from "@/lib/availability";
+import { busyMarkWarnings, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, fitsDay, groupClashes, needsClashCheck, teacherGrid, type DayType, type LessonLike } from "@/lib/availability";
 import { check, parseForm, v } from "@/lib/validation";
 import { phoneKey } from "@/lib/phone";
 
@@ -840,6 +840,33 @@ export async function deleteExam(id: number) {
   await db.exam.delete({ where: { id } });
   await logAction(user, "exam.delete", `Imtihon o'chirildi: ${exam.group.name} — ${exam.title}`);
   revalidatePath(`/groups/${exam.groupId}`);
+}
+
+// ---------- Teacher availability ----------
+/**
+ * Sets one hour of a teacher's week: free, busy or not set. Teachers edit their own; others need groups.manage.
+ * Hours with a lesson are never marks — they come from the groups.
+ */
+export async function setSlot(userId: number, dayType: DayType, hour: number, state: "free" | "busy" | "unset"): Promise<MemberActionState> {
+  try {
+    const user = await requireUser();
+    if (userId !== user.id || !user.isTeacher) await requirePermission("groups.manage");
+    const d = check(z.object({ dayType: z.enum(DAY_TYPES), hour: z.number().int().min(DAY_START).max(DAY_END - 1), state: z.enum(["free", "busy", "unset"]) }), { dayType, hour, state });
+    const teacher = await db.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!teacher.isTeacher) throw new Error("Bu foydalanuvchi o'qituvchi emas");
+    const groups = await db.group.findMany({ where: { status: "ACTIVE", OR: [{ teacherId: userId }, { assistantId: userId }] }, include: { course: { select: { lessonMin: true } } } });
+    if (teacherGrid(userId, groups.map((g) => ({ ...g, minutes: g.course.lessonMin })), [])[d.dayType].get(d.hour)?.state === "lesson") throw new Error("Bu soatda dars bor");
+    const key = { userId_dayType_hour: { userId, dayType: d.dayType, hour: d.hour } };
+    if (d.state === "unset") await db.teacherSlot.deleteMany({ where: { userId, dayType: d.dayType, hour: d.hour } });
+    else await db.teacherSlot.upsert({ where: key, create: { userId, dayType: d.dayType, hour: d.hour, free: d.state === "free" }, update: { free: d.state === "free" } });
+    const label = { free: "bo'sh", busy: "band", unset: "belgilanmagan" }[d.state];
+    await logAction(user, "teacher.availability", `${teacher.name}: ${DAY_TYPE_LABEL[d.dayType]} ${String(d.hour).padStart(2, "0")}:00 — ${label}`);
+    revalidatePath("/availability");
+    revalidatePath("/teachers");
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
 
 // ---------- Salaries ----------
