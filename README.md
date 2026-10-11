@@ -134,6 +134,10 @@ O'quvchilar ma'lumotlari kengaytirilgan versiyada `db:push` dan keyin eski "Izoh
 npm run db:notes-from-izoh
 ```
 
+**Chegirmalar:** o'quvchi sahifasidagi "Chegirma" bo'limida beriladi — har oy to'lovdan ayiriladigan summa, tanlangan
+oylar uchun (shu oydan, 2026-yil noyabrdan boshlab). Qisman oyda dars soniga qarab hisoblanadi; o'qituvchi ulushi
+o'zgarmaydi. "Menejer" rolida "Chegirma berish" ruxsatini Rollar sahifasida bir marta belgilang.
+
 **Excel / Google Sheets:** har bir ro'yxatda (o'quvchilar, lidlar, guruhlar, to'lovlar, qarzdorlar va boshqalar) "Excel"
 tugmasi sahifada ko'rinib turgan ma'lumotni (filtrlar bilan, barcha sahifalari) .xlsx qilib yuklaydi; "Google Sheets"
 tugmasi shu jadvalni nusxalaydi — Google Sheets'da Ctrl+V bosing.
