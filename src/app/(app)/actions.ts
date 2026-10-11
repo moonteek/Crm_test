@@ -17,7 +17,7 @@ import { nextMonthStart, schedulePrice } from "@/lib/prices-db";
 import { changeTeacher } from "@/lib/teachers-db";
 import { menuActions, systemLeaveDate, type EventType, type Status } from "@/lib/membership";
 import {
-  ACTIVITY_TYPES, isoDate, CALL_RESULTS, EXPENSE_CATEGORIES, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES,
+  ACTIVITY_TYPES, isoDate, CALL_RESULTS, EXPENSE_CATEGORIES, GENDERS, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_SOURCES, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES, TAG_COLORS,
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
@@ -200,7 +200,14 @@ const studentSchema = z.object({
   phone: v.text("Telefon", 40),
   parentPhone: v.optText(40),
   birthDate: v.optDate(),
-  note: v.optText(),
+  // "+ qo'shimcha ma'lumot"
+  gender: v.oneOf(GENDERS, null),
+  parentName: v.optText(120),
+  phone2: v.optText(40),
+  school: v.optText(120),
+  address: v.optText(200),
+  source: v.oneOf(LEAD_SOURCES, null),
+  passport: v.optText(40),
 });
 
 /** How a student starts in a group: free trial or charged from the given date. */
@@ -832,6 +839,93 @@ export async function deleteExam(id: number) {
   await db.exam.delete({ where: { id } });
   await logAction(user, "exam.delete", `Imtihon o'chirildi: ${exam.group.name} — ${exam.title}`);
   revalidatePath(`/groups/${exam.groupId}`);
+}
+
+// ---------- Student notes and tags ----------
+async function noteStudent(user: Awaited<ReturnType<typeof requirePermission>>, studentId: number) {
+  await assertStudentAccess(user, studentId);
+  return db.student.findUniqueOrThrow({ where: { id: studentId }, select: { id: true, name: true } });
+}
+
+export async function addNote(studentId: number, f: FormData) {
+  const user = await requirePermission("students.manage");
+  const student = await noteStudent(user, studentId);
+  const { text } = parseForm(z.object({ text: v.text("Eslatma", 2000) }), f);
+  await db.studentNote.create({ data: { studentId, text, userId: user.id } });
+  await logAction(user, "student.note", `Eslatma qo'shildi: ${text.slice(0, 80)}`, { studentId: student.id });
+  revalidatePath(`/students/${studentId}`);
+}
+
+/** Pins a note to the profile card (the previously pinned one is unpinned), or unpins it. */
+export async function pinNote(id: number) {
+  const user = await requirePermission("students.manage");
+  const note = await db.studentNote.findUniqueOrThrow({ where: { id } });
+  await noteStudent(user, note.studentId);
+  await db.$transaction([
+    db.studentNote.updateMany({ where: { studentId: note.studentId, pinned: true }, data: { pinned: false } }),
+    ...(note.pinned ? [] : [db.studentNote.update({ where: { id }, data: { pinned: true } })]),
+  ]);
+  await logAction(user, "student.note", note.pinned ? "Eslatma qadalgan joyidan olindi" : `Eslatma qadaldi: ${note.text.slice(0, 80)}`, { studentId: note.studentId });
+  revalidatePath(`/students/${note.studentId}`);
+}
+
+/** Its author or an admin may delete a note. */
+export async function deleteNote(id: number) {
+  const user = await requirePermission("students.manage");
+  const note = await db.studentNote.findUniqueOrThrow({ where: { id } });
+  await noteStudent(user, note.studentId);
+  if (note.userId !== user.id && !user.isAdmin) throw new Error("Faqat eslatma muallifi yoki administrator o'chira oladi");
+  await db.studentNote.delete({ where: { id } });
+  await logAction(user, "student.note", `Eslatma o'chirildi: ${note.text.slice(0, 80)}`, { studentId: note.studentId });
+  revalidatePath(`/students/${note.studentId}`);
+}
+
+/** The student's tags become exactly the ticked ones; a switched-off tag can stay but can't be newly added. */
+export async function setStudentTags(studentId: number, f: FormData) {
+  const user = await requirePermission("students.manage");
+  const student = await noteStudent(user, studentId);
+  const wanted = f.getAll("tagId").map((x) => check(v.id("Teg"), x));
+  const [current, tags] = await Promise.all([db.studentTag.findMany({ where: { studentId } }), db.tag.findMany()]);
+  const has = new Set(current.map((t) => t.tagId));
+  const added = wanted.filter((id) => !has.has(id) && tags.find((t) => t.id === id)?.active);
+  const removed = current.map((t) => t.tagId).filter((id) => !wanted.includes(id));
+  await db.$transaction([
+    db.studentTag.deleteMany({ where: { studentId, tagId: { in: removed } } }),
+    ...added.map((tagId) => db.studentTag.create({ data: { studentId, tagId } })),
+  ]);
+  const name = (id: number) => tags.find((t) => t.id === id)?.name;
+  const change = [...added.map((id) => `+${name(id)}`), ...removed.map((id) => `−${name(id)}`)].join(", ");
+  if (change) await logAction(user, "student.tag", `Teglar: ${change}`, { studentId: student.id });
+  revalidatePath(`/students/${studentId}`);
+}
+
+const tagSchema = z.object({ name: v.text("Teg nomi", 40), color: v.oneOf(TAG_COLORS, "amber") });
+
+export async function createTag(f: FormData) {
+  const user = await requirePermission("students.tags");
+  const d = parseForm(tagSchema, f);
+  if (await db.tag.findUnique({ where: { name: d.name } })) throw new Error("Bunday teg bor");
+  await db.tag.create({ data: d });
+  await logAction(user, "tag.manage", `Teg qo'shildi: ${d.name}`);
+  revalidatePath("/settings/tags");
+}
+
+export async function updateTag(id: number, f: FormData) {
+  const user = await requirePermission("students.tags");
+  const d = parseForm(tagSchema, f);
+  const before = await db.tag.findUniqueOrThrow({ where: { id } });
+  if (d.name !== before.name && (await db.tag.findUnique({ where: { name: d.name } }))) throw new Error("Bunday teg bor");
+  await db.tag.update({ where: { id }, data: d });
+  await logAction(user, "tag.manage", `Teg o'zgartirildi: ${before.name} → ${d.name}`);
+  revalidatePath("/settings/tags");
+}
+
+export async function toggleTag(id: number) {
+  const user = await requirePermission("students.tags");
+  const t = await db.tag.findUniqueOrThrow({ where: { id } });
+  await db.tag.update({ where: { id }, data: { active: !t.active } });
+  await logAction(user, "tag.manage", `Teg ${t.active ? "o'chirildi" : "yoqildi"}: ${t.name}`);
+  revalidatePath("/settings/tags");
 }
 
 // ---------- Teacher availability ----------

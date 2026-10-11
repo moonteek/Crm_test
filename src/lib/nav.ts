@@ -24,7 +24,7 @@ export const NAV: NavItem[] = [
   { href: "/salaries", label: "Ish haqi", icon: Banknote, perm: "salaries.view" },
   { href: "/rooms", label: "Xonalar", icon: DoorOpen, perm: "rooms.manage" },
   { href: "/activity", label: "Faoliyat jurnali", icon: History, perm: "audit.view" },
-  { href: "/settings", label: "Sozlamalar", icon: Settings, perm: ["staff.manage", "mcp.use"] },
+  { href: "/settings", label: "Sozlamalar", icon: Settings, perm: ["staff.manage", "students.tags", "mcp.use"] },
 ];
 
 /** Pages the user may open, in sidebar order. */

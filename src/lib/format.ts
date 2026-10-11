@@ -81,7 +81,7 @@ export const KPI_METRICS: Record<string, { label: string; unit: string }> = {
 };
 
 /** Tag colours, each a theme tint (see TagChip). */
-export const TAG_COLORS = ["amber", "green", "red", "blue", "grey"] as const;
+export const TAG_COLORS = ["amber", "green", "red", "orange", "grey"] as const;
 export type TagColor = (typeof TAG_COLORS)[number];
 export const GENDERS: Record<string, string> = { M: "O'g'il", F: "Qiz" };
 
