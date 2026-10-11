@@ -20,8 +20,22 @@ export function teacherOn(
 
 const ddmmyyyy = (d: Date) => `${String(d.getUTCDate()).padStart(2, "0")}.${String(d.getUTCMonth() + 1).padStart(2, "0")}.${d.getUTCFullYear()}`;
 
-/** Refuses a change dated before the latest change of the same role (that would rewrite history). */
-export function checkTeacherChange(history: TeacherRow[], role: TeacherRole, from: Date): string | null {
+/** Whether `userId` taught the group (as teacher or assistant) on `day`. */
+export function ownsOn(
+  group: { teacherId: number | null; assistantId: number | null; teachers?: TeacherRow[] },
+  userId: number,
+  day: Date,
+) {
+  const h = group.teachers ?? [];
+  return teacherOn(h, group, day, "TEACHER") === userId || teacherOn(h, group, day, "ASSISTANT") === userId;
+}
+
+/**
+ * Refuses a change dated before the latest change of the same role (that would rewrite history), or before
+ * `earliest` (the 1st of the current month: earlier months' salaries may already be paid).
+ */
+export function checkTeacherChange(history: TeacherRow[], role: TeacherRole, from: Date, earliest?: Date): string | null {
+  if (earliest && from < earliest) return `O'qituvchini o'tgan oylardan boshlab almashtirib bo'lmaydi — eng erta sana: ${ddmmyyyy(earliest)}`;
   const latest = history.filter((r) => r.role === role).reduce<Date | null>((m, r) => (!m || r.from > m ? r.from : m), null);
   if (latest && from < latest) return `Yangi o'qituvchi sanasi oldingi almashtirishdan (${ddmmyyyy(latest)}) oldin bo'lishi mumkin emas`;
   return null;

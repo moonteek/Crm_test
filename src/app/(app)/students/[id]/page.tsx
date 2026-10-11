@@ -7,6 +7,7 @@ import { requirePage } from "@/lib/auth";
 import { can, canSeeBalances, groupScope, studentScope } from "@/lib/access";
 import { balance, priceNow } from "@/lib/billing";
 import { statement } from "@/lib/statement";
+import { upcomingPrice } from "@/lib/prices";
 import { membershipInclude } from "@/lib/billing-include";
 import { date, GROUP_DAYS, isoDate, money } from "@/lib/format";
 import { Modal } from "@/components/Modal";
@@ -147,7 +148,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <Link href={`/groups/${gs.groupId}`} className="block truncate font-semibold hover:underline">{gs.group.name}</Link>
-                        <p className="truncate text-sm text-muted">{gs.group.course.name} · {money(priceNow(gs.group))} / oy</p>
+                        <p className="truncate text-sm text-muted">{gs.group.course.name} · {money(priceNow(gs.group))} / oy{upcomingPrice(gs.group.prices, new Date()) && <span className="label-mono ml-2">{date(upcomingPrice(gs.group.prices, new Date())!.from)} dan: {money(upcomingPrice(gs.group.prices, new Date())!.price)}</span>}</p>
                       </div>
                       <MemberMenu
                         member={toMemberData(gs, { id: student.id, name: student.name })}

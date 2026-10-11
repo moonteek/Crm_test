@@ -1,6 +1,7 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
 import { checkTeacherChange, type TeacherRole } from "./teachers-history";
+import { thisMonthStart } from "./prices-db";
 
 type Tx = Prisma.TransactionClient;
 const EPOCH = new Date(0);
@@ -11,7 +12,7 @@ const EPOCH = new Date(0);
  */
 export async function changeTeacher(tx: Tx, groupId: number, role: TeacherRole, previous: number | null, userId: number | null, from: Date) {
   const rows = await tx.groupTeacher.findMany({ where: { groupId } });
-  const error = checkTeacherChange(rows, role, from);
+  const error = checkTeacherChange(rows, role, from, thisMonthStart());
   if (error) throw new Error(error);
   if (!rows.some((r) => r.role === role)) await tx.groupTeacher.create({ data: { groupId, role, userId: previous, from: EPOCH } });
   await tx.groupTeacher.upsert({

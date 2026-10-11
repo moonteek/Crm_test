@@ -80,3 +80,11 @@ test("another teacher's students are not counted", () => {
   const m = member(FE, ["ACTIVATE", nov(1)]);
   assert.deepEqual(teacherEarnings(A, { type: "PERCENT", amount: 40 }, [m], 2026, 10, NOW), { rows: [], total: 0 });
 });
+
+test("breakdown rows are whole so'm and add up exactly to the total", () => {
+  // three students with 1 lesson each of an ODD 650 000 month (50 000 a lesson) at 33% → 16 500 each, plus odd remainders
+  const ms = [1, 2, 3].map(() => member({ ...FE, price: 650_001 }, ["ACTIVATE", nov(1)], ["FREEZE", nov(2)]));
+  const r = teacherEarnings(B, { type: "PERCENT", amount: 33.3 }, ms, 2026, 10, NOW);
+  assert.equal(r.rows.reduce((s, x) => s + x.rounded, 0), r.total);
+  assert.ok(r.rows.every((x) => Number.isInteger(x.rounded)));
+});

@@ -1,6 +1,6 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
-import { priceAt } from "./prices";
+import { planPriceChange } from "./prices";
 import { centreToday } from "./schedule";
 
 type Tx = Prisma.TransactionClient;
@@ -12,31 +12,24 @@ export function nextMonthStart(d = new Date()) {
   return new Date(Date.UTC(t.year, t.month, 1)); // t.month is 1-based, so this is next month
 }
 
-/** What the group will charge next month as things stand (history first, then its current price). */
-export async function priceNextMonth(tx: Tx, groupId: number, currentPrice: number) {
-  const from = nextMonthStart();
-  const rows = await tx.groupPrice.findMany({ where: { groupId } });
-  return priceAt(rows, currentPrice, from.getUTCFullYear(), from.getUTCMonth());
+/** The 1st of the current month at the centre — the earliest a teacher change may start. */
+export function thisMonthStart(d = new Date()) {
+  const t = centreToday(d);
+  return new Date(Date.UTC(t.year, t.month - 1, 1));
 }
 
 /**
- * Schedules `price` from the 1st of next month. The first change also records `currentPrice` as the price of
- * every earlier month, so past charges never move. Setting the price back to what the month before charges
- * cancels the scheduled change.
+ * Saves `price` as the group's price from the 1st of next month (see planPriceChange): the first change also
+ * records `currentPrice` for every earlier month, a same-month re-edit replaces, setting back cancels.
+ * Returns whether anything changed.
  */
 export async function schedulePrice(tx: Tx, groupId: number, price: number, currentPrice: number, userId: number) {
   const from = nextMonthStart();
   const rows = await tx.groupPrice.findMany({ where: { groupId } });
-  if (!rows.length) await tx.groupPrice.create({ data: { groupId, price: currentPrice, from: EPOCH, userId } });
-  const prev = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() - 1, 1));
-  const before = priceAt(rows.filter((r) => r.from < from), currentPrice, prev.getUTCFullYear(), prev.getUTCMonth());
-  if (price === before) {
-    await tx.groupPrice.deleteMany({ where: { groupId, from } });
-    return;
-  }
-  await tx.groupPrice.upsert({
-    where: { groupId_from: { groupId, from } },
-    create: { groupId, price, from, userId },
-    update: { price, userId },
-  });
+  const plan = planPriceChange(rows, price, currentPrice, from);
+  if (plan.action === "none") return false;
+  if (plan.baseline !== null) await tx.groupPrice.create({ data: { groupId, price: plan.baseline, from: EPOCH, userId } });
+  if (plan.action === "cancel") await tx.groupPrice.deleteMany({ where: { groupId, from } });
+  else await tx.groupPrice.upsert({ where: { groupId_from: { groupId, from } }, create: { groupId, price, from, userId }, update: { price, userId } });
+  return true;
 }

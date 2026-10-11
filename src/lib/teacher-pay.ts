@@ -20,6 +20,8 @@ export type EarningRow = {
   value: number;
   /** the teacher's (unrounded) share */
   share: number;
+  /** the share in whole so'm; the rows' rounded shares add up exactly to the total */
+  rounded: number;
 };
 
 /**
@@ -46,7 +48,15 @@ export function teacherEarnings(
     const lessonsInMonth = lessonDates(m.group.days, year, month).length;
     const value = taught.reduce((s, l) => s + l.value, 0);
     const share = salary.type === "PERCENT" ? (value * salary.amount) / 100 : (salary.amount * taught.length) / lessonsInMonth;
-    rows.push({ studentId: m.student.id, studentName: m.student.name, groupId: m.group.id, groupName: m.group.name, lessons: taught.length, lessonsInMonth, value, share });
+    rows.push({ studentId: m.student.id, studentName: m.student.name, groupId: m.group.id, groupName: m.group.name, lessons: taught.length, lessonsInMonth, value, share, rounded: Math.floor(share) });
   }
-  return { rows, total: Math.round(rows.reduce((s, r) => s + r.share, 0)) };
+  const total = Math.round(rows.reduce((s, r) => s + r.share, 0));
+  // largest remainder: hand the leftover so'm to the rows that lost the most when rounded down
+  let left = total - rows.reduce((s, r) => s + r.rounded, 0);
+  for (const r of [...rows].sort((a, b) => (b.share - b.rounded) - (a.share - a.rounded))) {
+    if (left <= 0) break;
+    r.rounded++;
+    left--;
+  }
+  return { rows, total };
 }

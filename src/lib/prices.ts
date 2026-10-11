@@ -17,3 +17,17 @@ export function upcomingPrice(history: PriceRow[], now: Date): PriceRow | null {
   const future = history.filter((r) => r.from > now).sort((a, b) => a.from.getTime() - b.from.getTime());
   return future[0] ?? null;
 }
+
+/**
+ * What saving `price` (from the month starting `from`) does to a group's history: record the old price as the
+ * baseline for earlier months (first change only), set the scheduled row, cancel it (back to the previous
+ * price), or nothing.
+ */
+export function planPriceChange(history: PriceRow[], price: number, currentPrice: number, from: Date): { baseline: number | null; action: "set" | "cancel" | "none" } {
+  const next = priceAt(history, currentPrice, from.getUTCFullYear(), from.getUTCMonth());
+  if (price === next) return { baseline: null, action: "none" };
+  const prev = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() - 1, 1));
+  const before = priceAt(history.filter((r) => r.from < from), currentPrice, prev.getUTCFullYear(), prev.getUTCMonth());
+  if (price === before) return { baseline: null, action: "cancel" };
+  return { baseline: history.length ? null : currentPrice, action: "set" };
+}

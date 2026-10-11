@@ -44,7 +44,7 @@ export default async function SalaryDetailPage({
                     <td data-label="Guruh">{r.groupName}</td>
                     <td data-label="Darslar" className="text-right font-mono">{r.lessons}/{r.lessonsInMonth}</td>
                     <td data-label="Qiymati" className="text-right">{money(r.value)}</td>
-                    <td data-label="Ulush" className="text-right font-semibold">{money(Math.round(r.share))}</td>
+                    <td data-label="Ulush" className="text-right font-semibold">{money(r.rounded)}</td>
                   </tr>
                 ))}
               </tbody>

@@ -13,7 +13,7 @@ import { shiftMonth } from "@/lib/month";
 import { ALL_PERMISSIONS } from "@/lib/permissions";
 import { logAction } from "@/lib/audit";
 import { centreDay, recordEvent, startMembership } from "@/lib/membership-db";
-import { nextMonthStart, priceNextMonth, schedulePrice } from "@/lib/prices-db";
+import { nextMonthStart, schedulePrice } from "@/lib/prices-db";
 import { changeTeacher } from "@/lib/teachers-db";
 import { menuActions, systemLeaveDate, type EventType, type Status } from "@/lib/membership";
 import {
@@ -346,8 +346,12 @@ export async function updateGroup(id: number, f: FormData) {
   const before = await db.group.findUniqueOrThrow({ where: { id }, include: { course: true, teacher: true, assistant: true } });
   // a new teacher / assistant takes over from the chosen day; earlier lessons stay with the previous person
   const from = teacherFrom ?? centreDay();
+  // a new price (own, or the new course's) starts next month; past months keep what they were charged
+  const target = data.price ?? (await db.course.findUniqueOrThrow({ where: { id: data.courseId } })).price;
+  const current = before.price ?? before.course.price;
   const changes: string[] = [];
-  await db.$transaction(async (tx) => {
+  // teacher history, price history and the group are saved together: all or nothing
+  const repriced = await db.$transaction(async (tx) => {
     if (data.teacherId !== before.teacherId) {
       await changeTeacher(tx, id, "TEACHER", before.teacherId, data.teacherId, from);
       changes.push("o'qituvchi");
@@ -356,16 +360,11 @@ export async function updateGroup(id: number, f: FormData) {
       await changeTeacher(tx, id, "ASSISTANT", before.assistantId, data.assistantId, from);
       changes.push("yordamchi");
     }
+    const priced = await schedulePrice(tx, id, target, current, user.id);
+    await tx.group.update({ where: { id }, data });
+    return priced;
   });
   if (changes.length) await logAction(user, "group.teacher", `${before.name}: ${changes.join(" va ")} ${isoDate(from)} dan almashtirildi`);
-  // a new price (own, or the new course's) starts next month; past months keep what they were charged
-  const target = data.price ?? (await db.course.findUniqueOrThrow({ where: { id: data.courseId } })).price;
-  const current = before.price ?? before.course.price;
-  const repriced = await db.$transaction(async (tx) => {
-    if (target === (await priceNextMonth(tx, id, current))) return false;
-    await schedulePrice(tx, id, target, current, user.id);
-    return true;
-  });
   if (repriced) await logAction(user, "group.price", `${before.name} narxi ${isoDate(nextMonthStart())} dan: ${money(target)}`);
   if (before.status !== "FINISHED" && data.status === "FINISHED") {
     // students graduate: charges stop today for everyone still in the group (trial and frozen too)
@@ -377,7 +376,6 @@ export async function updateGroup(id: number, f: FormData) {
     });
     await logAction(user, "group.finish", `Guruh yakunlandi: ${before.name}`);
   }
-  await db.group.update({ where: { id }, data });
   revalidatePath(`/groups/${id}`);
 }
 
@@ -435,7 +433,7 @@ export async function updateCourse(id: number, f: FormData) {
     const following = await db.group.findMany({ where: { courseId: id, price: null } });
     await db.$transaction(async (tx) => {
       for (const g of following) {
-        if (data.price !== (await priceNextMonth(tx, g.id, before.price))) await schedulePrice(tx, g.id, data.price, before.price, user.id);
+        await schedulePrice(tx, g.id, data.price, before.price, user.id);
       }
     });
     await logAction(user, "course.price", `${before.name} narxi ${isoDate(nextMonthStart())} dan: ${money(before.price)} → ${money(data.price)}`);

@@ -3,6 +3,8 @@ import { monthBounds } from "./month";
 import { salesStats } from "./sales";
 import { billedStudentCount, PER_LESSON_FROM } from "./billing";
 import { teacherEarnings } from "./teacher-pay";
+import { ownsOn } from "./teachers-history";
+import { dayOf } from "./membership-legacy";
 import { membershipInclude } from "./billing-include";
 
 export const SALARY_TYPES: Record<string, { label: string; unit: string }> = {
@@ -56,20 +58,10 @@ export async function salariesForMonth(month: string, { allActive = false } = {}
       base = u.salaryType === "PERCENT" ? e.rows.reduce((s, r) => s + r.value, 0) : Math.round(e.rows.reduce((s, r) => s + r.lessons / r.lessonsInMonth, 0) * 100) / 100;
       accrued = e.total;
     } else if (u.salaryType === "PERCENT") {
-      const sum = await db.payment.aggregate({
-        _sum: { amount: true },
-        where: { date: { gte: from, lt: to }, group: { OR: [{ teacherId: u.id }, { assistantId: u.id }] } },
-      });
-      base = sum._sum.amount ?? 0;
+      base = (await oldRulePayments(u.id, from, to)).reduce((s, p) => s + p.amount, 0);
       accrued = Math.round((base * u.salaryAmount) / 100);
     } else if (u.salaryType === "PER_STUDENT") {
-      // students charged at least one lesson in this teacher's groups that month (not trial-only, not frozen all month)
-      const memberships = await db.groupStudent.findMany({
-        where: { group: { OR: [{ teacherId: u.id }, { assistantId: u.id }] }, joinedAt: { lt: to }, OR: [{ leftAt: null }, { leftAt: { gte: from } }] },
-        include: membershipInclude,
-      });
-      const [y, m] = month.split("-").map(Number);
-      base = billedStudentCount(memberships, y, m - 1);
+      base = (await oldRuleStudents(u.id, month)).length;
       accrued = base * u.salaryAmount;
     }
     const paid = payouts.find((p) => p.userId === u.id)?._sum.amount ?? 0;
@@ -83,6 +75,31 @@ export async function salariesForMonth(month: string, { allActive = false } = {}
   return rows;
 }
 
+/** Groups the person teaches now or taught at some point (current teacher/assistant or in the history). */
+const taughtBy = (userId: number) => ({ OR: [{ teacherId: userId }, { assistantId: userId }, { teachers: { some: { userId } } }] });
+
+/** Before November: payments recorded to a group while this person taught it (the payment day decides). */
+async function oldRulePayments(userId: number, from: Date, to: Date) {
+  const payments = await db.payment.findMany({
+    where: { date: { gte: from, lt: to }, group: taughtBy(userId) },
+    include: { student: true, group: { include: { teachers: true } } },
+    orderBy: { date: "asc" },
+  });
+  return payments.filter((p) => p.group && ownsOn(p.group, userId, dayOf(p.date)));
+}
+
+/** Before November: students charged that month in groups this person taught on the 1st of the month. */
+async function oldRuleStudents(userId: number, month: string) {
+  const { from, to } = monthBounds(month);
+  const memberships = await db.groupStudent.findMany({
+    where: { group: taughtBy(userId), joinedAt: { lt: to }, OR: [{ leftAt: null }, { leftAt: { gte: from } }] },
+    include: { ...membershipInclude, student: true, group: { include: { course: true, prices: true, teachers: true } } },
+  });
+  const [y, m] = month.split("-").map(Number);
+  const first = new Date(Date.UTC(y, m - 1, 1));
+  return memberships.filter((ms) => ownsOn(ms.group, userId, first) && billedStudentCount([ms], y, m - 1) > 0);
+}
+
 /** Months from the per-lesson switch on pay teachers by the lessons they taught. */
 export function lessonBased(month: string) {
   const [y, m] = month.split("-").map(Number);
@@ -94,7 +111,7 @@ async function earningsFor(userId: number, salary: { type: "PERCENT" | "PER_STUD
   const { from, to } = monthBounds(month);
   const memberships = await db.groupStudent.findMany({
     where: {
-      group: { OR: [{ teacherId: userId }, { assistantId: userId }, { teachers: { some: { userId } } }] },
+      group: taughtBy(userId),
       joinedAt: { lt: to },
       OR: [{ leftAt: null }, { leftAt: { gte: from } }],
     },
@@ -119,19 +136,10 @@ export async function salaryBreakdown(userId: number, month: string): Promise<Sa
   }
   const { from, to } = monthBounds(month);
   if (u.salaryType === "PERCENT") {
-    const payments = await db.payment.findMany({
-      where: { date: { gte: from, lt: to }, group: { OR: [{ teacherId: userId }, { assistantId: userId }] } },
-      include: { student: true, group: true },
-      orderBy: { date: "asc" },
-    });
+    const payments = await oldRulePayments(userId, from, to);
     const sum = payments.reduce((s, p) => s + p.amount, 0);
     return { kind: "payments", rows: payments.map((p) => ({ date: p.date, studentName: p.student.name, groupName: p.group?.name ?? "—", amount: p.amount })), total: Math.round((sum * u.salaryAmount) / 100) };
   }
-  const memberships = await db.groupStudent.findMany({
-    where: { group: { OR: [{ teacherId: userId }, { assistantId: userId }] }, joinedAt: { lt: to }, OR: [{ leftAt: null }, { leftAt: { gte: from } }] },
-    include: { ...membershipInclude, student: true },
-  });
-  const [y, m] = month.split("-").map(Number);
-  const counted = memberships.filter((ms) => billedStudentCount([ms], y, m - 1) > 0);
+  const counted = await oldRuleStudents(userId, month);
   return { kind: "students", rows: counted.map((ms) => ({ studentName: ms.student.name, groupName: ms.group.name })), total: counted.length * u.salaryAmount };
 }
