@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Clock, DoorOpen, Plus, RotateCcw, User } from "lucide-react";
+import { Clock, DoorOpen, RotateCcw, User } from "lucide-react";
 import { db } from "@/lib/db";
 import { priceNow } from "@/lib/billing";
 import { requirePage } from "@/lib/auth";
@@ -7,11 +7,10 @@ import { can, groupScope } from "@/lib/access";
 import { date, GROUP_DAYS, money } from "@/lib/format";
 import { curriculumOn, type Progress } from "@/lib/curriculum";
 import { centreDay } from "@/lib/membership-db";
-import { Modal } from "@/components/Modal";
-import { GroupFields } from "@/components/GroupFields";
 import { CurriculumBadge, CurriculumBar } from "@/components/CurriculumBar";
-import { Empty, PageHeader, Segmented, SubmitRow } from "@/components/ui";
-import { createGroup, restoreGroup } from "../actions";
+import { Empty, PageHeader, Segmented } from "@/components/ui";
+import { restoreGroup } from "../actions";
+import { NewGroupDialog } from "@/components/NewGroupDialog";
 
 const PROGRESS: Record<Progress["state"], string> = {
   "not-started": "Boshlanmagan",
@@ -56,12 +55,7 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
       <PageHeader title={can(user, "groups.all") ? "Guruhlar" : "Mening guruhlarim"} subtitle={`${groups.length} ta guruh`}>
         <Segmented options={[{ href: href("ACTIVE"), label: "Faol", active: !archive }, { href: href("FINISHED"), label: "Arxiv", active: archive }]} />
         {can(user, "groups.manage") && courses.length > 0 && (
-          <Modal title="Yangi guruh" trigger={<><Plus className="h-4 w-4" /> Guruh ochish</>}>
-            <form action={createGroup} className="space-y-3">
-              <GroupFields courses={courses} teachers={teachers} rooms={rooms} />
-              <SubmitRow />
-            </form>
-          </Modal>
+          <NewGroupDialog courses={courses} teachers={teachers} rooms={rooms} />
         )}
       </PageHeader>
 

@@ -1,5 +1,5 @@
 import {
-  AlertCircle, Banknote, BarChart3, BookOpen, CalendarDays, DoorOpen, GraduationCap, History, LayoutDashboard,
+  AlertCircle, Banknote, Clock, BarChart3, BookOpen, CalendarDays, DoorOpen, GraduationCap, History, LayoutDashboard,
   Receipt, Settings, ShoppingBag, Target, UserPlus, Users, UsersRound, Wallet, type LucideIcon,
 } from "lucide-react";
 
@@ -14,6 +14,8 @@ export const NAV: NavItem[] = [
   { href: "/groups", label: "Guruhlar", icon: UsersRound, perm: "groups.view" },
   { href: "/schedule", label: "Dars jadvali", icon: CalendarDays, perm: "groups.view" },
   { href: "/teachers", label: "O'qituvchilar", icon: GraduationCap, perm: "teachers.view" },
+  // not a role permission: the layout adds "self.teacher" for users marked as teachers
+  { href: "/availability", label: "Mening vaqtim", icon: Clock, perm: "self.teacher" },
   { href: "/courses", label: "Kurslar", icon: BookOpen, perm: "courses.view" },
   { href: "/payments", label: "To'lovlar", icon: Wallet, perm: "payments.view" },
   { href: "/debtors", label: "Qarzdorlar", icon: AlertCircle, perm: "debtors.view" },

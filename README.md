@@ -120,6 +120,17 @@ cheklov haqida ekanini tekshiring, keyin:
 npx prisma db push --accept-data-loss
 ```
 
+O'qituvchilar vaqti qo'shilgan versiyada `db:push` dan keyin bir marta dars davomiyligini yangilang
+(bolalar kurslaridan tashqari hammasi 120 daqiqa; qayta ishga tushirish xavfsiz):
+
+```bash
+npm run db:lesson-length
+```
+
+**O'qituvchilar vaqti:** har bir o'qituvchi "Mening vaqtim" sahifasida toq (Du/Chor/Ju) va juft (Se/Pay/Sha)
+kunlar uchun 08:00–20:00 oralig'idagi soatlarini bo'sh yoki band deb belgilaydi; dars soatlari guruhlardan
+avtomatik olinadi. Guruh ochish/tahrirlashda o'qituvchi, yordamchi yoki xona boshqa guruhda band bo'lsa saqlanmaydi.
+
 **Kurs dasturi:** kurs — tartiblangan fanlar ro'yxati (har bir fan necha oy). Guruh har oy bitta daraja
 o'tadi, oy guruh boshlangan kundan hisoblanadi; har darajaning oxirgi darsida daraja imtihoni avtomatik
 belgilanadi. O'tish bali kurs sozlamasida (standart 60%).

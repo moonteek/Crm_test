@@ -44,6 +44,7 @@ model User {
   sales     Sale[]
   membershipEvents MembershipEvent[]
   teachingHistory GroupTeacher[] @relation("TeachingHistory")
+  slots     TeacherSlot[]
 }
 
 // Personal access tokens used by MCP clients. Only a SHA-256 hash is stored.
@@ -63,7 +64,7 @@ model Course {
   name        String
   price       Int // oylik narx, so'm
   durationMon Int      @default(6)
-  lessonMin   Int      @default(90)
+  lessonMin   Int      @default(120)
   description String?
   createdAt   DateTime @default(now())
   groups      Group[]
@@ -407,4 +408,17 @@ model StockMove {
   qty       Int // signed
   note      String?
   createdAt DateTime @default(now())
+}
+
+// A teacher's own weekly mark for one hour (08–20) on odd or even days. No row = not set.
+// Lesson hours are never stored: they come from the active groups (src/lib/availability.ts).
+model TeacherSlot {
+  id      Int     @id @default(autoincrement())
+  userId  Int
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dayType String // ODD | EVEN
+  hour    Int // 8..19 — the cell hour:00–hour+1:00
+  free    Boolean // true = bo'sh, false = band
+
+  @@unique([userId, dayType, hour])
 }

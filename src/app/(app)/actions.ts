@@ -21,6 +21,7 @@ import {
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
+import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, fitsDay, groupClashes, needsClashCheck, teacherGrid, type DayType, type LessonLike } from "@/lib/availability";
 import { check, parseForm, v } from "@/lib/validation";
 import { phoneKey } from "@/lib/phone";
 
@@ -251,7 +252,7 @@ export async function addStudentToGroup(f: FormData) {
   revalidatePath(`/groups/${groupId}`);
 }
 
-export type MemberActionState = { error?: string; ok?: boolean } | null;
+export type MemberActionState = { error?: string; ok?: boolean; warning?: string } | null;
 
 const MEMBER_ACTIONS = { ACTIVATE: "faollashtirildi", FREEZE: "muzlatildi", UNFREEZE: "muzlatishdan chiqarildi", BACK_TO_TRIAL: "sinov darsiga qaytarildi", LEAVE: "guruhdan chiqarildi" };
 const memberActionSchema = z.object({
@@ -343,12 +344,48 @@ async function startPoint(courseId: number, startSubjectId: number | null, start
   return { startSubjectId: subject.id, startLevel: Math.min(startLevel, subject.months) };
 }
 
-export async function createGroup(f: FormData) {
+type GroupTime = { id?: number; name: string; days: string; time: string; courseId: number; teacherId: number | null; assistantId: number | null; roomId: number | null };
+
+/**
+ * A group's lesson must fit 08:00–20:00 and not collide with another active group's teacher, assistant or room
+ * (throws one message listing every problem). Hours the teacher marked "band" only come back as warnings.
+ */
+async function checkGroupTime(g: GroupTime): Promise<{ warnings: string[] }> {
+  const course = await db.course.findUniqueOrThrow({ where: { id: g.courseId } });
+  const candidate: LessonLike = { ...g, minutes: course.lessonMin };
+  if (!fitsDay(g.time, course.lessonMin)) throw new Error("Dars 08:00–20:00 oralig'ida bo'lishi kerak");
+  const [others, users, rooms] = await Promise.all([
+    db.group.findMany({ where: { status: "ACTIVE" }, include: { course: { select: { lessonMin: true } } } }),
+    db.user.findMany({ select: { id: true, name: true } }),
+    db.room.findMany({ select: { id: true, name: true } }),
+  ]);
+  const names = { users: new Map(users.map((u) => [u.id, u.name])), rooms: new Map(rooms.map((r) => [r.id, r.name])) };
+  const clashes = groupClashes(candidate, others.map((o) => ({ ...o, minutes: o.course.lessonMin })), names);
+  if (clashes.length) throw new Error(clashes.map(clashMessage).join("; "));
+  const ids = [g.teacherId, g.assistantId].filter((x): x is number => x !== null);
+  const slots = ids.length ? await db.teacherSlot.findMany({ where: { userId: { in: ids } } }) : [];
+  return { warnings: busyMarkMessages(candidate, slots, names.users) };
+}
+
+async function insertGroup(f: FormData) {
   const user = await requirePermission("groups.manage");
   const { startDate, ...data } = parseForm(groupSchema.extend({ startDate: v.optDate() }), f);
+  const { warnings } = await checkGroupTime(data);
   const group = await db.group.create({ data: { ...data, ...(await startPoint(data.courseId, data.startSubjectId, data.startLevel)), startDate: startDate ?? new Date() } });
   await logAction(user, "group.create", `Yangi guruh: ${group.name}`);
-  redirect(`/groups/${group.id}`);
+  // only a flag in the link: the group page works the warning out itself, so a link can't show made-up text
+  return `/groups/${group.id}${warnings.length ? "?warn=1" : ""}`;
+}
+
+/** The new-group dialog: shows why a group can't be opened (time, clashes) instead of closing. */
+export async function saveNewGroup(_: MemberActionState, f: FormData): Promise<MemberActionState> {
+  let to: string;
+  try {
+    to = await insertGroup(f);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+  redirect(to);
 }
 
 export async function updateGroup(id: number, f: FormData) {
@@ -356,6 +393,8 @@ export async function updateGroup(id: number, f: FormData) {
   await assertGroupAccess(user, id);
   const { teacherFrom, ...data } = parseForm(groupSchema.extend({ status: v.oneOf(GROUP_STATUSES, "ACTIVE"), teacherFrom: v.optDate() }), f);
   const before = await db.group.findUniqueOrThrow({ where: { id }, include: { course: true, teacher: true, assistant: true } });
+  // a changed lesson time / teacher / room must not collide with another group (a finished group has no lessons)
+  const { warnings } = data.status === "ACTIVE" && (before.status !== "ACTIVE" || needsClashCheck(before, data)) ? await checkGroupTime({ ...data, id }) : { warnings: [] };
   // a new teacher / assistant takes over from the chosen day; earlier lessons stay with the previous person
   const from = teacherFrom ?? centreDay();
   // a new price (own, or the new course's) starts next month; past months keep what they were charged
@@ -392,13 +431,14 @@ export async function updateGroup(id: number, f: FormData) {
     await logAction(user, "group.finish", `Guruh yakunlandi: ${before.name}`);
   }
   revalidatePath(`/groups/${id}`);
+  return { warnings };
 }
 
 /** The group edit dialog: same as updateGroup, but returns the refusal reason to show in the dialog. */
 export async function saveGroup(_: MemberActionState, f: FormData): Promise<MemberActionState> {
   try {
-    await updateGroup(check(v.id(), f.get("groupId")), f);
-    return { ok: true };
+    const { warnings } = await updateGroup(check(v.id(), f.get("groupId")), f);
+    return { ok: true, warning: warnings.join("; ") || undefined };
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -439,7 +479,7 @@ const courseSchema = z.object({
   name: v.text("Kurs nomi", 120),
   price: v.int("Narx"),
   durationMon: v.int("Davomiylik (oy)", { min: 1, max: 600, fallback: 6 }),
-  lessonMin: v.int("Dars davomiyligi (daqiqa)", { min: 10, max: 600, fallback: 90 }),
+  lessonMin: v.int("Dars davomiyligi (daqiqa)", { min: 10, max: 600, fallback: 120 }),
   description: v.optText(2000),
   passPercent: v.int("O'tish bali", { min: 1, max: 100, fallback: 60 }),
 });
@@ -790,6 +830,33 @@ export async function deleteExam(id: number) {
   await db.exam.delete({ where: { id } });
   await logAction(user, "exam.delete", `Imtihon o'chirildi: ${exam.group.name} — ${exam.title}`);
   revalidatePath(`/groups/${exam.groupId}`);
+}
+
+// ---------- Teacher availability ----------
+/**
+ * Sets one hour of a teacher's week: free, busy or not set. Teachers edit their own; others need groups.manage.
+ * Hours with a lesson are never marks — they come from the groups.
+ */
+export async function setSlot(userId: number, dayType: DayType, hour: number, state: "free" | "busy" | "unset"): Promise<MemberActionState> {
+  try {
+    const user = await requireUser();
+    if (userId !== user.id || !user.isTeacher) await requirePermission("groups.manage");
+    const d = check(z.object({ dayType: z.enum(DAY_TYPES), hour: z.number().int().min(DAY_START).max(DAY_END - 1), state: z.enum(["free", "busy", "unset"]) }), { dayType, hour, state });
+    const teacher = await db.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!teacher.isTeacher) throw new Error("Bu foydalanuvchi o'qituvchi emas");
+    const groups = await db.group.findMany({ where: { status: "ACTIVE", OR: [{ teacherId: userId }, { assistantId: userId }] }, include: { course: { select: { lessonMin: true } } } });
+    if (teacherGrid(userId, groups.map((g) => ({ ...g, minutes: g.course.lessonMin })), [])[d.dayType].get(d.hour)?.state === "lesson") throw new Error("Bu soatda dars bor");
+    const key = { userId_dayType_hour: { userId, dayType: d.dayType, hour: d.hour } };
+    if (d.state === "unset") await db.teacherSlot.deleteMany({ where: { userId, dayType: d.dayType, hour: d.hour } });
+    else await db.teacherSlot.upsert({ where: key, create: { userId, dayType: d.dayType, hour: d.hour, free: d.state === "free" }, update: { free: d.state === "free" } });
+    const label = { free: "bo'sh", busy: "band", unset: "belgilanmagan" }[d.state];
+    await logAction(user, "teacher.availability", `${teacher.name}: ${DAY_TYPE_LABEL[d.dayType]} ${String(d.hour).padStart(2, "0")}:00 — ${label}`);
+    revalidatePath("/availability");
+    revalidatePath("/teachers");
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
 
 // ---------- Salaries ----------

@@ -1,7 +1,7 @@
 "use client";
 
 import type { CourseOption } from "./CourseStartFields";
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, startTransition, useEffect, useState } from "react";
 import { Pencil } from "lucide-react";
 import { saveGroup, type MemberActionState } from "@/app/(app)/actions";
 import { DialogFrame } from "./Modal";
@@ -20,17 +20,20 @@ export function EditGroupDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [state, action, pending] = useActionState<MemberActionState, FormData>(saveGroup, null);
-  useEffect(() => { if (state?.ok) setOpen(false); }, [state]);
+  // saved: close, unless there's a warning to read first (the teacher marked those hours as busy)
+  useEffect(() => { if (state?.ok && !state.warning) setOpen(false); }, [state]);
 
   return (
     <>
       <button type="button" className="btn-secondary" onClick={() => setOpen(true)}><Pencil className="h-4 w-4" /> Tahrirlash</button>
       {open && (
         <DialogFrame title="Guruhni tahrirlash" onClose={() => setOpen(false)}>
-          <form action={action} className="space-y-3">
+          {/* submitted by hand: a form action would clear everything typed when the save is refused */}
+          <form onSubmit={(e) => { e.preventDefault(); const data = new FormData(e.currentTarget); startTransition(() => action(data)); }} className="space-y-3">
             <input type="hidden" name="groupId" value={group.id} />
             <GroupFields courses={courses} teachers={teachers} rooms={rooms} g={group} />
             {state?.error && <p className="rounded-xl bg-danger-tint px-3 py-2 text-sm text-danger">{state.error}</p>}
+            {state?.warning && <p className="rounded-xl bg-warning-tint px-3 py-2 text-sm text-warning">Saqlandi. {state.warning}</p>}
             <div className="flex justify-end pt-2">
               <button type="submit" className="btn-primary" disabled={pending}>{pending ? "Saqlanmoqda..." : "Saqlash"}</button>
             </div>
