@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
 import { can } from "@/lib/access";
 import { date, isoDate, money, MONTHS } from "@/lib/format";
-import { currentMonth, SALARY_TYPES, salariesForMonth } from "@/lib/salary";
+import { currentMonth, lessonBased, SALARY_TYPES, salariesForMonth } from "@/lib/salary";
 import { Modal } from "@/components/Modal";
 import { Empty, Field, PageHeader, SubmitRow } from "@/components/ui";
 import { deleteSalaryPayment, paySalary, updateSalaryRule } from "../actions";
@@ -49,7 +49,13 @@ export default async function SalariesPage({ searchParams }: { searchParams: Pro
           <tbody>
             {rows.map((r) => (
               <tr key={r.userId}>
-                <td><p className="font-medium">{r.name}</p><p className="text-xs text-muted">{r.roleName}</p></td>
+                <td>
+                  <p className="font-medium">{r.name}</p>
+                  <p className="text-xs text-muted">{r.roleName}</p>
+                  {(r.salaryType === "PERCENT" || r.salaryType === "PER_STUDENT") && (
+                    <Link href={`/salaries/${r.userId}?m=${month}`} className="label-mono mt-1 inline-block hover:text-ink">Batafsil →</Link>
+                  )}
+                </td>
                 <td>
                   <div className="flex items-center gap-2">
                     <span>
@@ -83,7 +89,7 @@ export default async function SalariesPage({ searchParams }: { searchParams: Pro
                   </div>
                 </td>
                 <td className="text-muted">
-                  {r.salaryType === "PERCENT" ? `${money(r.base)} tushum` : r.salaryType === "PER_STUDENT" ? `${r.base} o'quvchi` : "—"}
+                  {r.salaryType === "PERCENT" ? `${money(r.base)} ${lessonBased(month) ? "darslar qiymati" : "tushum"}` : r.salaryType === "PER_STUDENT" ? `${r.base} o'quvchi` : "—"}
                 </td>
                 <td className={r.bonus ? "text-success" : "text-faint"}>{r.bonus ? `+${money(r.bonus)}` : "—"}</td>
                 <td className="font-semibold">{money(r.accrued)}</td>
