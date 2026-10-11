@@ -46,3 +46,10 @@ test("months before the switch are labelled as full months", () => {
   const rows = statement([member([{ type: "ACTIVATE", date: new Date(Date.UTC(2026, 9, 1)) }])], [], NOW);
   assert.deepEqual(rows.filter((r) => r.kind === "charge").map((r) => r.lessons), ["12/12 dars", "to'liq oy"]);
 });
+
+test("a discounted month says how much was taken off", () => {
+  const m = { ...member([{ type: "ACTIVATE", date: nov(1) }]), discounts: [{ from: nov(1), to: nov(1), amount: 200_000 }] };
+  const charge = statement([m], [], NOW).find((r) => r.kind === "charge")!;
+  assert.equal(charge.amount, -400_000);
+  assert.equal(charge.lessons, "12/12 dars · chegirma −200 000 so'm");
+});

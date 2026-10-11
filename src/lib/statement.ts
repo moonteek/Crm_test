@@ -1,5 +1,5 @@
 import { chargeLines, type BillableMembership } from "./billing";
-import { MONTHS, PAYMENT_METHODS } from "./format";
+import { money, MONTHS, PAYMENT_METHODS } from "./format";
 import { EVENT_LABEL, type EventType } from "./membership";
 
 export type StatementMembership = BillableMembership & {
@@ -40,7 +40,7 @@ export function statement(
         kind: "charge",
         label: `${MONTHS[l.month]} ${l.year}`,
         groupName: m.group.name,
-        lessons: l.legacy ? "to'liq oy" : `${l.billable}/${l.lessons} dars`,
+        lessons: (l.legacy ? "to'liq oy" : `${l.billable}/${l.lessons} dars`) + (l.discount > 0 ? ` · chegirma −${money(l.discount)}` : ""),
         amount: -l.amount,
       });
     }

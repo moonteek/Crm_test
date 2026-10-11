@@ -8,6 +8,7 @@ export type MemberData = {
   events: { type: string; date: string; migrated: boolean }[];
   group: MemberGroup;
   student: { id: number; name: string };
+  discounts?: { from: string; to: string; amount: number }[];
 };
 export type ReasonOption = { id: number; name: string };
 
@@ -16,6 +17,7 @@ type MembershipRow = {
   status: string;
   events: { type: string; date: Date; migrated: boolean }[];
   group: { id: number; name: string; days: string; price: number | null; course: { name: string; price: number }; prices: { price: number; from: Date }[] };
+  discounts?: { from: Date; to: Date; amount: number }[];
 };
 
 export function toMemberData(gs: MembershipRow, student: { id: number; name: string }): MemberData {
@@ -25,6 +27,7 @@ export function toMemberData(gs: MembershipRow, student: { id: number; name: str
     events: gs.events.map((e) => ({ type: e.type, date: e.date.toISOString(), migrated: e.migrated })),
     group: toMemberGroup(gs.group),
     student,
+    discounts: (gs.discounts ?? []).map((d) => ({ from: d.from.toISOString(), to: d.to.toISOString(), amount: d.amount })),
   };
 }
 
@@ -37,7 +40,11 @@ export function toMemberGroup(g: MembershipRow["group"]): MemberGroup {
   };
 }
 
-export function toBillable(m: Pick<MemberData, "events" | "group">): BillableMembership {
+export function toBillable(m: Pick<MemberData, "events" | "group" | "discounts">): BillableMembership {
   const group = { ...m.group, prices: m.group.prices.map((p) => ({ price: p.price, from: new Date(p.from) })) };
-  return { groupId: m.group.id, group, events: m.events.map((e) => ({ type: e.type, date: new Date(e.date), migrated: e.migrated })) };
+  return {
+    groupId: m.group.id, group,
+    events: m.events.map((e) => ({ type: e.type, date: new Date(e.date), migrated: e.migrated })),
+    discounts: (m.discounts ?? []).map((d) => ({ from: new Date(d.from), to: new Date(d.to), amount: d.amount })),
+  };
 }
