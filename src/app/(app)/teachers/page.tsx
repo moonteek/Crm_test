@@ -6,6 +6,7 @@ import { can } from "@/lib/access";
 import { Modal } from "@/components/Modal";
 import { Empty, Field, PageHeader, SubmitRow } from "@/components/ui";
 import { createUser } from "../actions";
+import { ExportButtons } from "@/components/ExportButtons";
 import { centreToday } from "@/lib/schedule";
 import { DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, HOURS, teacherGrid, todayDayType, type Cell, type DayType } from "@/lib/availability";
 
@@ -40,6 +41,7 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
   return (
     <>
       <PageHeader title="O'qituvchilar" subtitle={`${teachers.length} ta o'qituvchi`}>
+        <ExportButtons href="/teachers/export" />
         {can(user, "staff.manage") && (
           <Modal title="Yangi o'qituvchi" trigger={<><Plus className="h-4 w-4" /> O&apos;qituvchi qo&apos;shish</>}>
             <form action={createUser} className="space-y-3">

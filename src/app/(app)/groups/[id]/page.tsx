@@ -15,6 +15,8 @@ import { BalanceBadge, Empty, Field, SubmitRow } from "@/components/ui";
 import { CurriculumBadge, CurriculumBar } from "@/components/CurriculumBar";
 import { curriculumOn, levelExams, passed } from "@/lib/curriculum";
 import { LevelExamDialog } from "@/components/LevelExamDialog";
+import { examColumns } from "@/lib/group-exams";
+import { ExportButtons } from "@/components/ExportButtons";
 import { busyMarkMessages } from "@/lib/availability";
 import { GradeCell } from "@/components/GradeCell";
 import { MemberMenu } from "@/components/members/MemberMenu";
@@ -79,16 +81,8 @@ export default async function GroupPage({
         new Map(people.map((p) => [p.id, p.name])),
       )
     : [];
-  // exam columns: every automatic level exam (scored or not yet) and the exams added by hand, by date
   const autoExams = levelExams(group, group.course.subjects);
-  const autoLevels = new Set(autoExams.map((a) => a.level));
-  const examCols = [
-    ...autoExams.map((a) => {
-      const saved = exams.find((e) => e.level === a.level);
-      return { key: `L${a.level}`, id: saved?.id ?? null, level: a.level as number | null, title: a.title, date: a.date, maxScore: saved?.maxScore ?? 100, results: saved?.results ?? [], upcoming: a.date > centreDay() };
-    }),
-    ...exams.filter((e) => e.level === null || !autoLevels.has(e.level)).map((e) => ({ key: `E${e.id}`, id: e.id as number | null, level: null as number | null, title: e.title, date: e.date, maxScore: e.maxScore, results: e.results, upcoming: false })),
-  ].sort((a, b) => a.date.getTime() - b.date.getTime());
+  const examCols = examColumns(group, group.course.subjects, exams, centreDay());
   const mark = new Map(attendance.map((a) => [`${a.studentId}:${isoDate(a.date)}`, a.present]));
   const gradeMap = new Map(grades.map((g) => [`${g.studentId}:${isoDate(g.date)}`, g.score]));
   const prev = new Date(year, month - 1, 1);
@@ -148,6 +142,8 @@ export default async function GroupPage({
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-2 pb-2">
+            {/* last in the row, so the month switcher stays together */}
+            <div className="order-last"><ExportButtons href={`/groups/${id}/export`} extra={{ tab, m: `${year}-${month + 1}` }} /></div>
             {tab !== "exams" && (
               <>
                 <Link href={`/groups/${id}?tab=${tab}&m=${ym(prev)}`} className="btn-secondary px-2"><ChevronLeft className="h-4 w-4" /></Link>
