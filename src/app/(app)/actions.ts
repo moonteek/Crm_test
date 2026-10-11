@@ -337,7 +337,9 @@ const groupSchema = z.object({
 /** Keeps the start point inside the chosen course: another course's subject or a level past its months falls back. */
 async function startPoint(courseId: number, startSubjectId: number | null, startLevel: number) {
   const subject = startSubjectId ? await db.subject.findFirst({ where: { id: startSubjectId, courseId } }) : null;
-  if (!subject) return { startSubjectId: null, startLevel: 1 };
+  const first = await db.subject.findFirst({ where: { courseId }, orderBy: { position: "asc" } });
+  // the course's beginning is stored as "no start point", so reordering or deleting subjects can't move the group
+  if (!subject || (subject.id === first?.id && startLevel <= 1)) return { startSubjectId: null, startLevel: 1 };
   return { startSubjectId: subject.id, startLevel: Math.min(startLevel, subject.months) };
 }
 
@@ -371,6 +373,8 @@ export async function updateGroup(id: number, f: FormData) {
       await changeTeacher(tx, id, "ASSISTANT", before.assistantId, data.assistantId, from);
       changes.push("yordamchi");
     }
+    // saved level exams are numbered by the old course's months: keep them as ordinary exams
+    if (data.courseId !== before.courseId) await tx.exam.updateMany({ where: { groupId: id, level: { not: null } }, data: { level: null } });
     const priced = await schedulePrice(tx, id, target, current, user.id);
     await tx.group.update({ where: { id }, data: { ...data, ...start } });
     return priced;
@@ -434,7 +438,7 @@ export async function toggleAttendance(groupId: number, studentId: number, isoDa
 const courseSchema = z.object({
   name: v.text("Kurs nomi", 120),
   price: v.int("Narx"),
-  durationMon: v.int("Davomiylik (oy)", { min: 1, max: 120, fallback: 6 }),
+  durationMon: v.int("Davomiylik (oy)", { min: 1, max: 600, fallback: 6 }),
   lessonMin: v.int("Dars davomiyligi (daqiqa)", { min: 10, max: 600, fallback: 90 }),
   description: v.optText(2000),
   passPercent: v.int("O'tish bali", { min: 1, max: 100, fallback: 60 }),
@@ -749,6 +753,8 @@ export async function saveLevelExamScores(_: MemberActionState, f: FormData): Pr
     if (auto.date > centreDay()) throw new Error("Imtihon kuni hali kelmagan");
     const maxScore = check(v.int("Maksimal ball", { min: 1, max: 10_000, fallback: 100 }), f.get("maxScore"));
     const score = v.int("Ball", { min: 0, max: maxScore });
+    const highest = await db.examResult.findFirst({ where: { exam: { groupId, level } }, orderBy: { score: "desc" } });
+    if (highest && highest.score > maxScore) throw new Error(`Maksimal ball ${highest.score} dan kam bo'lishi mumkin emas — shunday natija bor`);
     const entries = group.students.map(({ studentId }) => {
       const raw = String(f.get(`score_${studentId}`) ?? "").trim();
       return { studentId, score: raw === "" ? null : check(score, raw) };
@@ -771,6 +777,8 @@ export async function saveLevelExamScores(_: MemberActionState, f: FormData): Pr
     revalidatePath(`/groups/${groupId}`);
     return { ok: true };
   } catch (e) {
+    // two people saving the same exam for the first time at once: the second hits the (group, level) unique
+    if ((e as { code?: string }).code === "P2002") return { error: "Natijalar hozirgina boshqa foydalanuvchi tomonidan saqlandi — qayta urinib ko'ring" };
     return { error: (e as Error).message };
   }
 }
@@ -1039,6 +1047,7 @@ export async function saveSubject(_: MemberActionState, f: FormData): Promise<Me
             db.subject.update({ where: { id: s.id }, data: { position: neighbour.position } }),
             db.subject.update({ where: { id: neighbour.id }, data: { position: s.position } }),
           ]);
+          await logAction(user, "course.subject", `Fanlar tartibi: ${s.name} ${op === "up" ? "yuqoriga" : "pastga"}`);
         }
       }
       await syncDuration(s.courseId);

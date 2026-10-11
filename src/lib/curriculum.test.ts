@@ -37,6 +37,12 @@ test("a group can start part-way through its course", () => {
   assert.deepEqual(w.map((x) => [x.level, x.subject, x.levelInSubject]), [[3, "CSS", 2]]);
 });
 
+test("a start level past a shortened subject stays in that subject", () => {
+  const w = levelWindows({ ...group, startSubjectId: 2, startLevel: 5 }, [HTML, CSS]);
+  assert.deepEqual(w.map((x) => [x.level, x.subject, x.levelInSubject]), [[3, "CSS", 2]]);
+  assert.equal(levelWindows({ ...group, startSubjectId: 99, startLevel: 2 }, [HTML, CSS])[0].subject, "HTML");
+});
+
 test("progress before, during, in the last level and after the course", () => {
   const s = [HTML, CSS];
   const before = progressOn(group, s, d(2026, 10, 15));

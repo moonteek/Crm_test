@@ -48,8 +48,9 @@ export function levelWindows(group: CurriculumGroup, subjects: CurriculumSubject
   const ordered = [...subjects].sort((a, b) => a.position - b.position);
   const steps = ordered.flatMap((s) => Array.from({ length: s.months }, (_, i) => ({ s, levelInSubject: i + 1 })));
   if (!steps.length) return [];
-  const found = steps.findIndex((x) => x.s.id === group.startSubjectId && x.levelInSubject === group.startLevel);
-  const first = found < 0 ? 0 : found;
+  // the start subject's level, capped at its months (a subject shortened later keeps the group in it); missing subject → beginning
+  const subjectAt = steps.findIndex((x) => x.s.id === group.startSubjectId);
+  const first = subjectAt < 0 ? 0 : subjectAt + Math.min(Math.max(group.startLevel, 1), steps[subjectAt].s.months) - 1;
   const start = centreDate(group.startDate);
   return steps.slice(first).map((x, k) => {
     const from = addMonthsClamped(start, k);

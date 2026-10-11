@@ -40,8 +40,8 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     const start = toMinutes(g.time);
     return { ...g, start, end: start + g.course.lessonMin };
   };
-  // the shown weekday's date in this week (Monday first): where each group is in its course that day, and exam days
-  const shown = new Date(centreDay().getTime() + (((day + 6) % 7) - ((today + 6) % 7)) * 86_400_000);
+  // the shown weekday's date in this week (Monday first; on Sunday, the coming week): where each group is in its course that day, and exam days
+  const shown = new Date(centreDay().getTime() + (((day + 6) % 7) - ((today + 6) % 7) + (today === 0 ? 7 : 0)) * 86_400_000);
   const lessons = (perDay.get(day) ?? []).map(withTimes).map((l) => {
     const cur = curriculumOn(l, l.course.subjects, shown);
     return { ...l, progress: cur.progress, exam: cur.nextExam !== null && cur.nextExam.date.getTime() === shown.getTime() };

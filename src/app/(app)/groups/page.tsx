@@ -28,7 +28,7 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
   const params = await searchParams;
   const status = params.status === "FINISHED" ? "FINISHED" : "ACTIVE";
   const courseId = Number(params.course) || null;
-  const subjectId = Number(params.subject) || null;
+  const asked = Number(params.subject) || null;
   const progress = params.progress && params.progress in PROGRESS ? (params.progress as Progress["state"]) : null;
   const [all, courses, teachers, rooms] = await Promise.all([
     db.group.findMany({
@@ -40,11 +40,13 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
     db.user.findMany({ where: { isTeacher: true, active: true }, orderBy: { name: "asc" } }),
     db.room.findMany({ orderBy: { name: "asc" } }),
   ]);
+  const subjectOptions = courses.filter((c) => !courseId || c.id === courseId).flatMap((c) => c.subjects.map((s) => ({ id: s.id, label: courseId ? s.name : `${c.name} · ${s.name}` })));
+  // a subject of another course (left in the link after switching course) is ignored
+  const subjectId = subjectOptions.some((s) => s.id === asked) ? asked : null;
   const today = centreDay();
   const groups = all
     .map((g) => ({ ...g, cur: curriculumOn(g, g.course.subjects, today) }))
-    .filter((g) => (!subjectId || g.cur.progress.window?.subjectId === subjectId) && (!progress || g.cur.progress.state === progress));
-  const subjectOptions = courses.filter((c) => !courseId || c.id === courseId).flatMap((c) => c.subjects.map((s) => ({ id: s.id, label: courseId ? s.name : `${c.name} · ${s.name}` })));
+    .filter((g) => (!subjectId || (g.cur.progress.state !== "finished" && g.cur.progress.window?.subjectId === subjectId)) && (!progress || g.cur.progress.state === progress));
   const filtered = Boolean(courseId || subjectId || progress);
   const archive = status === "FINISHED";
   const href = (s: string) => `/groups?status=${s}`;

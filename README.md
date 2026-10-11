@@ -113,7 +113,8 @@ npm run db:migrate-statuses   # qayta ishga tushirish xavfsiz: allaqachon to'ldi
 
 Fanlar va daraja imtihonlari qo'shilgan versiyada `db:push` imtihonlarga yangi cheklov (guruh + daraja
 takrorlanmasin) qo'shgani uchun tasdiq so'raydi. Mavjud imtihonlarning darajasi bo'sh, shuning uchun
-hech narsa o'chmaydi — shunday ishga tushiring:
+hech narsa o'chmaydi. Avval oddiy `npm run db:push` ni ishga tushiring va ogohlantirish faqat shu
+cheklov haqida ekanini tekshiring, keyin:
 
 ```bash
 npx prisma db push --accept-data-loss
