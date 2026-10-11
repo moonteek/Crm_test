@@ -22,8 +22,7 @@ test("where: search covers every phone, teacher means teacher or assistant, scop
     AND: [
       scope,
       { OR: [{ name: { contains: "90" } }, { phone: { contains: "90" } }, { phone2: { contains: "90" } }, { parentPhone: { contains: "90" } }] },
-      { groups: { some: { leftAt: null, group: { OR: [{ teacherId: 8 }, { assistantId: 8 }] } } } },
-      { groups: { some: { status: "FROZEN" } } },
+      { groups: { some: { leftAt: null, group: { OR: [{ teacherId: 8 }, { assistantId: 8 }] }, status: "FROZEN" } } },
     ],
   });
   const none = studentWhere(parseStudentFilters({ status: "none", group: "3", course: "1", tag: "2" }, { canSeeBalances: true }), {});
@@ -36,4 +35,11 @@ test("where: search covers every phone, teacher means teacher or assistant, scop
       { groups: { none: { leftAt: null } } },
     ],
   });
+});
+
+test("a status with a group, course or teacher applies to that same membership", () => {
+  const w = studentWhere(parseStudentFilters({ group: "5", status: "trial" }, { canSeeBalances: true }), {});
+  assert.deepEqual(w, { AND: [{}, { groups: { some: { leftAt: null, groupId: 5, status: "TRIAL" } } }] });
+  const t = studentWhere(parseStudentFilters({ teacher: "8", course: "1", status: "frozen" }, { canSeeBalances: true }), {});
+  assert.deepEqual(t, { AND: [{}, { groups: { some: { leftAt: null, group: { courseId: 1 }, status: "FROZEN" } } }, { groups: { some: { leftAt: null, group: { OR: [{ teacherId: 8 }, { assistantId: 8 }] }, status: "FROZEN" } } }] });
 });

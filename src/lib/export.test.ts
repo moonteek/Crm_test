@@ -23,3 +23,8 @@ test("dates as DD.MM.YYYY", () => {
   assert.equal(fmtDate(new Date("2026-10-11T00:00:00Z")), "11.10.2026");
   assert.equal(fmtDate(null), "");
 });
+
+test("tsv: text that a sheet would turn into a formula or a number stays text", () => {
+  const t2 = { title: "x", columns: ["A"], rows: [["+998 90 123 45 67"], ["=IMAGE(\"https://x\")"], ["-5 so'm"], ["@x"], [1500]] as (string | number | null)[][] };
+  assert.equal(toTsv(t2), "A\n'+998 90 123 45 67\n'=IMAGE(\"https://x\")\n'-5 so'm\n'@x\n1500");
+});

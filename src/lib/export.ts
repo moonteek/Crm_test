@@ -18,8 +18,12 @@ export function fmtDate(d: Date | null) {
 
 const clean = (c: Cell) => (c === null ? "" : String(c).replace(/[\t\r\n]+/g, " "));
 
+// A pasted cell is read like typed input: "+998 90…" would be a broken formula and "=…" a live one.
+// A leading apostrophe keeps such text as text (the sheet doesn't show it).
+const sheetText = (c: Cell) => (typeof c === "string" && /^[=+\-@]/.test(c) ? `'${clean(c)}` : clean(c));
+
 export function toTsv(t: Table) {
-  return [t.columns, ...t.rows].map((r) => r.map(clean).join("\t")).join("\n");
+  return [t.columns, ...t.rows].map((r) => r.map(sheetText).join("\t")).join("\n");
 }
 
 export async function toXlsx(t: Table): Promise<Buffer> {

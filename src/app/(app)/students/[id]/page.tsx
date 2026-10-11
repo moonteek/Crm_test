@@ -78,7 +78,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
   const tab: Tab = tabs.some((t) => t.key === asked) ? (asked as Tab) : "groups";
   const pinned = student.notes.find((n) => n.pinned);
   const allTags = allow.manage ? await db.tag.findMany({ orderBy: { name: "asc" } }) : [];
-  const history = tab === "history" ? await loadHistory(student.id, student.payments) : [];
+  const history = tab === "history" ? await loadHistory(student.id, student.payments, allow.payments) : [];
 
   return (
     <>
@@ -357,7 +357,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
 }
 
 /** The student's timeline: group events and payments from their own tables, everything else from the activity log. */
-async function loadHistory(studentId: number, payments: { date: Date; amount: number; method: string; group: { name: string } | null }[]) {
+async function loadHistory(studentId: number, payments: { date: Date; amount: number; method: string; group: { name: string } | null }[], showMoney: boolean) {
   const [events, logs] = await Promise.all([
     db.membershipEvent.findMany({
       where: { groupStudent: { studentId } },
@@ -369,7 +369,7 @@ async function loadHistory(studentId: number, payments: { date: Date; amount: nu
     events: events.map((e) => ({ date: e.date, createdAt: e.createdAt, type: e.type, group: e.groupStudent.group.name, user: e.user?.name ?? null, reason: e.reason?.name ?? null })),
     payments: payments.map((p) => ({ date: p.date, amount: p.amount, method: p.method, group: p.group?.name ?? null })),
     logs: logs.map((l) => ({ createdAt: l.createdAt, action: l.action, summary: l.summary, user: l.user?.name ?? null })),
-  });
+  }, { showMoney });
 }
 
 function Row({ k, children }: { k: string; children: React.ReactNode }) {

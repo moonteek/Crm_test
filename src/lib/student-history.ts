@@ -15,7 +15,12 @@ type Input = {
 // log actions already shown from the events / payments tables
 const SHOWN_ELSEWHERE = new Set(["payment.create", "student.join", "student.transfer", ...Object.keys(EVENT_LABEL).map((t) => `student.${t.toLowerCase()}`)]);
 
-export function studentHistory({ events, payments, logs }: Input): HistoryItem[] {
+/** `showMoney: false` (no payments access) leaves out payments and payment logs. */
+export function studentHistory({ events, payments, logs }: Input, opts: { showMoney?: boolean } = {}): HistoryItem[] {
+  if (opts.showMoney === false) {
+    payments = [];
+    logs = logs.filter((l) => !l.action.startsWith("payment."));
+  }
   const items: HistoryItem[] = [
     ...events.map((e) => ({
       at: e.createdAt,

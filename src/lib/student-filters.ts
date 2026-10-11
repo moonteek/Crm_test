@@ -52,13 +52,15 @@ const MEMBERSHIP_STATUS: Partial<Record<StudentStatus, string>> = { active: "ACT
 /** The database part of the filters ("Qarzdor" needs balances and is applied after loading). */
 export function studentWhere(f: StudentFilters, scope: Prisma.StudentWhereInput): Prisma.StudentWhereInput {
   const and: Prisma.StudentWhereInput[] = [scope];
-  if (f.q) and.push({ OR: [{ name: { contains: f.q } }, { phone: { contains: f.q } }, { phone2: { contains: f.q } }, { parentPhone: { contains: f.q } }] });
-  if (f.groupId) and.push({ groups: { some: { leftAt: null, groupId: f.groupId } } });
-  if (f.courseId) and.push({ groups: { some: { leftAt: null, group: { courseId: f.courseId } } } });
-  if (f.teacherId) and.push({ groups: { some: { leftAt: null, group: { OR: [{ teacherId: f.teacherId }, { assistantId: f.teacherId }] } } } });
-  if (f.tagId) and.push({ tags: { some: { tagId: f.tagId } } });
   const membership = MEMBERSHIP_STATUS[f.status];
-  if (membership) and.push({ groups: { some: { status: membership } } });
+  // with a group / course / teacher chosen, the status belongs to that same membership ("trial in group 5")
+  const status = membership ? { status: membership } : {};
+  if (f.q) and.push({ OR: [{ name: { contains: f.q } }, { phone: { contains: f.q } }, { phone2: { contains: f.q } }, { parentPhone: { contains: f.q } }] });
+  if (f.groupId) and.push({ groups: { some: { leftAt: null, groupId: f.groupId, ...status } } });
+  if (f.courseId) and.push({ groups: { some: { leftAt: null, group: { courseId: f.courseId }, ...status } } });
+  if (f.teacherId) and.push({ groups: { some: { leftAt: null, group: { OR: [{ teacherId: f.teacherId }, { assistantId: f.teacherId }] }, ...status } } });
+  if (f.tagId) and.push({ tags: { some: { tagId: f.tagId } } });
+  if (membership && !f.groupId && !f.courseId && !f.teacherId) and.push({ groups: { some: status } });
   if (f.status === "none") and.push({ groups: { none: { leftAt: null } } });
   return { AND: and };
 }
