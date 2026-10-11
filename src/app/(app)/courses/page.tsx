@@ -6,17 +6,21 @@ import { money } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { Empty, Field, PageHeader, SubmitRow } from "@/components/ui";
 import { createCourse, updateCourse } from "../actions";
+import { SubjectEditor } from "@/components/SubjectEditor";
 
-type C = { name: string; price: number; durationMon: number; lessonMin: number; description: string | null };
+type C = { name: string; price: number; durationMon: number; lessonMin: number; description: string | null; passPercent: number; subjects?: unknown[] };
 
 function CourseFields({ c }: { c?: C }) {
   return (
     <>
       <Field label="Kurs nomi"><input name="name" className="input" required defaultValue={c?.name} placeholder="Frontend dasturlash" /></Field>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Field label="Oylik narx"><input name="price" type="number" className="input" required defaultValue={c?.price} /></Field>
-        <Field label="Davomiyligi (oy)"><input name="durationMon" type="number" className="input" defaultValue={c?.durationMon ?? 6} /></Field>
+        <Field label="Davomiyligi (oy)">
+          <input name="durationMon" type="number" className="input" defaultValue={c?.durationMon ?? 6} readOnly={!!c?.subjects?.length} title={c?.subjects?.length ? "Fanlar oylari yig'indisi" : undefined} />
+        </Field>
         <Field label="Dars (daqiqa)"><input name="lessonMin" type="number" className="input" defaultValue={c?.lessonMin ?? 90} /></Field>
+        <Field label="O'tish bali, %"><input name="passPercent" type="number" min={1} max={100} className="input" defaultValue={c?.passPercent ?? 60} /></Field>
       </div>
       <Field label="Tavsif"><textarea name="description" className="input" rows={3} defaultValue={c?.description ?? ""} /></Field>
     </>
@@ -27,7 +31,7 @@ export default async function CoursesPage() {
   const user = await requirePage("courses.view");
   const manage = can(user, "courses.manage");
   const courses = await db.course.findMany({
-    include: { groups: { where: { status: "ACTIVE" }, include: { _count: { select: { students: { where: { leftAt: null } } } } } } },
+    include: { subjects: { orderBy: { position: "asc" } }, groups: { where: { status: "ACTIVE" }, include: { _count: { select: { students: { where: { leftAt: null } } } } } } },
     orderBy: { name: "asc" },
   });
 
@@ -47,7 +51,16 @@ export default async function CoursesPage() {
                 <form action={updateCourse.bind(null, c.id)} className="space-y-3"><CourseFields c={c} /><SubmitRow /></form>
               </Modal>}
             </div>
-            <p className="mt-1 flex-1 text-sm text-muted">{c.description}</p>
+            <p className="mt-1 text-sm text-muted">{c.description}</p>
+            <div className="mt-3 flex flex-1 flex-wrap content-start items-center gap-1.5">
+              {c.subjects.map((s, i) => (
+                <span key={s.id} className="badge border border-line-strong text-ink">
+                  <span className="font-mono text-[10px] text-faint">{i + 1}</span> {s.name} · {s.months} oy
+                </span>
+              ))}
+              {c.subjects.length === 0 && <span className="text-xs text-faint">Fanlar kiritilmagan</span>}
+              {manage && <SubjectEditor courseId={c.id} courseName={c.name} subjects={c.subjects} />}
+            </div>
             <p className="mt-4 text-xl font-semibold tracking-tight text-accent-ink">{money(c.price)}<span className="text-sm font-normal text-muted"> / oy</span></p>
             <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3 text-xs text-muted">
               <span className="badge bg-ink/5">{c.durationMon} oy</span>

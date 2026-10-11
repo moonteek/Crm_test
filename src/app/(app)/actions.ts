@@ -416,6 +416,7 @@ const courseSchema = z.object({
   durationMon: v.int("Davomiylik (oy)", { min: 1, max: 120, fallback: 6 }),
   lessonMin: v.int("Dars davomiyligi (daqiqa)", { min: 10, max: 600, fallback: 90 }),
   description: v.optText(2000),
+  passPercent: v.int("O'tish bali", { min: 1, max: 100, fallback: 60 }),
 });
 
 export async function createCourse(f: FormData) {
@@ -917,4 +918,67 @@ export async function toggleReason(id: number) {
   await db.reason.update({ where: { id }, data: { active: !r.active } });
   await logAction(user, "reason.toggle", `Sabab ${r.active ? "yashirildi" : "qayta yoqildi"}: ${r.name}`);
   revalidatePath("/settings/reasons");
+}
+
+// ---------- Course subjects (curriculum) ----------
+const subjectSchema = z.object({ name: v.text("Fan nomi", 60), months: v.int("Oylar soni", { min: 1, max: 24 }) });
+
+/** Keeps the course length equal to its subjects' months. */
+async function syncDuration(courseId: number) {
+  const subjects = await db.subject.findMany({ where: { courseId } });
+  if (subjects.length) await db.course.update({ where: { id: courseId }, data: { durationMon: subjects.reduce((s, x) => s + x.months, 0) } });
+}
+
+/** Level exams are numbered by course month, so once any are scored the order and lengths can't change. */
+async function assertStructureFree(courseId: number) {
+  const scored = await db.exam.findFirst({ where: { level: { not: null }, group: { courseId } }, include: { group: true } });
+  if (scored) throw new Error(`"${scored.group.name}" guruhida daraja imtihoni baholangan — fanlar tartibi va oylarini o'zgartirib bo'lmaydi (nomini o'zgartirish mumkin)`);
+}
+
+/** One action for the subjects dialog: add, update, move up/down, delete. */
+export async function saveSubject(_: MemberActionState, f: FormData): Promise<MemberActionState> {
+  try {
+    const user = await requirePermission("courses.manage");
+    const op = check(z.enum(["add", "update", "up", "down", "delete"]), f.get("op"));
+    if (op === "add") {
+      const courseId = check(v.id(), f.get("courseId"));
+      await assertStructureFree(courseId);
+      const d = parseForm(subjectSchema, f);
+      const last = await db.subject.findFirst({ where: { courseId }, orderBy: { position: "desc" } });
+      await db.subject.create({ data: { ...d, courseId, position: (last?.position ?? 0) + 1 } });
+      await syncDuration(courseId);
+      await logAction(user, "course.subject", `Fan qo'shildi: ${d.name} (${d.months} oy)`);
+    } else {
+      const id = check(v.id(), f.get("id"));
+      const s = await db.subject.findUniqueOrThrow({ where: { id }, include: { startingGroups: true } });
+      if (op === "update") {
+        const d = parseForm(subjectSchema, f);
+        if (d.months !== s.months) await assertStructureFree(s.courseId);
+        await db.subject.update({ where: { id }, data: d });
+        await logAction(user, "course.subject", `Fan o'zgartirildi: ${s.name} → ${d.name} (${d.months} oy)`);
+      } else if (op === "delete") {
+        await assertStructureFree(s.courseId);
+        if (s.startingGroups.length) throw new Error(`"${s.startingGroups[0].name}" guruhi shu fandan boshlangan — avval guruhning boshlanish fanini o'zgartiring`);
+        await db.subject.delete({ where: { id } });
+        await logAction(user, "course.subject", `Fan o'chirildi: ${s.name}`);
+      } else {
+        await assertStructureFree(s.courseId);
+        const neighbour = await db.subject.findFirst({
+          where: { courseId: s.courseId, position: op === "up" ? { lt: s.position } : { gt: s.position } },
+          orderBy: { position: op === "up" ? "desc" : "asc" },
+        });
+        if (neighbour) {
+          await db.$transaction([
+            db.subject.update({ where: { id: s.id }, data: { position: neighbour.position } }),
+            db.subject.update({ where: { id: neighbour.id }, data: { position: s.position } }),
+          ]);
+        }
+      }
+      await syncDuration(s.courseId);
+    }
+    revalidatePath("/courses");
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
