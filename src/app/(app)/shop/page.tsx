@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, PackagePlus, Pencil, Plus, Trash2, ClipboardCheck } from "lucide-react";
-import { db } from "@/lib/db";
+import { loadShop } from "@/lib/lists/shop";
+import { ExportButtons } from "@/components/ExportButtons";
 import { requirePage } from "@/lib/auth";
 import { can } from "@/lib/access";
 import { date, MONTHS, PAYMENT_METHODS, PRODUCT_CATEGORIES } from "@/lib/format";
@@ -44,15 +45,7 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
   const sell = can(user, "shop.sell");
   const manage = can(user, "shop.manage");
   const { tab = "sell", m } = await searchParams;
-  const month = m && /^\d{4}-\d{2}$/.test(m) ? m : currentMonth();
-  const { from, to } = monthBounds(month);
-  const [y, mm] = month.split("-").map(Number);
-
-  const [products, sales, students] = await Promise.all([
-    db.product.findMany({ orderBy: [{ active: "desc" }, { name: "asc" }] }),
-    db.sale.findMany({ where: { date: { gte: from, lt: to } }, include: { items: { include: { product: true } }, student: true, user: true }, orderBy: { date: "desc" } }),
-    sell ? db.student.findMany({ where: { groups: { some: { leftAt: null } } }, orderBy: { name: "asc" }, select: { id: true, name: true, phone: true } }) : [],
-  ]);
+  const { month, y, mm, products, sales, students } = await loadShop(user, { m, tab }, { students: sell });
   const revenue = sales.reduce((s, x) => s + x.total, 0);
   const cogs = sales.flatMap((x) => x.items).reduce((s, i) => s + i.cost * i.qty, 0);
   const units = sales.flatMap((x) => x.items).reduce((s, i) => s + i.qty, 0);
@@ -79,6 +72,7 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
   return (
     <>
       <PageHeader title="Do'kon" subtitle="Kitoblar, merch va boshqa mahsulotlar">
+        {active !== "sell" && <ExportButtons href="/shop/export" extra={{ tab: active, m: month }} />}
         <div className="flex items-center gap-2">
           <Link href={`/shop?tab=${active}&m=${shiftMonth(month, -1)}`} className="btn-secondary px-2"><ChevronLeft className="h-4 w-4" /></Link>
           <span className="w-32 text-center text-sm font-medium tabular-nums">{MONTHS[mm - 1]} {y}</span>

@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
-import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
 import { can } from "@/lib/access";
 import { date, isoDate, money, MONTHS } from "@/lib/format";
-import { currentMonth, lessonBased, SALARY_TYPES, salariesForMonth } from "@/lib/salary";
+import { currentMonth, lessonBased, SALARY_TYPES } from "@/lib/salary";
+import { loadSalaries } from "@/lib/lists/salaries";
+import { ExportButtons } from "@/components/ExportButtons";
 import { Modal } from "@/components/Modal";
 import { Empty, Field, PageHeader, SubmitRow } from "@/components/ui";
 import { deleteSalaryPayment, paySalary, updateSalaryRule } from "../actions";
@@ -17,19 +18,13 @@ function shift(month: string, delta: number) {
 export default async function SalariesPage({ searchParams }: { searchParams: Promise<{ m?: string }> }) {
   const user = await requirePage("salaries.view");
   const manage = can(user, "salaries.manage");
-  const raw = (await searchParams).m;
-  const month = raw && /^\d{4}-\d{2}$/.test(raw) ? raw : currentMonth();
-  const [y, mm] = month.split("-").map(Number);
-
-  const [rows, payouts] = await Promise.all([
-    salariesForMonth(month, { allActive: true }),
-    db.salaryPayment.findMany({ where: { month }, include: { user: true }, orderBy: { date: "desc" } }),
-  ]);
+  const { month, y, mm, rows, payouts } = await loadSalaries(user, await searchParams);
   const total = (k: "accrued" | "paid" | "remaining") => rows.reduce((s, r) => s + r[k], 0);
 
   return (
     <>
       <PageHeader title="Ish haqi" subtitle="Hisoblangan, to'langan va qolgan ish haqi">
+        <ExportButtons href="/salaries/export" />
         <div className="flex items-center gap-2">
           <Link href={`/salaries?m=${shift(month, -1)}`} className="btn-secondary px-2"><ChevronLeft className="h-4 w-4" /></Link>
           <span className="w-32 text-center text-sm font-medium tabular-nums">{MONTHS[mm - 1]} {y}</span>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
-import { db } from "@/lib/db";
+import { loadFinance } from "@/lib/lists/finance";
+import { ExportButtons } from "@/components/ExportButtons";
 import { requirePage } from "@/lib/auth";
 import { can } from "@/lib/access";
 import { date, EXPENSE_CATEGORIES, isoDate, money, MONTHS } from "@/lib/format";
@@ -11,15 +12,7 @@ import { createExpense, deleteExpense } from "../actions";
 export default async function FinancePage({ searchParams }: { searchParams: Promise<{ y?: string }> }) {
   const user = await requirePage("finance.view");
   const manage = can(user, "finance.manage");
-  const year = Number((await searchParams).y) || new Date().getFullYear();
-  const from = new Date(year, 0, 1);
-  const to = new Date(year + 1, 0, 1);
-
-  const [tuition, shop, expenses] = await Promise.all([
-    db.payment.findMany({ where: { date: { gte: from, lt: to } }, select: { amount: true, date: true } }),
-    db.sale.findMany({ where: { date: { gte: from, lt: to } }, select: { total: true, date: true } }),
-    db.expense.findMany({ where: { date: { gte: from, lt: to } }, include: { salaryPayment: true }, orderBy: { date: "desc" } }),
-  ]);
+  const { year, tuition, shop, expenses } = await loadFinance(user, await searchParams);
 
   // income = tuition payments + shop sales
   const payments = [...tuition, ...shop.map((s) => ({ amount: s.total, date: s.date }))];
@@ -35,6 +28,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
   return (
     <>
       <PageHeader title="Moliya" subtitle="Tushum, xarajat va foyda">
+        <ExportButtons href="/finance/export" />
         <div className="flex items-center gap-2">
           <Link href={`/finance?y=${year - 1}`} className="btn-secondary px-2"><ChevronLeft className="h-4 w-4" /></Link>
           <span className="w-16 text-center font-mono font-medium">{year}</span>
