@@ -21,11 +21,16 @@ import { toMemberData, toMemberGroup } from "@/components/members/types";
 import { TagChip } from "@/components/students/TagChip";
 import { NotesPanel } from "@/components/students/NotesPanel";
 import { HistoryList } from "@/components/students/HistoryList";
+import { DiscountDialog } from "@/components/students/DiscountDialog";
+import { DiscountList } from "@/components/students/DiscountList";
+import { PER_LESSON_FROM } from "@/lib/billing";
+import { centreToday } from "@/lib/schedule";
 import { addStudentToGroup, deletePayment, deleteStudent, setStudentTags, updateStudent } from "../../actions";
 
 const TABS = [
   { key: "groups", label: "Guruhlar" },
   { key: "payments", label: "To'lovlar" },
+  { key: "discounts", label: "Chegirma" },
   { key: "notes", label: "Eslatma" },
   { key: "exams", label: "Imtihonlar" },
   { key: "history", label: "Tarix" },
@@ -42,7 +47,14 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
       // the passport never leaves the server for staff who cannot edit students
       omit: { passport: !can(user, "students.manage") },
       include: {
-        groups: { include: { events: { ...membershipInclude.events, include: { reason: true } }, group: { include: { course: true, teacher: true, prices: true } } }, orderBy: { joinedAt: "desc" } },
+        groups: {
+          include: {
+            events: { ...membershipInclude.events, include: { reason: true } },
+            group: { include: { course: true, teacher: true, prices: true } },
+            discounts: { include: { user: { select: { name: true } } }, orderBy: { from: "desc" } },
+          },
+          orderBy: { joinedAt: "desc" },
+        },
         payments: { include: { group: true }, orderBy: { date: "desc" } },
         attendance: true,
         grades: { select: { score: true } },
@@ -73,8 +85,10 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
     deletePayment: can(user, "payments.delete"),
     balance: canSeeBalances(user),
     shop: can(user, "shop.view"),
+    discount: can(user, "students.discount"),
   };
-  const tabs = TABS.filter((t) => t.key !== "payments" || allow.payments);
+  // money tabs only for staff who see payments
+  const tabs = TABS.filter((t) => (t.key !== "payments" && t.key !== "discounts") || allow.payments);
   const tab: Tab = tabs.some((t) => t.key === asked) ? (asked as Tab) : "groups";
   const pinned = student.notes.find((n) => n.pinned);
   const allTags = allow.manage ? await db.tag.findMany({ orderBy: { name: "asc" } }) : [];
@@ -225,7 +239,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
                         <p className="truncate text-sm text-muted">{gs.group.course.name} · {money(priceNow(gs.group))} / oy{upcomingPrice(gs.group.prices, new Date()) && <span className="label-mono ml-2">{date(upcomingPrice(gs.group.prices, new Date())!.from)} dan: {money(upcomingPrice(gs.group.prices, new Date())!.price)}</span>}</p>
                       </div>
                       <MemberMenu
-                        member={toMemberData(gs, { id: student.id, name: student.name })}
+                        member={toMemberData(gs, { id: student.id, name: student.name }, { money: allow.balance })}
                         reasons={reasons}
                         groups={allGroups.map((g) => toMemberGroup(g))}
                         balance={allow.balance ? b : null}
@@ -321,6 +335,27 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
             </div>
           </div>}
 
+          {tab === "discounts" && allow.payments && (
+            <div className="card">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                <div>
+                  <h2 className="font-semibold">Chegirmalar</h2>
+                  <p className="text-sm text-muted">Har oy to&apos;lovdan ayiriladi; o&apos;qituvchi ulushiga ta&apos;sir qilmaydi</p>
+                </div>
+                {allow.discount && (
+                  <DiscountDialog
+                    groups={student.groups.filter((g) => !g.leftAt).map((g) => ({ id: g.id, name: g.group.name }))}
+                    firstMonth={firstDiscountMonth()}
+                  />
+                )}
+              </div>
+              <DiscountList
+                rows={student.groups.flatMap((g) => g.discounts.map((d) => ({ ...d, group: g.group.name }))).sort((a, b) => b.from.getTime() - a.from.getTime())}
+                canManage={allow.discount}
+              />
+            </div>
+          )}
+
           {tab === "notes" && (
             <div className="card">
               <NotesPanel studentId={student.id} notes={student.notes} canWrite={allow.manage} me={{ id: user.id, isAdmin: user.isAdmin }} />
@@ -379,4 +414,12 @@ function Row({ k, children }: { k: string; children: React.ReactNode }) {
       <dd className="text-right font-medium">{children}</dd>
     </div>
   );
+}
+
+/** The earliest month a discount may start: this month, but never before per-lesson billing (YYYY-MM). */
+function firstDiscountMonth() {
+  const t = centreToday();
+  const now = t.year * 12 + (t.month - 1);
+  const first = Math.max(now, PER_LESSON_FROM.getUTCFullYear() * 12 + PER_LESSON_FROM.getUTCMonth());
+  return `${Math.floor(first / 12)}-${String((first % 12) + 1).padStart(2, "0")}`;
 }

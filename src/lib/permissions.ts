@@ -37,6 +37,7 @@ export const PERMISSION_GROUPS: { title: string; items: { key: string; label: st
       { key: "students.manage", label: "O'quvchi qo'shish, tahrirlash, guruhga qo'shish" },
       { key: "students.delete", label: "O'quvchini o'chirish" },
       { key: "students.tags", label: "Teglarni boshqarish" },
+      { key: "students.discount", label: "Chegirma berish" },
     ],
   },
   {
@@ -108,7 +109,7 @@ export const DEFAULT_ROLES: { name: string; isSystem?: boolean; permissions: str
   {
     name: "Menejer",
     permissions: [
-      "dashboard.view", "leads.view", "leads.manage", "students.view", "students.manage", "students.tags",
+      "dashboard.view", "leads.view", "leads.manage", "students.view", "students.manage", "students.tags", "students.discount",
       "groups.view", "groups.all", "groups.manage", "attendance.mark", "grades.manage",
       "payments.view", "payments.create", "debtors.view", "sales.view", "shop.view", "shop.sell",
       "teachers.view", "courses.view", "rooms.manage", "mcp.use",

@@ -46,6 +46,7 @@ model User {
   teachingHistory GroupTeacher[] @relation("TeachingHistory")
   slots     TeacherSlot[]
   studentNotes StudentNote[]
+  discounts    Discount[]
 }
 
 // Personal access tokens used by MCP clients. Only a SHA-256 hash is stored.
@@ -197,6 +198,7 @@ model GroupStudent {
   events    MembershipEvent[]
 
   @@unique([groupId, studentId])
+  discounts Discount[]
 }
 
 /// One step in a student's life in a group; billing replays these (src/lib/billing.ts).
@@ -469,4 +471,21 @@ model StudentNote {
   createdAt DateTime @default(now())
 
   @@index([studentId])
+}
+
+// "Chegirma": so'm off each month of [from, to] (UTC 1sts, inclusive) for one student in one group.
+// Lowers the student's charge only; teacher pay keeps the full price (src/lib/billing.ts lessonValues).
+model Discount {
+  id             Int          @id @default(autoincrement())
+  groupStudentId Int
+  groupStudent   GroupStudent @relation(fields: [groupStudentId], references: [id], onDelete: Cascade)
+  amount         Int
+  from           DateTime
+  to             DateTime
+  reason         String?
+  userId         Int?
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt      DateTime     @default(now())
+
+  @@index([groupStudentId])
 }

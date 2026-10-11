@@ -28,9 +28,11 @@ export type BillableMembership = {
   /** used only when the membership has no events yet (database not migrated) */
   joinedAt?: Date;
   leftAt?: Date | null;
+  /** so'm off each month of [from, to] (UTC 1sts, inclusive); lowers the charge, never lessonValues */
+  discounts?: { from: Date; to: Date; amount: number }[];
 };
 
-export type ChargeLine = { year: number; month: number; lessons: number; billable: number; amount: number; legacy: boolean };
+export type ChargeLine = { year: number; month: number; lessons: number; billable: number; amount: number; legacy: boolean; discount: number };
 
 type Ev = { type: EventType; date: Date; migrated?: boolean };
 
@@ -84,7 +86,16 @@ function enrolledDuringMonth(events: Ev[], y: number, m: number) {
   return enrolled;
 }
 
-function lineFor(m: BillableMembership, events: Ev[], y: number, mo: number): ChargeLine & { days: Date[] } {
+/** The discount (so'm off the monthly price) for one month; discounts of a membership never overlap. */
+export function discountIn(discounts: { from: Date; to: Date; amount: number }[] | undefined, y: number, mo: number) {
+  const key = monthKey(y, mo);
+  return (discounts ?? [])
+    .filter((x) => monthKey(x.from.getUTCFullYear(), x.from.getUTCMonth()) <= key && key <= monthKey(x.to.getUTCFullYear(), x.to.getUTCMonth()))
+    .reduce((sum, x) => sum + x.amount, 0);
+}
+
+/** The month as charged: `full` is the undiscounted amount that teacher pay is built on. */
+function lineFor(m: BillableMembership, events: Ev[], y: number, mo: number): ChargeLine & { days: Date[]; full: number } {
   const price = priceAt(m.group.prices ?? [], groupPrice(m.group), y, mo);
   const lessons = lessonDates(m.group.days, y, mo);
   const first = Date.UTC(y, mo, 1);
@@ -92,11 +103,14 @@ function lineFor(m: BillableMembership, events: Ev[], y: number, mo: number): Ch
   const touchedInApp = events.some((e) => e.migrated === false && time(e.date) >= first && time(e.date) < next);
   if (monthKey(y, mo) < PER_LESSON_KEY && !touchedInApp) {
     const on = enrolledDuringMonth(events, y, mo);
-    return { year: y, month: mo, lessons: lessons.length, billable: on ? lessons.length : 0, amount: on ? price : 0, legacy: true, days: on ? lessons : [] };
+    // legacy months are never discounted (discounts start in the per-lesson era)
+    return { year: y, month: mo, lessons: lessons.length, billable: on ? lessons.length : 0, amount: on ? price : 0, legacy: true, days: on ? lessons : [], full: on ? price : 0, discount: 0 };
   }
   const days = lessons.filter((day) => billableOn(events, day));
-  const amount = lessons.length ? Math.round((price * days.length) / lessons.length) : 0;
-  return { year: y, month: mo, lessons: lessons.length, billable: days.length, amount, legacy: false, days };
+  const share = (monthly: number) => (lessons.length ? Math.round((Math.max(0, monthly) * days.length) / lessons.length) : 0);
+  const full = share(price);
+  const amount = share(price - discountIn(m.discounts, y, mo));
+  return { year: y, month: mo, lessons: lessons.length, billable: days.length, amount, legacy: false, days, full, discount: full - amount };
 }
 
 function months(events: Ev[], now: Date) {
@@ -118,7 +132,7 @@ export function chargeLines(m: BillableMembership, now = new Date()): ChargeLine
   return months(events, now)
     .map(([y, mo]) => lineFor(m, events, y, mo))
     .filter((l) => l.amount > 0 || l.billable > 0)
-    .map(({ days: _days, ...line }) => line);
+    .map(({ days: _days, full: _full, ...line }) => line);
 }
 
 export function totalCharges(memberships: BillableMembership[], now = new Date()) {
@@ -143,7 +157,8 @@ export function lessonValues(m: BillableMembership, year: number, month: number,
   if (monthKey(year, month) > nowKey) return [];
   const events = sorted(m);
   if (!events.length) return [];
-  const { days, amount } = lineFor(m, events, year, month);
+  // the undiscounted amount: a discount lowers what the student pays, never the teacher's share
+  const { days, full: amount } = lineFor(m, events, year, month);
   if (!days.length) return [];
   const base = Math.floor(amount / days.length);
   const extra = amount - base * days.length;
@@ -166,6 +181,6 @@ export function previewCharge(m: BillableMembership, extra: { type: EventType; d
   const events = [...sorted(m), { type: extra.type, date: extra.date, migrated: false }];
   const y = extra.date.getUTCFullYear();
   const mo = extra.date.getUTCMonth();
-  const { days, ...line } = lineFor(m, events, y, mo);
+  const { days, full: _full, ...line } = lineFor(m, events, y, mo);
   return { ...line, from: days[0] ?? null, to: days.at(-1) ?? null };
 }

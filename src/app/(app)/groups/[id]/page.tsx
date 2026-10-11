@@ -49,7 +49,7 @@ export default async function GroupPage({
       course: { include: { subjects: { orderBy: { position: "asc" } } } }, teacher: true, assistant: true, room: true, prices: true,
       students: {
         where: { leftAt: null },
-        include: { events: membershipInclude.events, student: { include: { payments: { select: { amount: true } }, groups: { include: membershipInclude } } } },
+        include: { events: membershipInclude.events, discounts: membershipInclude.discounts, student: { include: { payments: { select: { amount: true } }, groups: { include: membershipInclude } } } },
         orderBy: { student: { name: "asc" } },
       },
     },
@@ -229,7 +229,7 @@ export default async function GroupPage({
                             </p>
                           </div>
                           <MemberMenu
-                            member={toMemberData({ ...gs, group: thisGroup }, { id: student.id, name: student.name })}
+                            member={toMemberData({ ...gs, group: thisGroup }, { id: student.id, name: student.name }, { money: allow.balance })}
                             reasons={reasons}
                             groups={transferGroups.map((g) => toMemberGroup(g))}
                             balance={allow.balance ? b : null}

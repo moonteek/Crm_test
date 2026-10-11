@@ -17,10 +17,11 @@ import { nextMonthStart, schedulePrice } from "@/lib/prices-db";
 import { changeTeacher } from "@/lib/teachers-db";
 import { menuActions, systemLeaveDate, type EventType, type Status } from "@/lib/membership";
 import {
-  ACTIVITY_TYPES, isoDate, CALL_RESULTS, EXPENSE_CATEGORIES, GENDERS, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_SOURCES, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES, TAG_COLORS,
+  ACTIVITY_TYPES, isoDate, CALL_RESULTS, MONTHS, EXPENSE_CATEGORIES, GENDERS, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_SOURCES, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES, TAG_COLORS,
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
+import { canDelete, canEnd, discountProblem, lastMonth } from "@/lib/discounts";
 import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, fitsDay, groupClashes, needsClashCheck, teacherGrid, type DayType, type LessonLike } from "@/lib/availability";
 import { check, parseForm, v } from "@/lib/validation";
 import { phoneKey } from "@/lib/phone";
@@ -926,6 +927,63 @@ export async function toggleTag(id: number) {
   await db.tag.update({ where: { id }, data: { active: !t.active } });
   await logAction(user, "tag.manage", `Teg ${t.active ? "o'chirildi" : "yoqildi"}: ${t.name}`);
   revalidatePath("/settings/tags");
+}
+
+// ---------- Discounts (Chegirma) ----------
+const monthInput = (label: string) =>
+  z.preprocess((x) => (typeof x === "string" ? x.trim() : x), z.string().regex(/^\d{4}-\d{2}$/, `${label} noto'g'ri`))
+    .transform((s) => new Date(Date.UTC(Number(s.slice(0, 4)), Number(s.slice(5, 7)) - 1, 1)));
+const monthName = (d: Date) => `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+
+/** "Chegirma berish": so'm off each month of a range for one of the student's current groups. */
+export async function saveDiscount(_: MemberActionState, f: FormData): Promise<MemberActionState> {
+  try {
+    const user = await requirePermission("students.discount");
+    const d = parseForm(z.object({
+      groupStudentId: v.id("Guruh"),
+      amount: v.int("Chegirma summasi", { min: 0, max: 100_000_000 }),
+      from: monthInput("Boshlanish oyi"),
+      to: monthInput("Tugash oyi"),
+      reason: v.optText(120),
+    }), f);
+    const gs = await db.groupStudent.findUniqueOrThrow({ where: { id: d.groupStudentId }, include: { group: true, student: true, discounts: true } });
+    await assertStudentAccess(user, gs.studentId);
+    const problem = discountProblem({ ...d, current: gs.leftAt === null }, gs.discounts, new Date());
+    if (problem) return { error: problem };
+    await db.discount.create({ data: { groupStudentId: gs.id, amount: d.amount, from: d.from, to: d.to, reason: d.reason, userId: user.id } });
+    await logAction(user, "student.discount", `Chegirma: ${gs.group.name} — ${money(d.amount)}/oy, ${monthName(d.from)} – ${monthName(d.to)}${d.reason ? ` (${d.reason})` : ""}`, { studentId: gs.studentId });
+    revalidatePath(`/students/${gs.studentId}`);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+async function discountFor(id: number) {
+  const user = await requirePermission("students.discount");
+  const d = await db.discount.findUniqueOrThrow({ where: { id }, include: { groupStudent: { include: { group: true } } } });
+  await assertStudentAccess(user, d.groupStudent.studentId);
+  return { user, d };
+}
+
+/** Only while nothing of it falls in a past month. */
+export async function deleteDiscount(id: number) {
+  const { user, d } = await discountFor(id);
+  if (!canDelete(d, new Date())) throw new Error("Boshlangan chegirmani o'chirib bo'lmaydi — tugating");
+  await db.discount.delete({ where: { id } });
+  await logAction(user, "student.discount", `Chegirma o'chirildi: ${d.groupStudent.group.name} — ${money(d.amount)}/oy, ${monthName(d.from)} – ${monthName(d.to)}`, { studentId: d.groupStudent.studentId });
+  revalidatePath(`/students/${d.groupStudent.studentId}`);
+}
+
+/** A running discount stops from this month: last month becomes its final one; past months stay as charged. */
+export async function endDiscount(id: number) {
+  const { user, d } = await discountFor(id);
+  const today = new Date();
+  if (!canEnd(d, today)) throw new Error("Chegirma tugagan");
+  const to = lastMonth(today);
+  await db.discount.update({ where: { id }, data: { to } });
+  await logAction(user, "student.discount", `Chegirma tugatildi: ${d.groupStudent.group.name} — ${monthName(to)} oxirgi oy`, { studentId: d.groupStudent.studentId });
+  revalidatePath(`/students/${d.groupStudent.studentId}`);
 }
 
 // ---------- Teacher availability ----------
