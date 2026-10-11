@@ -11,7 +11,7 @@ test("tsv keeps columns: tabs/newlines inside cells become spaces", () => {
 
 test("xlsx: sheet name, bold header, numbers stay numbers, Uzbek text intact", async () => {
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(await toXlsx(t));
+  await wb.xlsx.load((await toXlsx(t)) as unknown as ExcelJS.Buffer);
   const ws = wb.worksheets[0];
   assert.equal(ws.name, "O'quvchilar");
   assert.equal(ws.getCell("A1").font?.bold, true);
