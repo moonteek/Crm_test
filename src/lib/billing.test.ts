@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { balance, billableLessonsIn, billedStudentCount, chargeChangeIf, chargeLines, previewCharge, totalCharges, type BillableMembership } from "./billing";
+import { balance, billableLessonsIn, billedStudentCount, chargeChangeIf, chargeLines, lessonValues, previewCharge, totalCharges, type BillableMembership } from "./billing";
 import type { EventType } from "./membership";
 
 // November 2026: EVEN (Tue/Thu/Sat) has 12 lessons — 3,5,7,10,12,14,17,19,21,24,26,28;
@@ -99,7 +99,7 @@ test("billableLessonsIn counts the lessons charged in one month", () => {
 
 test("previewCharge shows what a freeze would cost this month", () => {
   const p = previewCharge(even(["ACTIVATE", nov(1)]), { type: "FREEZE", date: nov(10) });
-  assert.deepEqual(p, { year: 2026, month: 10, lessons: 12, billable: 4, amount: 200_000, legacy: false, from: nov(3), to: nov(10) });
+  assert.deepEqual(p, { year: 2026, month: 10, lessons: 12, billable: 4, amount: 200_000, legacy: false, discount: 0, from: nov(3), to: nov(10) });
 });
 
 test("previewCharge for activating mid-month", () => {
@@ -183,4 +183,60 @@ test("price history: October keeps the old price, November uses the new one", ()
   m.group.prices = [{ price: 450_000, from: new Date(0) }, { price: 500_000, from: nov(1) }];
   const lines = chargeLines(m, NOW);
   assert.deepEqual(lines.map((l) => [l.month, l.amount]), [[9, 450_000], [10, 500_000]]);
+});
+
+// ---------- discounts (so'm off each month; never lowers lessonValues, which teacher pay is built on) ----------
+const off = (amount: number, from: Date, to: Date) => ({ from, to, amount });
+const withDiscount = (m: BillableMembership, ...ds: ReturnType<typeof off>[]): BillableMembership => ({ ...m, discounts: ds });
+const lineOf = (m: BillableMembership, y: number, mo: number, now = d(2027, 2, 15)) => chargeLines(m, now).find((l) => l.year === y && l.month === mo);
+
+test("discount: full month 600 000 − 200 000", () => {
+  const l = lineOf(withDiscount(even(["ACTIVATE", nov(1)]), off(200_000, nov(1), nov(1))), 2026, 10);
+  assert.deepEqual([l?.amount, l?.discount], [400_000, 200_000]);
+});
+
+test("discount: half the lessons pay half the discounted price", () => {
+  // ACTIVATE on the 7th lesson day (17 Nov): 6 of 12 lessons
+  assert.equal(lineOf(withDiscount(even(["ACTIVATE", nov(17)]), off(200_000, nov(1), nov(1))), 2026, 10)?.amount, 200_000);
+});
+
+test("discount bigger than the price: the month costs 0, never negative, still billed", () => {
+  const l = lineOf(withDiscount(even(["ACTIVATE", nov(1)]), off(700_000, nov(1), nov(1))), 2026, 10);
+  assert.deepEqual([l?.amount, l?.billable, l?.discount], [0, 12, 600_000]);
+});
+
+test("discount covers only its months; a Dec–Jan range covers both", () => {
+  const m = even(["ACTIVATE", nov(1)]);
+  const dec = withDiscount(m, off(100_000, d(2026, 12, 1), d(2026, 12, 1)));
+  assert.deepEqual([lineOf(dec, 2026, 10)?.discount, lineOf(dec, 2026, 11)?.discount, lineOf(dec, 2027, 0)?.discount], [0, 100_000, 0]);
+  const span = withDiscount(m, off(100_000, d(2026, 12, 1), d(2027, 1, 1)));
+  assert.deepEqual([lineOf(span, 2026, 11)?.discount, lineOf(span, 2027, 0)?.discount, lineOf(span, 2027, 1)?.discount], [100_000, 100_000, 0]);
+});
+
+test("a legacy (pre-November) month is never discounted", () => {
+  const m = withDiscount(even(["ACTIVATE", d(2026, 10, 15)]), off(200_000, d(2026, 10, 1), nov(1)));
+  const oct = lineOf(m, 2026, 9);
+  assert.deepEqual([oct?.amount, oct?.discount, oct?.legacy], [600_000, 0, true]);
+});
+
+test("teacher pay basis: lessonValues add up to the undiscounted charge", () => {
+  const m = withDiscount(even(["ACTIVATE", nov(1)]), off(200_000, nov(1), nov(1)));
+  assert.equal(lessonValues(m, 2026, 10, d(2026, 12, 1)).reduce((s, v) => s + v.value, 0), 600_000);
+});
+
+test("a fully discounted student still counts as taught", () => {
+  const m = withDiscount(even(["ACTIVATE", nov(1)]), off(600_000, nov(1), nov(1)));
+  assert.equal(billableLessonsIn(m, 2026, 10, d(2026, 12, 1)), 12);
+});
+
+test("leaving mid-range stops the discounted charges with the membership", () => {
+  const m = withDiscount(even(["ACTIVATE", nov(1)], ["LEAVE", nov(15)]), off(200_000, nov(1), d(2026, 12, 1)));
+  assert.equal(lineOf(m, 2026, 10)?.amount, 200_000); // 6 of 12 lessons × 400 000
+  assert.equal(lineOf(m, 2026, 11), undefined);
+});
+
+test("menu previews use the discounted price", () => {
+  const m = withDiscount(even(["ACTIVATE", nov(1)]), off(200_000, nov(1), nov(1)));
+  // leaving on 10 Nov keeps 4 of 12 lessons: 400 000 → 133 333
+  assert.equal(chargeChangeIf(m, { type: "LEAVE", date: nov(10) }, d(2026, 11, 30)), 133_333 - 400_000);
 });

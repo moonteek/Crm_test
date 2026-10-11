@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 export const membershipInclude = {
   events: { orderBy: [{ date: "asc" }, { id: "asc" }] },
   group: { include: { course: true, prices: true } },
+  discounts: { select: { from: true, to: true, amount: true } },
 } satisfies Prisma.GroupStudentInclude;
 
 export const studentBillingInclude = {
