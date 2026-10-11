@@ -21,7 +21,7 @@ import {
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
-import { busyMarkWarnings, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, fitsDay, groupClashes, needsClashCheck, teacherGrid, type DayType, type LessonLike } from "@/lib/availability";
+import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, fitsDay, groupClashes, needsClashCheck, teacherGrid, type DayType, type LessonLike } from "@/lib/availability";
 import { check, parseForm, v } from "@/lib/validation";
 import { phoneKey } from "@/lib/phone";
 
@@ -364,18 +364,7 @@ async function checkGroupTime(g: GroupTime): Promise<{ warnings: string[] }> {
   if (clashes.length) throw new Error(clashes.map(clashMessage).join("; "));
   const ids = [g.teacherId, g.assistantId].filter((x): x is number => x !== null);
   const slots = ids.length ? await db.teacherSlot.findMany({ where: { userId: { in: ids } } }) : [];
-  const range = (hours: number[]) => {
-    // consecutive hours merge into one range: 14, 15 → 14:00–16:00
-    const parts: string[] = [];
-    for (let i = 0; i < hours.length; i++) {
-      let j = i;
-      while (hours[j + 1] === hours[j] + 1) j++;
-      parts.push(`${String(hours[i]).padStart(2, "0")}:00–${String(hours[j] + 1).padStart(2, "0")}:00`);
-      i = j;
-    }
-    return parts.join(", ");
-  };
-  return { warnings: busyMarkWarnings(candidate, slots).map((w) => `Diqqat: ${names.users.get(w.userId)} ${range(w.hours)} ni band deb belgilagan`) };
+  return { warnings: busyMarkMessages(candidate, slots, names.users) };
 }
 
 async function insertGroup(f: FormData) {
@@ -384,7 +373,8 @@ async function insertGroup(f: FormData) {
   const { warnings } = await checkGroupTime(data);
   const group = await db.group.create({ data: { ...data, ...(await startPoint(data.courseId, data.startSubjectId, data.startLevel)), startDate: startDate ?? new Date() } });
   await logAction(user, "group.create", `Yangi guruh: ${group.name}`);
-  return `/groups/${group.id}${warnings.length ? `?warn=${encodeURIComponent(warnings.join("; "))}` : ""}`;
+  // only a flag in the link: the group page works the warning out itself, so a link can't show made-up text
+  return `/groups/${group.id}${warnings.length ? "?warn=1" : ""}`;
 }
 
 /** The new-group dialog: shows why a group can't be opened (time, clashes) instead of closing. */
@@ -489,7 +479,7 @@ const courseSchema = z.object({
   name: v.text("Kurs nomi", 120),
   price: v.int("Narx"),
   durationMon: v.int("Davomiylik (oy)", { min: 1, max: 600, fallback: 6 }),
-  lessonMin: v.int("Dars davomiyligi (daqiqa)", { min: 10, max: 600, fallback: 90 }),
+  lessonMin: v.int("Dars davomiyligi (daqiqa)", { min: 10, max: 600, fallback: 120 }),
   description: v.optText(2000),
   passPercent: v.int("O'tish bali", { min: 1, max: 100, fallback: 60 }),
 });

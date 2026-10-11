@@ -15,6 +15,7 @@ import { BalanceBadge, Empty, Field, SubmitRow } from "@/components/ui";
 import { CurriculumBadge, CurriculumBar } from "@/components/CurriculumBar";
 import { curriculumOn, levelExams, passed } from "@/lib/curriculum";
 import { LevelExamDialog } from "@/components/LevelExamDialog";
+import { busyMarkMessages } from "@/lib/availability";
 import { GradeCell } from "@/components/GradeCell";
 import { MemberMenu } from "@/components/members/MemberMenu";
 import { StatusBadge, StatusLegend } from "@/components/members/StatusBadge";
@@ -69,6 +70,15 @@ export default async function GroupPage({
   const thisGroup = { id: group.id, name: group.name, days: group.days, price: group.price, course: group.course, prices: group.prices };
   const upcoming = upcomingPrice(group.prices, now);
   const cur = curriculumOn(group, group.course.subjects, centreDay());
+  // just opened (?warn=1): hours its teacher / assistant marked as busy, worked out here — never text from the link
+  const people = [group.teacher, group.assistant].filter((p): p is NonNullable<typeof p> => p !== null);
+  const busyWarnings = warn && people.length
+    ? busyMarkMessages(
+        { ...group, minutes: group.course.lessonMin },
+        await db.teacherSlot.findMany({ where: { userId: { in: people.map((p) => p.id) } } }),
+        new Map(people.map((p) => [p.id, p.name])),
+      )
+    : [];
   // exam columns: every automatic level exam (scored or not yet) and the exams added by hand, by date
   const autoExams = levelExams(group, group.course.subjects);
   const autoLevels = new Set(autoExams.map((a) => a.level));
@@ -89,7 +99,7 @@ export default async function GroupPage({
   return (
     <>
       <Link href="/groups" className="label-mono hover:text-ink">← Guruhlar</Link>
-      {warn && <p className="mt-3 rounded-xl bg-warning-tint px-4 py-3 text-sm text-warning">Guruh ochildi. {warn}</p>}
+      {busyWarnings.length > 0 && <p className="mt-3 rounded-xl bg-warning-tint px-4 py-3 text-sm text-warning">Guruh ochildi. {busyWarnings.join("; ")}</p>}
       <div className="card mt-3 p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

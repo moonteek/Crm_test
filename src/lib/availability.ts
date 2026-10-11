@@ -92,3 +92,19 @@ type When = { days: string; time: string; teacherId: number | null; assistantId:
 /** An edit is clash-checked only if it changes when, who, where or how long (course) the lesson is. */
 export const needsClashCheck = (before: When, after: When) =>
   (["days", "time", "teacherId", "assistantId", "roomId", "courseId"] as const).some((k) => before[k] !== after[k]);
+
+const hh = (h: number) => `${String(h).padStart(2, "0")}:00`;
+
+/** busyMarkWarnings as readable lines; consecutive hours merge (14, 15 → 14:00–16:00). */
+export function busyMarkMessages(candidate: LessonLike, slots: (Slot & { userId: number })[], users: Map<number, string>) {
+  return busyMarkWarnings(candidate, slots).map(({ userId, hours }) => {
+    const parts: string[] = [];
+    for (let i = 0; i < hours.length; i++) {
+      let j = i;
+      while (hours[j + 1] === hours[j] + 1) j++;
+      parts.push(`${hh(hours[i])}–${hh(hours[j] + 1)}`);
+      i = j;
+    }
+    return `Diqqat: ${users.get(userId) ?? "O'qituvchi"} ${parts.join(", ")} ni band deb belgilagan`;
+  });
+}

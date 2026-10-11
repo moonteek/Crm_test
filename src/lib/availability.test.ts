@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { busyMarkWarnings, needsClashCheck, clashMessage, dayTypesOf, fitsDay, groupClashes, lessonCells, teacherGrid, type LessonLike } from "./availability";
+import { busyMarkMessages, busyMarkWarnings, needsClashCheck, clashMessage, dayTypesOf, fitsDay, groupClashes, lessonCells, teacherGrid, type LessonLike } from "./availability";
 
 const L = (o: Partial<LessonLike>): LessonLike => ({ id: 1, name: "FE-14", days: "ODD", time: "14:00", minutes: 120, teacherId: 1, assistantId: null, roomId: 1, ...o });
 const names = { users: new Map([[1, "Aziz Karimov"], [2, "Shoxrux Aliyev"]]), rooms: new Map([[1, "Kompyuter xonasi"], [2, "1-xona"]]) };
@@ -63,4 +63,10 @@ test("edits are checked only when the lesson's when/who/where changes", () => {
   assert.equal(needsClashCheck(g, { ...g, time: "15:00" }), true);
   assert.equal(needsClashCheck(g, { ...g, courseId: 2 }), true);
   assert.equal(needsClashCheck(g, { ...g, assistantId: 2 }), true);
+});
+
+test("busy-mark warning text merges consecutive hours", () => {
+  const slots = [14, 15, 18].map((hour) => ({ userId: 1, dayType: "ODD", hour, free: false }));
+  assert.deepEqual(busyMarkMessages(L({ id: 9, time: "14:00", minutes: 300 }), slots, names.users), ["Diqqat: Aziz Karimov 14:00–16:00, 18:00–19:00 ni band deb belgilagan"]);
+  assert.deepEqual(busyMarkMessages(L({ id: 9 }), [], names.users), []);
 });

@@ -19,7 +19,7 @@ function CourseFields({ c }: { c?: C }) {
         <Field label="Davomiyligi (oy)">
           <input name="durationMon" type="number" className="input" defaultValue={c?.durationMon ?? 6} readOnly={!!c?.subjects?.length} title={c?.subjects?.length ? "Fanlar oylari yig'indisi" : undefined} />
         </Field>
-        <Field label="Dars (daqiqa)"><input name="lessonMin" type="number" className="input" defaultValue={c?.lessonMin ?? 90} /></Field>
+        <Field label="Dars (daqiqa)"><input name="lessonMin" type="number" className="input" defaultValue={c?.lessonMin ?? 120} /></Field>
         <Field label="O'tish bali, %"><input name="passPercent" type="number" min={1} max={100} className="input" defaultValue={c?.passPercent ?? 60} /></Field>
       </div>
       <Field label="Tavsif"><textarea name="description" className="input" rows={3} defaultValue={c?.description ?? ""} /></Field>
