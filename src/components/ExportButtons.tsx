@@ -23,20 +23,16 @@ export function ExportButtons({ href, extra = {} }: { href: string; extra?: Reco
   };
 
   const copy = async () => {
+    const text = fetch(url("tsv")).then(async (r) => {
+      if (!r.ok) throw new Error(await r.text());
+      return r.text();
+    });
     try {
-      const text = fetch(url("tsv")).then(async (r) => {
-        if (!r.ok) throw new Error(await r.text());
-        return r.text();
-      });
-      // Safari only allows a clipboard write started inside the click, so hand it the pending text
-      if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
-        await navigator.clipboard.write([new ClipboardItem({ "text/plain": text.then((t) => new Blob([t], { type: "text/plain" })) })]);
-      } else {
-        await navigator.clipboard.writeText(await text);
-      }
+      await writeClipboard(text);
       show({ ok: true, text: "Nusxa olindi — Google Sheets'da Ctrl+V bosing" });
     } catch (e) {
-      show({ ok: false, text: (e as Error).message || "Nusxa olib bo'lmadi" });
+      const server = await text.then(() => null, (err: Error) => err.message);
+      show({ ok: false, text: server ?? "Brauzer nusxa olishga ruxsat bermadi — Excel faylini yuklab oling" });
     }
   };
 
@@ -55,4 +51,31 @@ export function ExportButtons({ href, extra = {} }: { href: string; extra?: Reco
       )}
     </div>
   );
+}
+
+/** Tries the ways browsers allow, newest first; throws if none works. */
+async function writeClipboard(text: Promise<string>) {
+  // Safari only allows a clipboard write started inside the click, so it gets the pending text
+  if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ "text/plain": text.then((t) => new Blob([t], { type: "text/plain" })) })]);
+      return;
+    } catch {}
+  }
+  const value = await text;
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return;
+    } catch {}
+  }
+  // older browsers and embedded views: copy from a hidden text box
+  const box = document.createElement("textarea");
+  box.value = value;
+  box.style.cssText = "position:fixed;opacity:0;pointer-events:none";
+  document.body.appendChild(box);
+  box.select();
+  const ok = document.execCommand("copy");
+  box.remove();
+  if (!ok) throw new Error("copy refused");
 }
