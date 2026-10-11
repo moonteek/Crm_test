@@ -45,6 +45,7 @@ model User {
   membershipEvents MembershipEvent[]
   teachingHistory GroupTeacher[] @relation("TeachingHistory")
   slots     TeacherSlot[]
+  studentNotes StudentNote[]
 }
 
 // Personal access tokens used by MCP clients. Only a SHA-256 hash is stored.
@@ -161,8 +162,19 @@ model Student {
   phone     String
   parentPhone String?
   birthDate DateTime?
-  note      String?
+  note      String? // old single "Izoh"; moved into StudentNote by `npm run db:notes-from-izoh`
+  // extra details ("+ qo'shimcha ma'lumot"), all optional
+  gender     String? // M | F
+  parentName String?
+  phone2     String?
+  school     String? // school and class, free text
+  address    String?
+  source     String? // one of LEAD_SOURCES
+  passport   String? // only staff with students.manage see it; never exported
   createdAt DateTime       @default(now())
+  tags      StudentTag[]
+  notes     StudentNote[]
+  auditLogs AuditLog[]
   groups    GroupStudent[]
   attendance Attendance[]
   payments  Payment[]
@@ -306,9 +318,13 @@ model AuditLog {
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   action    String // e.g. payment.create
   summary   String // human readable, Uzbek
+  // the student it was about, for the student's history tab
+  studentId Int?
+  student   Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+  @@index([studentId])
 }
 
 // status: NEW | CONTACTED | TRIAL | WON | LOST
@@ -421,4 +437,36 @@ model TeacherSlot {
   free    Boolean // true = bo'sh, false = band
 
   @@unique([userId, dayType, hour])
+}
+
+// Labels admins (students.tags) keep in Settings → Teglar; staff attach them to students.
+model Tag {
+  id       Int          @id @default(autoincrement())
+  name     String       @unique
+  color    String // one of TAG_COLORS
+  active   Boolean      @default(true)
+  students StudentTag[]
+}
+
+model StudentTag {
+  studentId Int
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tagId     Int
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([studentId, tagId])
+}
+
+// "Eslatma": notes about a student; at most one pinned (shown on the profile card).
+model StudentNote {
+  id        Int      @id @default(autoincrement())
+  studentId Int
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  text      String
+  pinned    Boolean  @default(false)
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([studentId])
 }

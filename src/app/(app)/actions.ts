@@ -131,12 +131,13 @@ export async function convertLead(id: number, f: FormData) {
       name: lead.name,
       phone: lead.phone,
       note: lead.note,
+      source: lead.source,
     },
   });
   if (groupId) await db.$transaction((tx) => startMembership(tx, { groupId, studentId: student.id, mode: "TRIAL", date: centreDay(), userId: user.id }));
   await db.lead.update({ where: { id }, data: { status: "WON", wonAt: new Date(), studentId: student.id, nextActionAt: null } });
   await db.leadActivity.create({ data: { leadId: id, userId: user.id, type: "STATUS", result: "WON" } });
-  await logAction(user, "lead.convert", `Lid o'quvchiga aylantirildi: ${lead.name}`);
+  await logAction(user, "lead.convert", `Lid o'quvchiga aylantirildi: ${lead.name}`, { studentId: student.id });
   revalidatePath("/leads");
   redirect(`/students/${student.id}`);
 }
@@ -215,14 +216,15 @@ export async function createStudent(f: FormData) {
   if (groupId) {
     await db.$transaction((tx) => startMembership(tx, { groupId, studentId: student.id, mode: mode as "TRIAL" | "ACTIVE", date: joinedAt ?? centreDay(), userId: user.id }));
   }
-  await logAction(user, "student.create", `Yangi o'quvchi: ${student.name}`);
+  await logAction(user, "student.create", `Yangi o'quvchi: ${student.name}`, { studentId: student.id });
   redirect(`/students/${student.id}`);
 }
 
 export async function updateStudent(id: number, f: FormData) {
   const user = await requirePermission("students.manage");
   await assertStudentAccess(user, id);
-  await db.student.update({ where: { id }, data: parseForm(studentSchema, f) });
+  const student = await db.student.update({ where: { id }, data: parseForm(studentSchema, f) });
+  await logAction(user, "student.update", `Ma'lumotlari tahrirlandi: ${student.name}`, { studentId: id });
   revalidatePath(`/students/${id}`);
 }
 
@@ -247,7 +249,7 @@ export async function addStudentToGroup(f: FormData) {
   const date = joinedAt ?? centreDay();
   await db.$transaction((tx) => startMembership(tx, { groupId, studentId, mode: mode as "TRIAL" | "ACTIVE", date, userId: user.id }));
   const [student, group] = await Promise.all([db.student.findUniqueOrThrow({ where: { id: studentId } }), db.group.findUniqueOrThrow({ where: { id: groupId } })]);
-  await logAction(user, "student.join", `${student.name} → ${group.name} (${MODES[mode as keyof typeof MODES].toLowerCase()}, ${isoDate(date)})`);
+  await logAction(user, "student.join", `${student.name} → ${group.name} (${MODES[mode as keyof typeof MODES].toLowerCase()}, ${isoDate(date)})`, { studentId });
   revalidatePath(`/students/${studentId}`);
   revalidatePath(`/groups/${groupId}`);
 }
@@ -276,7 +278,7 @@ export async function memberAction(_: MemberActionState, f: FormData): Promise<M
     const date = d.date ?? centreDay();
     await db.$transaction((tx) => recordEvent(tx, gs.id, { type: d.type as EventType, date, reasonId: d.reasonId, comment: d.comment, userId: user.id }));
     const reason = d.reasonId ? (await db.reason.findUnique({ where: { id: d.reasonId } }))?.name : null;
-    await logAction(user, `student.${d.type.toLowerCase()}`, `${gs.student.name} — ${gs.group.name}: ${MEMBER_ACTIONS[d.type as keyof typeof MEMBER_ACTIONS]} (${isoDate(date)}${reason ? `, ${reason}` : ""})`);
+    await logAction(user, `student.${d.type.toLowerCase()}`, `${gs.student.name} — ${gs.group.name}: ${MEMBER_ACTIONS[d.type as keyof typeof MEMBER_ACTIONS]} (${isoDate(date)}${reason ? `, ${reason}` : ""})`, { studentId: gs.studentId });
     revalidatePath(`/groups/${gs.groupId}`);
     revalidatePath(`/students/${gs.studentId}`);
     return { ok: true };
@@ -308,7 +310,7 @@ export async function transferStudent(_: MemberActionState, f: FormData): Promis
       await recordEvent(tx, gs.id, { type: "LEAVE", date, reasonId: d.reasonId, comment: `${to.name} guruhiga o'tkazildi`, userId: user.id });
       await startMembership(tx, { groupId: d.toGroupId, studentId: gs.studentId, mode: d.mode as "TRIAL" | "ACTIVE", date, userId: user.id });
     });
-    await logAction(user, "student.transfer", `${gs.student.name}: ${gs.group.name} → ${to.name} (${isoDate(date)})`);
+    await logAction(user, "student.transfer", `${gs.student.name}: ${gs.group.name} → ${to.name} (${isoDate(date)})`, { studentId: gs.studentId });
     revalidatePath(`/groups/${gs.groupId}`);
     revalidatePath(`/groups/${d.toGroupId}`);
     revalidatePath(`/students/${gs.studentId}`);
@@ -696,7 +698,7 @@ export async function createPayment(f: FormData) {
     include: { student: true },
     data: { studentId: d.studentId, groupId, amount: d.amount, method: d.method, note: d.note, date: d.date ?? new Date() },
   });
-  await logAction(user, "payment.create", `To'lov: ${payment.student.name} — ${money(payment.amount)}`);
+  await logAction(user, "payment.create", `To'lov: ${payment.student.name} — ${money(payment.amount)}`, { studentId: payment.studentId });
   revalidatePath(`/students/${d.studentId}`);
   revalidatePath("/payments");
 }
@@ -704,7 +706,7 @@ export async function createPayment(f: FormData) {
 export async function deletePayment(id: number) {
   const user = await requirePermission("payments.delete");
   const p = await db.payment.delete({ where: { id }, include: { student: true } });
-  await logAction(user, "payment.delete", `To'lov o'chirildi: ${p.student.name} — ${money(p.amount)} (${p.date.toISOString().slice(0, 10)})`);
+  await logAction(user, "payment.delete", `To'lov o'chirildi: ${p.student.name} — ${money(p.amount)} (${p.date.toISOString().slice(0, 10)})`, { studentId: p.studentId });
   revalidatePath(`/students/${p.studentId}`);
   revalidatePath("/payments");
 }
