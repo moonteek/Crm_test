@@ -82,3 +82,8 @@ export function busyMarkWarnings(candidate: LessonLike, slots: (Slot & { userId:
     return hours.length ? [{ userId, hours }] : [];
   });
 }
+
+type When = { days: string; time: string; teacherId: number | null; assistantId: number | null; roomId: number | null; courseId: number };
+/** An edit is clash-checked only if it changes when, who, where or how long (course) the lesson is. */
+export const needsClashCheck = (before: When, after: When) =>
+  (["days", "time", "teacherId", "assistantId", "roomId", "courseId"] as const).some((k) => before[k] !== after[k]);

@@ -23,7 +23,7 @@ import { addStudentToGroup, createExam, deleteExam, deleteGroup, toggleAttendanc
 
 export default async function GroupPage({
   params, searchParams,
-}: { params: Promise<{ id: string }>; searchParams: Promise<{ m?: string; tab?: string }> }) {
+}: { params: Promise<{ id: string }>; searchParams: Promise<{ m?: string; tab?: string; warn?: string }> }) {
   const user = await requirePage("groups.view");
   const allow = {
     edit: can(user, "groups.manage"),
@@ -35,7 +35,7 @@ export default async function GroupPage({
     pay: can(user, "payments.create"),
   };
   const id = Number((await params).id);
-  const { m, tab: tabParam } = await searchParams;
+  const { m, tab: tabParam, warn } = await searchParams;
   const tab = TABS.some((t) => t.key === tabParam) ? tabParam! : "attendance";
   const now = new Date();
   const [year, month] = m ? m.split("-").map(Number).map((v, i) => (i === 1 ? v - 1 : v)) : [now.getFullYear(), now.getMonth()];
@@ -89,6 +89,7 @@ export default async function GroupPage({
   return (
     <>
       <Link href="/groups" className="label-mono hover:text-ink">← Guruhlar</Link>
+      {warn && <p className="mt-3 rounded-xl bg-warning-tint px-4 py-3 text-sm text-warning">Guruh ochildi. {warn}</p>}
       <div className="card mt-3 p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

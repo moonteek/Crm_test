@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { busyMarkWarnings, clashMessage, dayTypesOf, fitsDay, groupClashes, lessonCells, teacherGrid, type LessonLike } from "./availability";
+import { busyMarkWarnings, needsClashCheck, clashMessage, dayTypesOf, fitsDay, groupClashes, lessonCells, teacherGrid, type LessonLike } from "./availability";
 
 const L = (o: Partial<LessonLike>): LessonLike => ({ id: 1, name: "FE-14", days: "ODD", time: "14:00", minutes: 120, teacherId: 1, assistantId: null, roomId: 1, ...o });
 const names = { users: new Map([[1, "Aziz Karimov"], [2, "Shoxrux Aliyev"]]), rooms: new Map([[1, "Kompyuter xonasi"], [2, "1-xona"]]) };
@@ -55,4 +55,12 @@ test("busy-mark warnings", () => {
   assert.deepEqual(busyMarkWarnings(cand, [{ userId: 1, dayType: "ODD", hour: 15, free: false }]), [{ userId: 1, hours: [15] }]);
   assert.deepEqual(busyMarkWarnings(cand, [{ userId: 1, dayType: "ODD", hour: 15, free: true }]), []);
   assert.deepEqual(busyMarkWarnings(cand, [{ userId: 1, dayType: "EVEN", hour: 15, free: false }]), []);
+});
+
+test("edits are checked only when the lesson's when/who/where changes", () => {
+  const g = { days: "ODD", time: "14:00", teacherId: 1, assistantId: null, roomId: 1, courseId: 1 };
+  assert.equal(needsClashCheck(g, { ...g }), false);
+  assert.equal(needsClashCheck(g, { ...g, time: "15:00" }), true);
+  assert.equal(needsClashCheck(g, { ...g, courseId: 2 }), true);
+  assert.equal(needsClashCheck(g, { ...g, assistantId: 2 }), true);
 });
