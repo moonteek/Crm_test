@@ -1,19 +1,20 @@
 import { GROUP_DAYS, GROUP_LEVELS, isoDate } from "@/lib/format";
 import { Field } from "./ui";
+import { CourseStartFields, type CourseOption } from "./CourseStartFields";
 
 type Opt = { id: number; name: string };
 
 export function GroupFields({
   courses, teachers, rooms, g,
 }: {
-  courses: Opt[]; teachers: Opt[]; rooms: Opt[];
-  g?: { name: string; level: string | null; price: number | null; courseId: number; teacherId: number | null; assistantId: number | null; roomId: number | null; days: string; time: string; status: string; startDate: Date };
+  courses: CourseOption[]; teachers: Opt[]; rooms: Opt[];
+  g?: { name: string; level: string | null; price: number | null; courseId: number; startSubjectId: number | null; startLevel: number; teacherId: number | null; assistantId: number | null; roomId: number | null; days: string; time: string; status: string; startDate: Date };
 }) {
   return (
     <>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Guruh nomi"><input name="name" className="input" required defaultValue={g?.name} placeholder="Frontend-12" /></Field>
-        <Field label="Daraja">
+        <Field label="Daraja (fanlarsiz kurslar uchun)">
           <select name="level" className="input" defaultValue={g?.level ?? ""}>
             <option value="">—</option>
             {GROUP_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
@@ -21,11 +22,9 @@ export function GroupFields({
         </Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Kurs">
-          <select name="courseId" className="input" required defaultValue={g?.courseId}>
-            {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </Field>
+        <CourseStartFields courses={courses} courseId={g?.courseId} startSubjectId={g?.startSubjectId} startLevel={g?.startLevel} />
+      </div>
+      <div className="grid grid-cols-1 gap-3">
         <Field label="O'qituvchi">
           <select name="teacherId" className="input" defaultValue={g?.teacherId ?? ""}>
             <option value="">—</option>

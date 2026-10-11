@@ -9,23 +9,28 @@ import type { Theme } from "@/lib/theme";
 import { Logo, LogoMark } from "./brand/Logo";
 import { ThemeToggle } from "./ThemeToggle";
 import { PhoneNav } from "./nav/PhoneNav";
+import { AlertsBell } from "./AlertsBell";
+import type { AlertItem } from "@/lib/alerts";
 
-type Props = { name: string; roleName: string; permissions: string[]; theme: Theme };
+type Props = { name: string; roleName: string; permissions: string[]; theme: Theme; alerts: AlertItem[]; canSeeAlerts: boolean };
 
 /** Desktop sidebar (icon rail on tablets) plus the phone navigation. */
-export function Sidebar({ name, roleName, permissions, theme }: Props) {
+export function Sidebar({ name, roleName, permissions, theme, alerts, canSeeAlerts }: Props) {
   const pathname = usePathname();
   const items = allowedNav(permissions);
 
   return (
     <>
-      <PhoneNav name={name} roleName={roleName} permissions={permissions} theme={theme} />
+      <PhoneNav name={name} roleName={roleName} permissions={permissions} theme={theme} alerts={alerts} canSeeAlerts={canSeeAlerts} />
 
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-16 flex-col border-r border-line bg-nav md:flex lg:w-64">
-        <Link href="/" className="flex h-16 items-center justify-center px-5 lg:justify-start">
-          <LogoMark className="h-7 w-auto lg:hidden" />
-          <span className="hidden lg:block"><Logo /></span>
-        </Link>
+        <div className="flex flex-col items-center gap-1 py-3 lg:h-16 lg:flex-row lg:justify-between lg:py-0 lg:pr-3 lg:pl-5">
+          <Link href="/" className="flex items-center">
+            <LogoMark className="h-7 w-auto lg:hidden" />
+            <span className="hidden lg:block"><Logo /></span>
+          </Link>
+          {canSeeAlerts && <AlertsBell alerts={alerts} />}
+        </div>
 
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-2">
           {items.map(({ href, label, icon: Icon }) => {

@@ -11,7 +11,10 @@ import { membershipInclude } from "@/lib/billing-include";
 import { date, GROUP_DAYS, isoDate, lessonDates, money, MONTHS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { EditGroupDialog } from "@/components/EditGroupDialog";
-import { BalanceBadge, Empty, Field, LevelBadge, SubmitRow } from "@/components/ui";
+import { BalanceBadge, Empty, Field, SubmitRow } from "@/components/ui";
+import { CurriculumBadge, CurriculumBar } from "@/components/CurriculumBar";
+import { curriculumOn, levelExams, passed } from "@/lib/curriculum";
+import { LevelExamDialog } from "@/components/LevelExamDialog";
 import { GradeCell } from "@/components/GradeCell";
 import { MemberMenu } from "@/components/members/MemberMenu";
 import { StatusBadge, StatusLegend } from "@/components/members/StatusBadge";
@@ -40,7 +43,7 @@ export default async function GroupPage({
   const group = await db.group.findFirst({
     where: { id, ...groupScope(user) },
     include: {
-      course: true, teacher: true, assistant: true, room: true, prices: true,
+      course: { include: { subjects: { orderBy: { position: "asc" } } } }, teacher: true, assistant: true, room: true, prices: true,
       students: {
         where: { leftAt: null },
         include: { events: membershipInclude.events, student: { include: { payments: { select: { amount: true } }, groups: { include: membershipInclude } } } },
@@ -56,7 +59,7 @@ export default async function GroupPage({
     db.attendance.findMany({ where: { groupId: id, date: range } }),
     db.grade.findMany({ where: { groupId: id, date: range } }),
     db.exam.findMany({ where: { groupId: id }, include: { results: true }, orderBy: { date: "asc" } }),
-    db.course.findMany({ orderBy: { name: "asc" } }),
+    db.course.findMany({ orderBy: { name: "asc" }, include: { subjects: { orderBy: { position: "asc" } } } }),
     db.user.findMany({ where: { isTeacher: true, active: true }, orderBy: { name: "asc" } }),
     db.room.findMany({ orderBy: { name: "asc" } }),
     db.student.findMany({ where: { groups: { none: { groupId: id, leftAt: null } } }, orderBy: { name: "asc" } }),
@@ -65,6 +68,17 @@ export default async function GroupPage({
   ]);
   const thisGroup = { id: group.id, name: group.name, days: group.days, price: group.price, course: group.course, prices: group.prices };
   const upcoming = upcomingPrice(group.prices, now);
+  const cur = curriculumOn(group, group.course.subjects, centreDay());
+  // exam columns: every automatic level exam (scored or not yet) and the exams added by hand, by date
+  const autoExams = levelExams(group, group.course.subjects);
+  const autoLevels = new Set(autoExams.map((a) => a.level));
+  const examCols = [
+    ...autoExams.map((a) => {
+      const saved = exams.find((e) => e.level === a.level);
+      return { key: `L${a.level}`, id: saved?.id ?? null, level: a.level as number | null, title: a.title, date: a.date, maxScore: saved?.maxScore ?? 100, results: saved?.results ?? [], upcoming: a.date > centreDay() };
+    }),
+    ...exams.filter((e) => e.level === null || !autoLevels.has(e.level)).map((e) => ({ key: `E${e.id}`, id: e.id as number | null, level: null as number | null, title: e.title, date: e.date, maxScore: e.maxScore, results: e.results, upcoming: false })),
+  ].sort((a, b) => a.date.getTime() - b.date.getTime());
   const mark = new Map(attendance.map((a) => [`${a.studentId}:${isoDate(a.date)}`, a.present]));
   const gradeMap = new Map(grades.map((g) => [`${g.studentId}:${isoDate(g.date)}`, g.score]));
   const prev = new Date(year, month - 1, 1);
@@ -80,7 +94,7 @@ export default async function GroupPage({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight md:text-[28px]">{group.name}</h1>
-              <LevelBadge level={group.level} />
+              <CurriculumBadge progress={cur.progress} level={group.level} />
               {group.status === "FINISHED" && <span className="badge bg-ink/5 text-muted">Tugagan</span>}
             </div>
             <p className="mt-1 text-muted">{group.course.name} · {money(priceNow(group))} / oy{upcoming && <span className="label-mono ml-2">{date(upcoming.from)} dan: {money(upcoming.price)}</span>}</p>
@@ -101,6 +115,12 @@ export default async function GroupPage({
           <Info k="Xona" v={group.room?.name ?? "—"} />
           <Info k="Boshlangan" v={date(group.startDate)} />
         </div>
+        {cur.windows.length > 0 && (
+          <div className="mt-5 border-t border-line pt-4">
+            <CurriculumBar windows={cur.windows} progress={cur.progress} />
+            {cur.nextExam && <p className="label-mono mt-3">Keyingi imtihon: {cur.nextExam.title} · {date(cur.nextExam.date)}</p>}
+          </div>
+        )}
       </div>
 
       <div className="card mt-4 md:mt-6">
@@ -258,24 +278,31 @@ export default async function GroupPage({
                 <tr>
                   <th className="sticky left-0 z-10 min-w-48 bg-surface">O&apos;quvchi</th>
                   <th className="text-center">O&apos;rtacha</th>
-                  {exams.map((e) => (
-                    <th key={e.id} className="text-center normal-case">
+                  {examCols.map((e) => (
+                    <th key={e.key} className={`text-center normal-case ${e.upcoming ? "opacity-50" : ""}`}>
                       <div className="flex items-center justify-center gap-1">
-                        <span title={e.title} className="max-w-32 truncate">{e.title}</span>
-                        {allow.grades && (
+                        {e.level !== null && <span className="badge border border-line-strong px-1.5 py-0 text-[10px] text-muted">avto</span>}
+                        <span title={e.title} className="max-w-36 truncate">{e.title}</span>
+                        {allow.grades && e.level !== null && !e.upcoming && (
+                          <LevelExamDialog
+                            groupId={id} level={e.level} title={e.title} dateLabel={date(e.date)} maxScore={e.maxScore} passPercent={group.course.passPercent}
+                            students={group.students.map(({ student }) => ({ id: student.id, name: student.name, score: e.results.find((r) => r.studentId === student.id)?.score ?? null }))}
+                          />
+                        )}
+                        {allow.grades && e.id !== null && (
                           <form action={deleteExam.bind(null, e.id)}>
                             <button className="text-faint hover:text-danger" aria-label="Imtihonni o'chirish"><Trash2 className="h-3.5 w-3.5" /></button>
                           </form>
                         )}
                       </div>
-                      <div className="font-normal text-faint">{date(e.date)} · {e.maxScore} ball</div>
+                      <div className="font-normal text-faint">{date(e.date)}{e.upcoming ? " · kutilmoqda" : ` · ${e.maxScore} ball`}</div>
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {group.students.map(({ student }) => {
-                  const pcts = exams.flatMap((e) => {
+                  const pcts = examCols.flatMap((e) => {
                     const r = e.results.find((x) => x.studentId === student.id);
                     return r ? [(r.score / e.maxScore) * 100] : [];
                   });
@@ -284,16 +311,24 @@ export default async function GroupPage({
                     <tr key={student.id}>
                       <td className="sticky left-0 z-10 bg-surface font-medium">{student.name}</td>
                       <td className="text-center font-semibold">{avg === null ? "—" : <ScoreBadge pct={avg} />}</td>
-                      {exams.map((e) => {
+                      {examCols.map((e) => {
                         const r = e.results.find((x) => x.studentId === student.id);
-                        return <td key={e.id} className="text-center">{r ? <>{r.score} <span className="text-xs text-faint">/ {e.maxScore}</span></> : <span className="text-faint">—</span>}</td>;
+                        if (!r) return <td key={e.key} className="text-center text-faint">—</td>;
+                        const failed = !passed(r.score, e.maxScore, group.course.passPercent);
+                        return (
+                          <td key={e.key} className={`text-center ${failed ? "text-danger" : ""}`}>
+                            {r.score} <span className={`text-xs ${failed ? "" : "text-faint"}`}>/ {e.maxScore}</span>
+                            {failed && <div className="label-mono text-danger">yiqildi</div>}
+                          </td>
+                        );
                       })}
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-            {exams.length === 0 && <Empty text="Hali imtihon o'tkazilmagan" />}
+            {examCols.length === 0 && <Empty text="Hali imtihon o'tkazilmagan" />}
+            {autoExams.length > 0 && <p className="px-5 py-3 text-xs text-muted">Daraja imtihonlari har oyning oxirgi darsida avtomatik belgilanadi. O&apos;tish bali: {group.course.passPercent}%.</p>}
           </div>
         )}
       </div>

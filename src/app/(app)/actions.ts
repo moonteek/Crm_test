@@ -20,6 +20,7 @@ import {
   ACTIVITY_TYPES, isoDate, CALL_RESULTS, EXPENSE_CATEGORIES, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES,
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
+import { levelExams } from "@/lib/curriculum";
 import { check, parseForm, v } from "@/lib/validation";
 import { phoneKey } from "@/lib/phone";
 
@@ -323,6 +324,8 @@ const groupSchema = z.object({
   name: v.text("Guruh nomi", 80),
   level: v.oneOf(GROUP_LEVELS, null),
   price: v.optInt("Guruh narxi", { min: 1 }),
+  startSubjectId: v.optId(),
+  startLevel: v.int("Boshlanish darajasi", { min: 1, max: 24, fallback: 1 }),
   courseId: v.id("Kurs"),
   teacherId: v.optId(),
   assistantId: v.optId(),
@@ -331,10 +334,19 @@ const groupSchema = z.object({
   time: v.time(),
 });
 
+/** Keeps the start point inside the chosen course: another course's subject or a level past its months falls back. */
+async function startPoint(courseId: number, startSubjectId: number | null, startLevel: number) {
+  const subject = startSubjectId ? await db.subject.findFirst({ where: { id: startSubjectId, courseId } }) : null;
+  const first = await db.subject.findFirst({ where: { courseId }, orderBy: { position: "asc" } });
+  // the course's beginning is stored as "no start point", so reordering or deleting subjects can't move the group
+  if (!subject || (subject.id === first?.id && startLevel <= 1)) return { startSubjectId: null, startLevel: 1 };
+  return { startSubjectId: subject.id, startLevel: Math.min(startLevel, subject.months) };
+}
+
 export async function createGroup(f: FormData) {
   const user = await requirePermission("groups.manage");
   const { startDate, ...data } = parseForm(groupSchema.extend({ startDate: v.optDate() }), f);
-  const group = await db.group.create({ data: { ...data, startDate: startDate ?? new Date() } });
+  const group = await db.group.create({ data: { ...data, ...(await startPoint(data.courseId, data.startSubjectId, data.startLevel)), startDate: startDate ?? new Date() } });
   await logAction(user, "group.create", `Yangi guruh: ${group.name}`);
   redirect(`/groups/${group.id}`);
 }
@@ -349,6 +361,7 @@ export async function updateGroup(id: number, f: FormData) {
   // a new price (own, or the new course's) starts next month; past months keep what they were charged
   const target = data.price ?? (await db.course.findUniqueOrThrow({ where: { id: data.courseId } })).price;
   const current = before.price ?? before.course.price;
+  const start = await startPoint(data.courseId, data.startSubjectId, data.startLevel);
   const changes: string[] = [];
   // teacher history, price history and the group are saved together: all or nothing
   const repriced = await db.$transaction(async (tx) => {
@@ -360,8 +373,10 @@ export async function updateGroup(id: number, f: FormData) {
       await changeTeacher(tx, id, "ASSISTANT", before.assistantId, data.assistantId, from);
       changes.push("yordamchi");
     }
+    // saved level exams are numbered by the old course's months: keep them as ordinary exams
+    if (data.courseId !== before.courseId) await tx.exam.updateMany({ where: { groupId: id, level: { not: null } }, data: { level: null } });
     const priced = await schedulePrice(tx, id, target, current, user.id);
-    await tx.group.update({ where: { id }, data });
+    await tx.group.update({ where: { id }, data: { ...data, ...start } });
     return priced;
   });
   if (changes.length) await logAction(user, "group.teacher", `${before.name}: ${changes.join(" va ")} ${isoDate(from)} dan almashtirildi`);
@@ -389,6 +404,16 @@ export async function saveGroup(_: MemberActionState, f: FormData): Promise<Memb
   }
 }
 
+/** Brings an archived (finished) group back to active. Its students stay as they are — re-add them by hand. */
+export async function restoreGroup(id: number) {
+  const user = await requirePermission("groups.manage");
+  await assertGroupAccess(user, id);
+  const group = await db.group.update({ where: { id }, data: { status: "ACTIVE" } });
+  await logAction(user, "group.restore", `Guruh arxivdan qaytarildi: ${group.name}`);
+  revalidatePath("/groups");
+  revalidatePath(`/groups/${id}`);
+}
+
 export async function deleteGroup(id: number) {
   const user = await requirePermission("groups.delete");
   const group = await db.group.delete({ where: { id } });
@@ -413,9 +438,10 @@ export async function toggleAttendance(groupId: number, studentId: number, isoDa
 const courseSchema = z.object({
   name: v.text("Kurs nomi", 120),
   price: v.int("Narx"),
-  durationMon: v.int("Davomiylik (oy)", { min: 1, max: 120, fallback: 6 }),
+  durationMon: v.int("Davomiylik (oy)", { min: 1, max: 600, fallback: 6 }),
   lessonMin: v.int("Dars davomiyligi (daqiqa)", { min: 10, max: 600, fallback: 90 }),
   description: v.optText(2000),
+  passPercent: v.int("O'tish bali", { min: 1, max: 100, fallback: 60 }),
 });
 
 export async function createCourse(f: FormData) {
@@ -707,6 +733,56 @@ export async function createExam(groupId: number, f: FormData) {
   revalidatePath(`/groups/${groupId}`);
 }
 
+/**
+ * Scores of an automatic level exam. The exam is saved the first time it is scored (title and date come from
+ * the curriculum) and updated after that; a cleared score removes that student's result, and an exam left with
+ * no results goes back to unscored (so it doesn't lock the course's subjects).
+ */
+export async function saveLevelExamScores(_: MemberActionState, f: FormData): Promise<MemberActionState> {
+  try {
+    const user = await requirePermission("grades.manage");
+    const groupId = check(v.id("Guruh"), f.get("groupId"));
+    const level = check(v.int("Daraja", { min: 1, max: 1000 }), f.get("level"));
+    await assertGroupAccess(user, groupId);
+    const group = await db.group.findUniqueOrThrow({
+      where: { id: groupId },
+      include: { course: { include: { subjects: true } }, students: { where: { leftAt: null }, select: { studentId: true } } },
+    });
+    const auto = levelExams(group, group.course.subjects).find((e) => e.level === level);
+    if (!auto) throw new Error("Bu daraja imtihoni topilmadi");
+    if (auto.date > centreDay()) throw new Error("Imtihon kuni hali kelmagan");
+    const maxScore = check(v.int("Maksimal ball", { min: 1, max: 10_000, fallback: 100 }), f.get("maxScore"));
+    const score = v.int("Ball", { min: 0, max: maxScore });
+    const highest = await db.examResult.findFirst({ where: { exam: { groupId, level } }, orderBy: { score: "desc" } });
+    if (highest && highest.score > maxScore) throw new Error(`Maksimal ball ${highest.score} dan kam bo'lishi mumkin emas — shunday natija bor`);
+    const entries = group.students.map(({ studentId }) => {
+      const raw = String(f.get(`score_${studentId}`) ?? "").trim();
+      return { studentId, score: raw === "" ? null : check(score, raw) };
+    });
+    const scored = entries.filter((e): e is { studentId: number; score: number } => e.score !== null);
+    await db.$transaction(async (tx) => {
+      const exam = await tx.exam.upsert({
+        where: { groupId_level: { groupId, level } },
+        create: { groupId, level, title: auto.title, date: auto.date, maxScore },
+        update: { title: auto.title, date: auto.date, maxScore },
+      });
+      for (const e of scored) {
+        await tx.examResult.upsert({ where: { examId_studentId: { examId: exam.id, studentId: e.studentId } }, create: { examId: exam.id, studentId: e.studentId, score: e.score }, update: { score: e.score } });
+      }
+      const cleared = entries.filter((e) => e.score === null).map((e) => e.studentId);
+      if (cleared.length) await tx.examResult.deleteMany({ where: { examId: exam.id, studentId: { in: cleared } } });
+      if ((await tx.examResult.count({ where: { examId: exam.id } })) === 0) await tx.exam.delete({ where: { id: exam.id } });
+    });
+    await logAction(user, "exam.level", `Daraja imtihoni: ${group.name} — ${auto.title} (${scored.length} natija)`);
+    revalidatePath(`/groups/${groupId}`);
+    return { ok: true };
+  } catch (e) {
+    // two people saving the same exam for the first time at once: the second hits the (group, level) unique
+    if ((e as { code?: string }).code === "P2002") return { error: "Natijalar hozirgina boshqa foydalanuvchi tomonidan saqlandi — qayta urinib ko'ring" };
+    return { error: (e as Error).message };
+  }
+}
+
 export async function deleteExam(id: number) {
   const user = await requirePermission("grades.manage");
   const exam = await db.exam.findUniqueOrThrow({ where: { id }, include: { group: true } });
@@ -917,4 +993,68 @@ export async function toggleReason(id: number) {
   await db.reason.update({ where: { id }, data: { active: !r.active } });
   await logAction(user, "reason.toggle", `Sabab ${r.active ? "yashirildi" : "qayta yoqildi"}: ${r.name}`);
   revalidatePath("/settings/reasons");
+}
+
+// ---------- Course subjects (curriculum) ----------
+const subjectSchema = z.object({ name: v.text("Fan nomi", 60), months: v.int("Oylar soni", { min: 1, max: 24 }) });
+
+/** Keeps the course length equal to its subjects' months. */
+async function syncDuration(courseId: number) {
+  const subjects = await db.subject.findMany({ where: { courseId } });
+  if (subjects.length) await db.course.update({ where: { id: courseId }, data: { durationMon: subjects.reduce((s, x) => s + x.months, 0) } });
+}
+
+/** Level exams are numbered by course month, so once any are scored the order and lengths can't change. */
+async function assertStructureFree(courseId: number) {
+  const scored = await db.exam.findFirst({ where: { level: { not: null }, group: { courseId } }, include: { group: true } });
+  if (scored) throw new Error(`"${scored.group.name}" guruhida daraja imtihoni baholangan — fanlar tartibi va oylarini o'zgartirib bo'lmaydi (nomini o'zgartirish mumkin)`);
+}
+
+/** One action for the subjects dialog: add, update, move up/down, delete. */
+export async function saveSubject(_: MemberActionState, f: FormData): Promise<MemberActionState> {
+  try {
+    const user = await requirePermission("courses.manage");
+    const op = check(z.enum(["add", "update", "up", "down", "delete"]), f.get("op"));
+    if (op === "add") {
+      const courseId = check(v.id(), f.get("courseId"));
+      await assertStructureFree(courseId);
+      const d = parseForm(subjectSchema, f);
+      const last = await db.subject.findFirst({ where: { courseId }, orderBy: { position: "desc" } });
+      await db.subject.create({ data: { ...d, courseId, position: (last?.position ?? 0) + 1 } });
+      await syncDuration(courseId);
+      await logAction(user, "course.subject", `Fan qo'shildi: ${d.name} (${d.months} oy)`);
+    } else {
+      const id = check(v.id(), f.get("id"));
+      const s = await db.subject.findUniqueOrThrow({ where: { id }, include: { startingGroups: true } });
+      if (op === "update") {
+        const d = parseForm(subjectSchema, f);
+        if (d.months !== s.months) await assertStructureFree(s.courseId);
+        await db.subject.update({ where: { id }, data: d });
+        await logAction(user, "course.subject", `Fan o'zgartirildi: ${s.name} → ${d.name} (${d.months} oy)`);
+      } else if (op === "delete") {
+        await assertStructureFree(s.courseId);
+        if (s.startingGroups.length) throw new Error(`"${s.startingGroups[0].name}" guruhi shu fandan boshlangan — avval guruhning boshlanish fanini o'zgartiring`);
+        await db.subject.delete({ where: { id } });
+        await logAction(user, "course.subject", `Fan o'chirildi: ${s.name}`);
+      } else {
+        await assertStructureFree(s.courseId);
+        const neighbour = await db.subject.findFirst({
+          where: { courseId: s.courseId, position: op === "up" ? { lt: s.position } : { gt: s.position } },
+          orderBy: { position: op === "up" ? "desc" : "asc" },
+        });
+        if (neighbour) {
+          await db.$transaction([
+            db.subject.update({ where: { id: s.id }, data: { position: neighbour.position } }),
+            db.subject.update({ where: { id: neighbour.id }, data: { position: s.position } }),
+          ]);
+          await logAction(user, "course.subject", `Fanlar tartibi: ${s.name} ${op === "up" ? "yuqoriga" : "pastga"}`);
+        }
+      }
+      await syncDuration(s.courseId);
+    }
+    revalidatePath("/courses");
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }

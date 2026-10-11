@@ -68,6 +68,21 @@ model Course {
   createdAt   DateTime @default(now())
   groups      Group[]
   leads       Lead[]
+  // a level exam is passed at this percentage of the maximum score
+  passPercent Int      @default(60)
+  subjects    Subject[]
+}
+
+/// One subject of a course, so many months (= levels) long, in course order (src/lib/curriculum.ts).
+model Subject {
+  id        Int      @id @default(autoincrement())
+  courseId  Int
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  name      String
+  months    Int
+  position  Int
+  createdAt DateTime @default(now())
+  startingGroups Group[]
 }
 
 model Room {
@@ -104,6 +119,10 @@ model Group {
   exams     Exam[]
   prices    GroupPrice[]
   teachers  GroupTeacher[]
+  // where in the course the group began (empty = the first subject); levels count a month from startDate
+  startSubjectId Int?
+  startSubject   Subject? @relation(fields: [startSubjectId], references: [id], onDelete: SetNull)
+  startLevel     Int      @default(1)
 }
 
 /// Who taught a group from a date on (TEACHER or ASSISTANT); lessons before keep the earlier person.
@@ -249,7 +268,11 @@ model Exam {
   title    String
   date     DateTime
   maxScore Int          @default(100)
+  // course month number for automatic level exams (src/lib/curriculum.ts levelExams); empty for exams added by hand
+  level    Int?
   results  ExamResult[]
+
+  @@unique([groupId, level])
 }
 
 model ExamResult {

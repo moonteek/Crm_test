@@ -111,6 +111,19 @@ npm run db:push
 npm run db:migrate-statuses   # qayta ishga tushirish xavfsiz: allaqachon to'ldirilganlarini o'tkazib yuboradi
 ```
 
+Fanlar va daraja imtihonlari qo'shilgan versiyada `db:push` imtihonlarga yangi cheklov (guruh + daraja
+takrorlanmasin) qo'shgani uchun tasdiq so'raydi. Mavjud imtihonlarning darajasi bo'sh, shuning uchun
+hech narsa o'chmaydi. Avval oddiy `npm run db:push` ni ishga tushiring va ogohlantirish faqat shu
+cheklov haqida ekanini tekshiring, keyin:
+
+```bash
+npx prisma db push --accept-data-loss
+```
+
+**Kurs dasturi:** kurs — tartiblangan fanlar ro'yxati (har bir fan necha oy). Guruh har oy bitta daraja
+o'tadi, oy guruh boshlangan kundan hisoblanadi; har darajaning oxirgi darsida daraja imtihoni avtomatik
+belgilanadi. O'tish bali kurs sozlamasida (standart 60%).
+
 **Darsbay hisob:** 2026-yil 1-noyabrdan boshlab oylik to'lov o'quvchi faol bo'lgan darslar soniga qarab
 hisoblanadi (narx × faol darslar ÷ oydagi darslar). Undan oldingi oylar eski qoida bo'yicha — to'liq oy.
 
