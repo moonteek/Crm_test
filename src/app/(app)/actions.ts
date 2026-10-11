@@ -20,6 +20,7 @@ import {
   ACTIVITY_TYPES, isoDate, CALL_RESULTS, EXPENSE_CATEGORIES, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES,
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
+import { levelExams } from "@/lib/curriculum";
 import { check, parseForm, v } from "@/lib/validation";
 import { phoneKey } from "@/lib/phone";
 
@@ -716,6 +717,52 @@ export async function createExam(groupId: number, f: FormData) {
   });
   await logAction(user, "exam.create", `Imtihon: ${exam.group.name} — ${exam.title} (${scores.length} natija)`);
   revalidatePath(`/groups/${groupId}`);
+}
+
+/**
+ * Scores of an automatic level exam. The exam is saved the first time it is scored (title and date come from
+ * the curriculum) and updated after that; a cleared score removes that student's result, and an exam left with
+ * no results goes back to unscored (so it doesn't lock the course's subjects).
+ */
+export async function saveLevelExamScores(_: MemberActionState, f: FormData): Promise<MemberActionState> {
+  try {
+    const user = await requirePermission("grades.manage");
+    const groupId = check(v.id("Guruh"), f.get("groupId"));
+    const level = check(v.int("Daraja", { min: 1, max: 1000 }), f.get("level"));
+    await assertGroupAccess(user, groupId);
+    const group = await db.group.findUniqueOrThrow({
+      where: { id: groupId },
+      include: { course: { include: { subjects: true } }, students: { where: { leftAt: null }, select: { studentId: true } } },
+    });
+    const auto = levelExams(group, group.course.subjects).find((e) => e.level === level);
+    if (!auto) throw new Error("Bu daraja imtihoni topilmadi");
+    if (auto.date > centreDay()) throw new Error("Imtihon kuni hali kelmagan");
+    const maxScore = check(v.int("Maksimal ball", { min: 1, max: 10_000, fallback: 100 }), f.get("maxScore"));
+    const score = v.int("Ball", { min: 0, max: maxScore });
+    const entries = group.students.map(({ studentId }) => {
+      const raw = String(f.get(`score_${studentId}`) ?? "").trim();
+      return { studentId, score: raw === "" ? null : check(score, raw) };
+    });
+    const scored = entries.filter((e): e is { studentId: number; score: number } => e.score !== null);
+    await db.$transaction(async (tx) => {
+      const exam = await tx.exam.upsert({
+        where: { groupId_level: { groupId, level } },
+        create: { groupId, level, title: auto.title, date: auto.date, maxScore },
+        update: { title: auto.title, date: auto.date, maxScore },
+      });
+      for (const e of scored) {
+        await tx.examResult.upsert({ where: { examId_studentId: { examId: exam.id, studentId: e.studentId } }, create: { examId: exam.id, studentId: e.studentId, score: e.score }, update: { score: e.score } });
+      }
+      const cleared = entries.filter((e) => e.score === null).map((e) => e.studentId);
+      if (cleared.length) await tx.examResult.deleteMany({ where: { examId: exam.id, studentId: { in: cleared } } });
+      if ((await tx.examResult.count({ where: { examId: exam.id } })) === 0) await tx.exam.delete({ where: { id: exam.id } });
+    });
+    await logAction(user, "exam.level", `Daraja imtihoni: ${group.name} — ${auto.title} (${scored.length} natija)`);
+    revalidatePath(`/groups/${groupId}`);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
 
 export async function deleteExam(id: number) {

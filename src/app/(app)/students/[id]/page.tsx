@@ -8,6 +8,7 @@ import { can, canSeeBalances, groupScope, studentScope } from "@/lib/access";
 import { balance, priceNow } from "@/lib/billing";
 import { statement } from "@/lib/statement";
 import { upcomingPrice } from "@/lib/prices";
+import { passed } from "@/lib/curriculum";
 import { membershipInclude } from "@/lib/billing-include";
 import { date, GROUP_DAYS, isoDate, money } from "@/lib/format";
 import { Modal } from "@/components/Modal";
@@ -143,6 +144,10 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                 const first = (t: string) => gs.events.find((e) => e.type === t);
                 const last = gs.events.at(-1);
                 const activated = first("ACTIVATE");
+                // level exams of this group the student did not pass (flag only — they stay in the group)
+                const failed = student.examResults
+                  .filter((r) => r.exam.groupId === gs.groupId && r.exam.level !== null && !passed(r.score, r.exam.maxScore, gs.group.course.passPercent))
+                  .sort((a, b) => a.exam.date.getTime() - b.exam.date.getTime());
                 return (
                   <div key={gs.id} className={`rounded-xl border p-4 ${gs.status === "LEFT" ? "border-line opacity-70" : "border-line-strong bg-raised"}`}>
                     <div className="flex items-start justify-between gap-2">
@@ -159,7 +164,10 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                         canPay={allow.pay}
                       />
                     </div>
-                    <div className="mt-3"><StatusBadge status={gs.status} /></div>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      <StatusBadge status={gs.status} />
+                      {failed.length > 0 && <span className="badge bg-danger-tint text-danger">Imtihondan yiqilgan: {failed.length}</span>}
+                    </div>
                     <dl className="mt-3 space-y-1 text-sm">
                       <Row k="Jadval">{GROUP_DAYS[gs.group.days]} · <span className="font-mono">{gs.group.time}</span></Row>
                       <Row k="Qo'shilgan">{date(gs.events[0]?.date ?? gs.joinedAt)}</Row>
@@ -170,6 +178,16 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
                         </Row>
                       )}
                     </dl>
+                    {failed.length > 0 && (
+                      <ul className="mt-3 space-y-1 border-t border-line pt-3 text-sm">
+                        {failed.map((r) => (
+                          <li key={r.id} className="flex items-baseline justify-between gap-2">
+                            <span className="min-w-0 truncate">{r.exam.title}</span>
+                            <span className="shrink-0 font-mono text-xs text-danger">{r.score}/{r.exam.maxScore} · {date(r.exam.date)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 );
               })}
