@@ -27,7 +27,8 @@ a full history per student, a filterable student list, and exporting the shown l
   field is then no longer shown or edited.
 - A3. History for actions before this release shows what is already stored (membership events, payments); profile
   edits, notes, tags and payment deletions are recorded from this release on.
-- A4. The export control is reusable; this step puts it on the student list only.
+- A4. (User, at spec review) Every list gets the Excel / Google Sheets control, not only students — see "Export on
+  every list".
 
 ## Data
 
@@ -135,6 +136,18 @@ students but can't be newly attached and are hidden from the filter.
   tab-separated text to the clipboard and says "Nusxa olindi — Google Sheets'da Ctrl+V bosing".
   Columns: № , Ism, Telefon, Ota-ona telefoni, Guruhlar, O'qituvchilar, Holati, Balans (if allowed), Teglar,
   Qayerdan keldi. Never passport.
+
+## Export on every list
+
+Each list's query (with its filters) moves into one loader in `src/lib/lists/<name>.ts` used by both the page and a
+sibling route `<page>/export/route.ts`, so the file always equals what the page shows. A loader returns
+`Table = { title: string; columns: string[]; rows: (string | number | null)[][] }` for export alongside what the page
+renders. The route checks the page's own permission and scope, then answers `?format=xlsx` (download) or
+`?format=tsv` (text for the Sheets copy). Money cells are numbers (Excel can sum them); dates are `DD.MM.YYYY`.
+
+Lists: O'quvchilar, Lidlar, Guruhlar, O'qituvchilar, To'lovlar, Qarzdorlar, Moliya (xarajatlar), Ish haqi, Do'kon
+(sotuvlar), Kurslar, Xonalar, Faoliyat jurnali, and the group page's Davomat / Baholar / Imtihonlar tables (the shown
+month). Columns that a role can't see on the page (balances, amounts) are left out of its export too.
 
 ## Logic units
 
