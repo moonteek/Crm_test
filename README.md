@@ -127,6 +127,17 @@ O'qituvchilar vaqti qo'shilgan versiyada `db:push` dan keyin bir marta dars davo
 npm run db:lesson-length
 ```
 
+O'quvchilar ma'lumotlari kengaytirilgan versiyada `db:push` dan keyin eski "Izoh" matnlarini eslatmaga o'tkazing
+(qayta ishga tushirish xavfsiz). "Menejer" rolida "Teglarni boshqarish" ruxsatini Rollar sahifasida bir marta belgilang:
+
+```bash
+npm run db:notes-from-izoh
+```
+
+**Excel / Google Sheets:** har bir ro'yxatda (o'quvchilar, lidlar, guruhlar, to'lovlar, qarzdorlar va boshqalar) "Excel"
+tugmasi sahifada ko'rinib turgan ma'lumotni (filtrlar bilan, barcha sahifalari) .xlsx qilib yuklaydi; "Google Sheets"
+tugmasi shu jadvalni nusxalaydi — Google Sheets'da Ctrl+V bosing.
+
 **O'qituvchilar vaqti:** har bir o'qituvchi "Mening vaqtim" sahifasida toq (Du/Chor/Ju) va juft (Se/Pay/Sha)
 kunlar uchun 08:00–20:00 oralig'idagi soatlarini bo'sh yoki band deb belgilaydi; dars soatlari guruhlardan
 avtomatik olinadi. Guruh ochish/tahrirlashda o'qituvchi, yordamchi yoki xona boshqa guruhda band bo'lsa saqlanmaydi.

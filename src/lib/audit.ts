@@ -1,10 +1,10 @@
 import { db } from "./db";
 import type { CurrentUser } from "./access";
 
-/** Records who did what. Never blocks the action itself if logging fails. */
-export async function logAction(user: Pick<CurrentUser, "id"> | null, action: string, summary: string) {
+/** Records who did what (and, for the student's history, which student). Never blocks the action if logging fails. */
+export async function logAction(user: Pick<CurrentUser, "id"> | null, action: string, summary: string, opts: { studentId?: number | null } = {}) {
   try {
-    await db.auditLog.create({ data: { userId: user?.id ?? null, action, summary } });
+    await db.auditLog.create({ data: { userId: user?.id ?? null, action, summary, studentId: opts.studentId ?? null } });
   } catch (e) {
     console.error("audit log failed", e);
   }
@@ -27,4 +27,5 @@ export const AUDIT_AREAS: Record<string, string> = {
   sales: "Sotuv KPI",
   shop: "Do'kon",
   reason: "Sabablar",
+  tag: "Teglar",
 };

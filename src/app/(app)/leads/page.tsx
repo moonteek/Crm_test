@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { AlarmClock, Phone, Plus, UserRound } from "lucide-react";
 import { db } from "@/lib/db";
+import { leadsWhere } from "@/lib/lists/leads";
+import { ExportButtons } from "@/components/ExportButtons";
 import { requirePage } from "@/lib/auth";
 import { can, groupScope, leadScope } from "@/lib/access";
 import { LEAD_SOURCES, LEAD_STATUSES } from "@/lib/format";
@@ -22,18 +24,13 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   const manage = can(user, "leads.manage");
   const own = can(user, "leads.own");
   const convert = manage && can(user, "students.manage");
-  const filter = {
-    ...leadScope(user),
-    ...(!own && u ? { assignedToId: u === "none" ? null : Number(u) } : {}),
-    ...(src ? { source: src } : {}),
-  };
   const endOfToday = new Date();
   endOfToday.setHours(23, 59, 59, 999);
   const now = new Date();
 
   const [leads, courses, groups, sellers] = await Promise.all([
     db.lead.findMany({
-      where: { ...filter, OR: [{ status: { in: ["NEW", "CONTACTED", "TRIAL"] } }, { createdAt: { gte: new Date(Date.now() - 60 * 86400_000) } }] },
+      where: leadsWhere(user, { u, src }),
       include: { course: true, assignedTo: true, _count: { select: { activities: true } } },
       orderBy: { createdAt: "desc" },
     }),
@@ -53,6 +50,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   return (
     <>
       <PageHeader title={own ? "Mening lidlarim" : "Lidlar"} subtitle="Bo'lajak o'quvchilar bilan ishlash">
+        <ExportButtons href="/leads/export" />
         {manage && <Modal title="Yangi lid" trigger={<><Plus className="h-4 w-4" /> Lid qo&apos;shish</>}>
           <form action={createLead} className="space-y-3">
             <Field label="Ism familiya"><input name="name" className="input" required /></Field>

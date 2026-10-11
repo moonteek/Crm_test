@@ -3,49 +3,23 @@ import { Clock, DoorOpen, RotateCcw, User } from "lucide-react";
 import { db } from "@/lib/db";
 import { priceNow } from "@/lib/billing";
 import { requirePage } from "@/lib/auth";
-import { can, groupScope } from "@/lib/access";
+import { can } from "@/lib/access";
 import { date, GROUP_DAYS, money } from "@/lib/format";
-import { curriculumOn, type Progress } from "@/lib/curriculum";
-import { centreDay } from "@/lib/membership-db";
+import { loadGroups, PROGRESS, type GroupFilters } from "@/lib/lists/groups";
+import { ExportButtons } from "@/components/ExportButtons";
 import { CurriculumBadge, CurriculumBar } from "@/components/CurriculumBar";
 import { Empty, PageHeader, Segmented } from "@/components/ui";
 import { restoreGroup } from "../actions";
 import { NewGroupDialog } from "@/components/NewGroupDialog";
 
-const PROGRESS: Record<Progress["state"], string> = {
-  "not-started": "Boshlanmagan",
-  "in-progress": "O'qimoqda",
-  finishing: "Oxirgi oy",
-  finished: "Kursi tugagan",
-  none: "Fanlarsiz",
-};
-
-type Filters = { status?: string; course?: string; subject?: string; progress?: string };
-
-export default async function GroupsPage({ searchParams }: { searchParams: Promise<Filters> }) {
+export default async function GroupsPage({ searchParams }: { searchParams: Promise<GroupFilters> }) {
   const user = await requirePage("groups.view");
   const params = await searchParams;
-  const status = params.status === "FINISHED" ? "FINISHED" : "ACTIVE";
-  const courseId = Number(params.course) || null;
-  const asked = Number(params.subject) || null;
-  const progress = params.progress && params.progress in PROGRESS ? (params.progress as Progress["state"]) : null;
-  const [all, courses, teachers, rooms] = await Promise.all([
-    db.group.findMany({
-      where: { status, ...(courseId ? { courseId } : {}), ...groupScope(user) },
-      include: { course: { include: { subjects: true } }, teacher: true, assistant: true, room: true, prices: true, _count: { select: { students: { where: { leftAt: null } } } } },
-      orderBy: [{ days: "asc" }, { time: "asc" }],
-    }),
-    db.course.findMany({ orderBy: { name: "asc" }, include: { subjects: { orderBy: { position: "asc" } } } }),
+  const [{ status, courseId, subjectId, progress, courses, subjectOptions, groups }, teachers, rooms] = await Promise.all([
+    loadGroups(user, params),
     db.user.findMany({ where: { isTeacher: true, active: true }, orderBy: { name: "asc" } }),
     db.room.findMany({ orderBy: { name: "asc" } }),
   ]);
-  const subjectOptions = courses.filter((c) => !courseId || c.id === courseId).flatMap((c) => c.subjects.map((s) => ({ id: s.id, label: courseId ? s.name : `${c.name} · ${s.name}` })));
-  // a subject of another course (left in the link after switching course) is ignored
-  const subjectId = subjectOptions.some((s) => s.id === asked) ? asked : null;
-  const today = centreDay();
-  const groups = all
-    .map((g) => ({ ...g, cur: curriculumOn(g, g.course.subjects, today) }))
-    .filter((g) => (!subjectId || (g.cur.progress.state !== "finished" && g.cur.progress.window?.subjectId === subjectId)) && (!progress || g.cur.progress.state === progress));
   const filtered = Boolean(courseId || subjectId || progress);
   const archive = status === "FINISHED";
   const href = (s: string) => `/groups?status=${s}`;
@@ -53,6 +27,7 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
   return (
     <>
       <PageHeader title={can(user, "groups.all") ? "Guruhlar" : "Mening guruhlarim"} subtitle={`${groups.length} ta guruh`}>
+        <ExportButtons href="/groups/export" />
         <Segmented options={[{ href: href("ACTIVE"), label: "Faol", active: !archive }, { href: href("FINISHED"), label: "Arxiv", active: archive }]} />
         {can(user, "groups.manage") && courses.length > 0 && (
           <NewGroupDialog courses={courses} teachers={teachers} rooms={rooms} />

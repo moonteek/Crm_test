@@ -13,7 +13,8 @@
     "test": "tsx --test \"src/**/*.test.ts\"",
     "check:colors": "node scripts/check-colors.mjs",
     "db:migrate-statuses": "tsx prisma/migrate-statuses.ts",
-    "db:lesson-length": "tsx prisma/lesson-length.ts"
+    "db:lesson-length": "tsx prisma/lesson-length.ts",
+    "db:notes-from-izoh": "tsx prisma/notes-from-izoh.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -22,6 +23,7 @@
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@prisma/client": "^6.19.3",
     "bcryptjs": "^3.0.3",
+    "exceljs": "^4.4.0",
     "jose": "^6.2.12",
     "lucide-react": "^1.54.0",
     "next": "^15.5.27",

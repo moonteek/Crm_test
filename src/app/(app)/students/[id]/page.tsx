@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Pencil, Phone, Plus, Trash2, Wallet } from "lucide-react";
+import { Pencil, Phone, Pin, Plus, Tags, Trash2, Wallet } from "lucide-react";
 import { db } from "@/lib/db";
 import { centreDay } from "@/lib/membership-db";
 import { requirePage } from "@/lib/auth";
@@ -10,21 +10,37 @@ import { statement } from "@/lib/statement";
 import { upcomingPrice } from "@/lib/prices";
 import { passed } from "@/lib/curriculum";
 import { membershipInclude } from "@/lib/billing-include";
-import { date, GROUP_DAYS, isoDate, money } from "@/lib/format";
+import { date, GENDERS, GROUP_DAYS, isoDate, money } from "@/lib/format";
+import { studentHistory } from "@/lib/student-history";
 import { Modal } from "@/components/Modal";
 import { PaymentForm, StudentFields } from "@/components/forms";
 import { Empty, Field, SubmitRow } from "@/components/ui";
 import { MemberMenu } from "@/components/members/MemberMenu";
 import { StatusBadge } from "@/components/members/StatusBadge";
 import { toMemberData, toMemberGroup } from "@/components/members/types";
-import { addStudentToGroup, deletePayment, deleteStudent, updateStudent } from "../../actions";
+import { TagChip } from "@/components/students/TagChip";
+import { NotesPanel } from "@/components/students/NotesPanel";
+import { HistoryList } from "@/components/students/HistoryList";
+import { addStudentToGroup, deletePayment, deleteStudent, setStudentTags, updateStudent } from "../../actions";
 
-export default async function StudentPage({ params }: { params: Promise<{ id: string }> }) {
+const TABS = [
+  { key: "groups", label: "Guruhlar" },
+  { key: "payments", label: "To'lovlar" },
+  { key: "notes", label: "Eslatma" },
+  { key: "exams", label: "Imtihonlar" },
+  { key: "history", label: "Tarix" },
+] as const;
+type Tab = (typeof TABS)[number]["key"];
+
+export default async function StudentPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> }) {
   const user = await requirePage("students.view");
   const id = Number((await params).id);
+  const asked = (await searchParams).tab;
   const [student, allGroups] = await Promise.all([
     db.student.findFirst({
       where: { id, ...studentScope(user) },
+      // the passport never leaves the server for staff who cannot edit students
+      omit: { passport: !can(user, "students.manage") },
       include: {
         groups: { include: { events: { ...membershipInclude.events, include: { reason: true } }, group: { include: { course: true, teacher: true, prices: true } } }, orderBy: { joinedAt: "desc" } },
         payments: { include: { group: true }, orderBy: { date: "desc" } },
@@ -32,6 +48,8 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
         grades: { select: { score: true } },
         examResults: { include: { exam: true } },
         purchases: { include: { items: { include: { product: true } } }, orderBy: { date: "desc" } },
+        tags: { include: { tag: true }, orderBy: { tag: { name: "asc" } } },
+        notes: { include: { user: { select: { name: true } } }, orderBy: [{ pinned: "desc" }, { createdAt: "desc" }] },
       },
     }),
     db.group.findMany({ where: { status: "ACTIVE", ...groupScope(user) }, include: { course: true, prices: true }, orderBy: { name: "asc" } }),
@@ -56,6 +74,11 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
     balance: canSeeBalances(user),
     shop: can(user, "shop.view"),
   };
+  const tabs = TABS.filter((t) => t.key !== "payments" || allow.payments);
+  const tab: Tab = tabs.some((t) => t.key === asked) ? (asked as Tab) : "groups";
+  const pinned = student.notes.find((n) => n.pinned);
+  const allTags = allow.manage ? await db.tag.findMany({ orderBy: { name: "asc" } }) : [];
+  const history = tab === "history" ? await loadHistory(student.id, student.payments, allow.payments) : [];
 
   return (
     <>
@@ -74,18 +97,42 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             </div>
             <dl className="mt-5 space-y-2 text-sm">
               <Row k="Telefon"><a href={`tel:${student.phone}`} className="flex items-center gap-1 hover:underline"><Phone className="h-3.5 w-3.5" />{student.phone}</a></Row>
-              <Row k="Ota-ona">{student.parentPhone ?? "—"}</Row>
+              {student.phone2 && <Row k="Qo'shimcha telefon">{student.phone2}</Row>}
+              <Row k="Ota-ona">{[student.parentName, student.parentPhone].filter(Boolean).join(" · ") || "—"}</Row>
               <Row k="Tug'ilgan sana">{date(student.birthDate)}</Row>
               <Row k="Qo'shilgan">{date(student.createdAt)}</Row>
               <Row k="Davomat">{student.attendance.length ? `${Math.round((present / student.attendance.length) * 100)}% (${present}/${student.attendance.length})` : "—"}</Row>
               <Row k="O'rtacha baho">{avgGrade === null ? "—" : `${avgGrade.toFixed(1)} / 5 (${student.grades.length} ta)`}</Row>
               <Row k="Imtihonlar">{examPct === null ? "—" : `${examPct}% (${student.examResults.length} ta)`}</Row>
-              {student.note && <Row k="Izoh">{student.note}</Row>}
+              {student.gender && <Row k="Jinsi">{GENDERS[student.gender] ?? student.gender}</Row>}
+              {student.school && <Row k="Maktab">{student.school}</Row>}
+              {student.address && <Row k="Manzil">{student.address}</Row>}
+              {student.source && <Row k="Qayerdan keldi">{student.source}</Row>}
+              {allow.manage && student.passport && <Row k="Pasport / ID">{student.passport}</Row>}
             </dl>
+            <div className="mt-4 flex flex-wrap items-center gap-1.5">
+              {student.tags.map(({ tag }) => <TagChip key={tag.id} name={tag.name} color={tag.color} />)}
+              {allow.manage && allTags.length > 0 && (
+                <Modal title="Teglar" triggerClassName="btn-ghost px-2 py-1 text-xs" trigger={<><Tags className="h-3.5 w-3.5" /> {student.tags.length ? "Teglar" : "Teg qo'shish"}</>}>
+                  <form action={setStudentTags.bind(null, student.id)} className="space-y-3">
+                    <div className="space-y-2">
+                      {allTags.filter((t) => t.active || student.tags.some((x) => x.tagId === t.id)).map((t) => (
+                        <label key={t.id} className="flex items-center gap-3 text-sm">
+                          <input type="checkbox" name="tagId" value={t.id} defaultChecked={student.tags.some((x) => x.tagId === t.id)} className="h-4 w-4 accent-accent" />
+                          <TagChip name={t.name} color={t.color} />
+                          {!t.active && <span className="text-xs text-faint">o&apos;chirilgan</span>}
+                        </label>
+                      ))}
+                    </div>
+                    <SubmitRow />
+                  </form>
+                </Modal>
+              )}
+            </div>
             <div className="mt-5 flex flex-wrap gap-2">
               {allow.manage && <Modal title="Ma'lumotlarni tahrirlash" triggerClassName="btn-secondary" trigger={<><Pencil className="h-4 w-4" /> Tahrirlash</>}>
                 <form action={updateStudent.bind(null, student.id)} className="space-y-3">
-                  <StudentFields s={student} />
+                  <StudentFields s={student} canManage={allow.manage} />
                   <SubmitRow />
                 </form>
               </Modal>}
@@ -112,9 +159,31 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
               </Modal>
             </div>}
           </div>}
+
+          {pinned && (
+            <Link href={`/students/${student.id}?tab=notes`} className="card press block p-5 hover:border-line-strong">
+              <p className="label-mono flex items-center gap-1.5"><Pin className="h-3.5 w-3.5" /> Eslatma</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm text-ink">{pinned.text}</p>
+              <p className="label-mono mt-3">{date(pinned.createdAt)} · {pinned.user?.name ?? "Tizim"}</p>
+            </Link>
+          )}
         </div>
 
         <div className="space-y-6 xl:col-span-2">
+          <nav className="card flex gap-1 overflow-x-auto px-3 pt-2" aria-label="O'quvchi bo'limlari">
+            {tabs.map((t) => (
+              <Link
+                key={t.key}
+                href={`/students/${student.id}?tab=${t.key}`}
+                aria-current={tab === t.key ? "page" : undefined}
+                className={`shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${tab === t.key ? "border-ink text-ink" : "border-transparent text-muted hover:text-ink"}`}
+              >
+                {t.label}{t.key === "notes" && student.notes.length > 0 && <span className="ml-1 text-faint">{student.notes.length}</span>}
+              </Link>
+            ))}
+          </nav>
+
+          {tab === "groups" && (
           <div className="card">
             <div className="flex items-center justify-between px-5 py-4">
               <h2 className="font-semibold">Guruhlar</h2>
@@ -194,8 +263,9 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             </div>
             {student.groups.length === 0 && <Empty text="Guruhga biriktirilmagan" />}
           </div>
+          )}
 
-          {allow.payments && <div className="card">
+          {tab === "payments" && allow.payments && <div className="card">
             <div className="flex items-center justify-between px-5 py-4">
               <h2 className="font-semibold">To&apos;lovlar va hisob</h2>
               {allow.balance && <span className={`font-semibold ${b < 0 ? "text-danger" : "text-success"}`}>{money(b)}</span>}
@@ -233,7 +303,7 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
             </div>
           </div>}
 
-          {allow.shop && student.purchases.length > 0 && <div className="card">
+          {tab === "payments" && allow.shop && student.purchases.length > 0 && <div className="card">
             <h2 className="px-5 py-4 font-semibold">Do&apos;kondan xaridlar</h2>
             <div className="overflow-x-auto">
               <table className="table">
@@ -250,10 +320,56 @@ export default async function StudentPage({ params }: { params: Promise<{ id: st
               </table>
             </div>
           </div>}
+
+          {tab === "notes" && (
+            <div className="card">
+              <NotesPanel studentId={student.id} notes={student.notes} canWrite={allow.manage} me={{ id: user.id, isAdmin: user.isAdmin }} />
+            </div>
+          )}
+
+          {tab === "exams" && (
+            <div className="card overflow-x-auto">
+              <table className="table">
+                <thead><tr><th>Imtihon</th><th>Sana</th><th className="text-right">Ball</th></tr></thead>
+                <tbody>
+                  {[...student.examResults].sort((a, b) => b.exam.date.getTime() - a.exam.date.getTime()).map((r) => {
+                    const course = student.groups.find((g) => g.groupId === r.exam.groupId)?.group.course;
+                    const fail = course ? !passed(r.score, r.exam.maxScore, course.passPercent) : false;
+                    return (
+                      <tr key={r.id}>
+                        <td className="whitespace-normal">{r.exam.title}</td>
+                        <td className="text-muted">{date(r.exam.date)}</td>
+                        <td className={`text-right font-mono ${fail ? "text-danger" : ""}`}>{r.score}/{r.exam.maxScore}{fail && <span className="label-mono ml-2 text-danger">yiqildi</span>}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {student.examResults.length === 0 && <Empty text="Imtihon natijalari yo'q" />}
+            </div>
+          )}
+
+          {tab === "history" && <div className="card"><HistoryList items={history} /></div>}
         </div>
       </div>
     </>
   );
+}
+
+/** The student's timeline: group events and payments from their own tables, everything else from the activity log. */
+async function loadHistory(studentId: number, payments: { date: Date; amount: number; method: string; group: { name: string } | null }[], showMoney: boolean) {
+  const [events, logs] = await Promise.all([
+    db.membershipEvent.findMany({
+      where: { groupStudent: { studentId } },
+      include: { groupStudent: { include: { group: { select: { name: true } } } }, user: { select: { name: true } }, reason: { select: { name: true } } },
+    }),
+    db.auditLog.findMany({ where: { studentId }, include: { user: { select: { name: true } } } }),
+  ]);
+  return studentHistory({
+    events: events.map((e) => ({ date: e.date, createdAt: e.createdAt, type: e.type, group: e.groupStudent.group.name, user: e.user?.name ?? null, reason: e.reason?.name ?? null })),
+    payments: payments.map((p) => ({ date: p.date, amount: p.amount, method: p.method, group: p.group?.name ?? null })),
+    logs: logs.map((l) => ({ createdAt: l.createdAt, action: l.action, summary: l.summary, user: l.user?.name ?? null })),
+  }, { showMoney });
 }
 
 function Row({ k, children }: { k: string; children: React.ReactNode }) {

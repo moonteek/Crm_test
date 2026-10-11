@@ -4,6 +4,7 @@ import { requirePage } from "@/lib/auth";
 import { GROUP_DAYS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { Empty, Field, PageHeader, SubmitRow } from "@/components/ui";
+import { ExportButtons } from "@/components/ExportButtons";
 import { createRoom, deleteRoom } from "../actions";
 
 export default async function RoomsPage() {
@@ -15,6 +16,7 @@ export default async function RoomsPage() {
   return (
     <>
       <PageHeader title="Xonalar" subtitle="Xonalar va ularning bandligi">
+        <ExportButtons href="/rooms/export" />
         <Modal title="Yangi xona" trigger={<><Plus className="h-4 w-4" /> Xona qo&apos;shish</>}>
           <form action={createRoom} className="space-y-3">
             <Field label="Xona nomi"><input name="name" className="input" required placeholder="1-xona" /></Field>

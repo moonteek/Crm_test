@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
-import { can, studentScope } from "@/lib/access";
-import { balance } from "@/lib/billing";
-import { membershipInclude } from "@/lib/billing-include";
+import { can } from "@/lib/access";
+import { loadDebtors } from "@/lib/lists/debtors";
+import { ExportButtons } from "@/components/ExportButtons";
 import { money } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { PaymentForm } from "@/components/forms";
@@ -11,22 +10,13 @@ import { Empty, PageHeader } from "@/components/ui";
 
 export default async function DebtorsPage() {
   const user = await requirePage("debtors.view");
-  const students = await db.student.findMany({
-    where: studentScope(user),
-    include: {
-      payments: { select: { amount: true } },
-      groups: { include: membershipInclude },
-    },
-  });
-  const debtors = students
-    .map((s) => ({ ...s, balance: balance(s.groups, s.payments) }))
-    .filter((s) => s.balance < 0)
-    .sort((a, b) => a.balance - b.balance);
-  const total = debtors.reduce((sum, s) => sum + s.balance, 0);
+  const { debtors, total } = await loadDebtors(user);
 
   return (
     <>
-      <PageHeader title="Qarzdorlar" subtitle={`${debtors.length} ta o'quvchi · jami qarz ${money(-total)}`} />
+      <PageHeader title="Qarzdorlar" subtitle={`${debtors.length} ta o'quvchi · jami qarz ${money(-total)}`}>
+        <ExportButtons href="/debtors/export" />
+      </PageHeader>
       <div className="card md:overflow-x-auto">
         <table className="table table-stack">
           <thead><tr><th>Ism</th><th>Telefon</th><th>Ota-ona</th><th>Guruhlar</th><th>Qarz</th><th></th></tr></thead>

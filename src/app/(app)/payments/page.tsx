@@ -1,27 +1,16 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
-import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
-import { can, studentScope } from "@/lib/access";
+import { can } from "@/lib/access";
 import { date, money, MONTHS, PAYMENT_METHODS } from "@/lib/format";
 import { Empty, PageHeader } from "@/components/ui";
+import { ExportButtons } from "@/components/ExportButtons";
+import { loadPayments } from "@/lib/lists/payments";
 import { deletePayment } from "../actions";
 
 export default async function PaymentsPage({ searchParams }: { searchParams: Promise<{ m?: string; method?: string }> }) {
   const user = await requirePage("payments.view");
-  const { m, method } = await searchParams;
-  const now = new Date();
-  const [year, month] = m ? [Number(m.split("-")[0]), Number(m.split("-")[1]) - 1] : [now.getFullYear(), now.getMonth()];
-  const from = new Date(year, month, 1);
-  const to = new Date(year, month + 1, 1);
-
-  const [payments] = await Promise.all([
-    db.payment.findMany({
-      where: { date: { gte: from, lt: to }, ...(method ? { method } : {}), student: studentScope(user) },
-      include: { student: true, group: true },
-      orderBy: { date: "desc" },
-    }),
-  ]);
+  const { year, month, from, method, payments } = await loadPayments(user, await searchParams);
   const total = payments.reduce((s, p) => s + p.amount, 0);
   const byMethod = Object.keys(PAYMENT_METHODS).map((k) => ({
     k, sum: payments.filter((p) => p.method === k).reduce((s, p) => s + p.amount, 0),
@@ -37,6 +26,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
   return (
     <>
       <PageHeader title="To'lovlar" subtitle="To'lovlar o'quvchi sahifasidan qabul qilinadi">
+        <ExportButtons href="/payments/export" />
         <div className="flex items-center gap-2">
           <Link href={q({ m: ym(new Date(year, month - 1, 1)) })} className="btn-secondary px-2"><ChevronLeft className="h-4 w-4" /></Link>
           <span className="w-32 text-center text-sm font-medium tabular-nums">{MONTHS[month]} {year}</span>

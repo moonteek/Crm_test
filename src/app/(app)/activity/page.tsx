@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { activityWhere } from "@/lib/lists/activity";
+import { ExportButtons } from "@/components/ExportButtons";
 import { requirePage } from "@/lib/auth";
 import { AUDIT_AREAS } from "@/lib/audit";
 import { Empty, PageHeader } from "@/components/ui";
@@ -17,11 +19,7 @@ export default async function ActivityPage({
   await requirePage("audit.view");
   const { user, area, q, page: pageParam } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
-  const where = {
-    ...(user ? { userId: Number(user) } : {}),
-    ...(area ? { action: { startsWith: `${area}.` } } : {}),
-    ...(q ? { summary: { contains: q } } : {}),
-  };
+  const where = activityWhere({ user, area, q });
   const [logs, count, staff] = await Promise.all([
     db.auditLog.findMany({ where, include: { user: true }, orderBy: { createdAt: "desc" }, skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE }),
     db.auditLog.count({ where }),
@@ -39,7 +37,9 @@ export default async function ActivityPage({
 
   return (
     <>
-      <PageHeader title="Faoliyat jurnali" subtitle="Kim, qachon, nima qildi — barcha muhim amallar" />
+      <PageHeader title="Faoliyat jurnali" subtitle="Kim, qachon, nima qildi — barcha muhim amallar">
+        <ExportButtons href="/activity/export" />
+      </PageHeader>
       <div className="card">
         <form className="flex flex-wrap gap-3 border-b border-line p-4">
           <select name="user" defaultValue={user ?? ""} className="input w-auto">

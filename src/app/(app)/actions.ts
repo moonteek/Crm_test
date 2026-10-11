@@ -17,7 +17,7 @@ import { nextMonthStart, schedulePrice } from "@/lib/prices-db";
 import { changeTeacher } from "@/lib/teachers-db";
 import { menuActions, systemLeaveDate, type EventType, type Status } from "@/lib/membership";
 import {
-  ACTIVITY_TYPES, isoDate, CALL_RESULTS, EXPENSE_CATEGORIES, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES,
+  ACTIVITY_TYPES, isoDate, CALL_RESULTS, EXPENSE_CATEGORIES, GENDERS, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_SOURCES, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES, TAG_COLORS,
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
@@ -131,12 +131,13 @@ export async function convertLead(id: number, f: FormData) {
       name: lead.name,
       phone: lead.phone,
       note: lead.note,
+      source: lead.source,
     },
   });
   if (groupId) await db.$transaction((tx) => startMembership(tx, { groupId, studentId: student.id, mode: "TRIAL", date: centreDay(), userId: user.id }));
   await db.lead.update({ where: { id }, data: { status: "WON", wonAt: new Date(), studentId: student.id, nextActionAt: null } });
   await db.leadActivity.create({ data: { leadId: id, userId: user.id, type: "STATUS", result: "WON" } });
-  await logAction(user, "lead.convert", `Lid o'quvchiga aylantirildi: ${lead.name}`);
+  await logAction(user, "lead.convert", `Lid o'quvchiga aylantirildi: ${lead.name}`, { studentId: student.id });
   revalidatePath("/leads");
   redirect(`/students/${student.id}`);
 }
@@ -199,7 +200,14 @@ const studentSchema = z.object({
   phone: v.text("Telefon", 40),
   parentPhone: v.optText(40),
   birthDate: v.optDate(),
-  note: v.optText(),
+  // "+ qo'shimcha ma'lumot"
+  gender: v.oneOf(GENDERS, null),
+  parentName: v.optText(120),
+  phone2: v.optText(40),
+  school: v.optText(120),
+  address: v.optText(200),
+  source: v.oneOf(LEAD_SOURCES, null),
+  passport: v.optText(40),
 });
 
 /** How a student starts in a group: free trial or charged from the given date. */
@@ -215,14 +223,15 @@ export async function createStudent(f: FormData) {
   if (groupId) {
     await db.$transaction((tx) => startMembership(tx, { groupId, studentId: student.id, mode: mode as "TRIAL" | "ACTIVE", date: joinedAt ?? centreDay(), userId: user.id }));
   }
-  await logAction(user, "student.create", `Yangi o'quvchi: ${student.name}`);
+  await logAction(user, "student.create", `Yangi o'quvchi: ${student.name}`, { studentId: student.id });
   redirect(`/students/${student.id}`);
 }
 
 export async function updateStudent(id: number, f: FormData) {
   const user = await requirePermission("students.manage");
   await assertStudentAccess(user, id);
-  await db.student.update({ where: { id }, data: parseForm(studentSchema, f) });
+  const student = await db.student.update({ where: { id }, data: parseForm(studentSchema, f) });
+  await logAction(user, "student.update", `Ma'lumotlari tahrirlandi: ${student.name}`, { studentId: id });
   revalidatePath(`/students/${id}`);
 }
 
@@ -247,7 +256,7 @@ export async function addStudentToGroup(f: FormData) {
   const date = joinedAt ?? centreDay();
   await db.$transaction((tx) => startMembership(tx, { groupId, studentId, mode: mode as "TRIAL" | "ACTIVE", date, userId: user.id }));
   const [student, group] = await Promise.all([db.student.findUniqueOrThrow({ where: { id: studentId } }), db.group.findUniqueOrThrow({ where: { id: groupId } })]);
-  await logAction(user, "student.join", `${student.name} → ${group.name} (${MODES[mode as keyof typeof MODES].toLowerCase()}, ${isoDate(date)})`);
+  await logAction(user, "student.join", `${student.name} → ${group.name} (${MODES[mode as keyof typeof MODES].toLowerCase()}, ${isoDate(date)})`, { studentId });
   revalidatePath(`/students/${studentId}`);
   revalidatePath(`/groups/${groupId}`);
 }
@@ -276,7 +285,7 @@ export async function memberAction(_: MemberActionState, f: FormData): Promise<M
     const date = d.date ?? centreDay();
     await db.$transaction((tx) => recordEvent(tx, gs.id, { type: d.type as EventType, date, reasonId: d.reasonId, comment: d.comment, userId: user.id }));
     const reason = d.reasonId ? (await db.reason.findUnique({ where: { id: d.reasonId } }))?.name : null;
-    await logAction(user, `student.${d.type.toLowerCase()}`, `${gs.student.name} — ${gs.group.name}: ${MEMBER_ACTIONS[d.type as keyof typeof MEMBER_ACTIONS]} (${isoDate(date)}${reason ? `, ${reason}` : ""})`);
+    await logAction(user, `student.${d.type.toLowerCase()}`, `${gs.student.name} — ${gs.group.name}: ${MEMBER_ACTIONS[d.type as keyof typeof MEMBER_ACTIONS]} (${isoDate(date)}${reason ? `, ${reason}` : ""})`, { studentId: gs.studentId });
     revalidatePath(`/groups/${gs.groupId}`);
     revalidatePath(`/students/${gs.studentId}`);
     return { ok: true };
@@ -308,7 +317,7 @@ export async function transferStudent(_: MemberActionState, f: FormData): Promis
       await recordEvent(tx, gs.id, { type: "LEAVE", date, reasonId: d.reasonId, comment: `${to.name} guruhiga o'tkazildi`, userId: user.id });
       await startMembership(tx, { groupId: d.toGroupId, studentId: gs.studentId, mode: d.mode as "TRIAL" | "ACTIVE", date, userId: user.id });
     });
-    await logAction(user, "student.transfer", `${gs.student.name}: ${gs.group.name} → ${to.name} (${isoDate(date)})`);
+    await logAction(user, "student.transfer", `${gs.student.name}: ${gs.group.name} → ${to.name} (${isoDate(date)})`, { studentId: gs.studentId });
     revalidatePath(`/groups/${gs.groupId}`);
     revalidatePath(`/groups/${d.toGroupId}`);
     revalidatePath(`/students/${gs.studentId}`);
@@ -696,7 +705,7 @@ export async function createPayment(f: FormData) {
     include: { student: true },
     data: { studentId: d.studentId, groupId, amount: d.amount, method: d.method, note: d.note, date: d.date ?? new Date() },
   });
-  await logAction(user, "payment.create", `To'lov: ${payment.student.name} — ${money(payment.amount)}`);
+  await logAction(user, "payment.create", `To'lov: ${payment.student.name} — ${money(payment.amount)}`, { studentId: payment.studentId });
   revalidatePath(`/students/${d.studentId}`);
   revalidatePath("/payments");
 }
@@ -704,7 +713,7 @@ export async function createPayment(f: FormData) {
 export async function deletePayment(id: number) {
   const user = await requirePermission("payments.delete");
   const p = await db.payment.delete({ where: { id }, include: { student: true } });
-  await logAction(user, "payment.delete", `To'lov o'chirildi: ${p.student.name} — ${money(p.amount)} (${p.date.toISOString().slice(0, 10)})`);
+  await logAction(user, "payment.delete", `To'lov o'chirildi: ${p.student.name} — ${money(p.amount)} (${p.date.toISOString().slice(0, 10)})`, { studentId: p.studentId });
   revalidatePath(`/students/${p.studentId}`);
   revalidatePath("/payments");
 }
@@ -830,6 +839,93 @@ export async function deleteExam(id: number) {
   await db.exam.delete({ where: { id } });
   await logAction(user, "exam.delete", `Imtihon o'chirildi: ${exam.group.name} — ${exam.title}`);
   revalidatePath(`/groups/${exam.groupId}`);
+}
+
+// ---------- Student notes and tags ----------
+async function noteStudent(user: Awaited<ReturnType<typeof requirePermission>>, studentId: number) {
+  await assertStudentAccess(user, studentId);
+  return db.student.findUniqueOrThrow({ where: { id: studentId }, select: { id: true, name: true } });
+}
+
+export async function addNote(studentId: number, f: FormData) {
+  const user = await requirePermission("students.manage");
+  const student = await noteStudent(user, studentId);
+  const { text } = parseForm(z.object({ text: v.text("Eslatma", 2000) }), f);
+  await db.studentNote.create({ data: { studentId, text, userId: user.id } });
+  await logAction(user, "student.note", `Eslatma qo'shildi: ${text.slice(0, 80)}`, { studentId: student.id });
+  revalidatePath(`/students/${studentId}`);
+}
+
+/** Pins a note to the profile card (the previously pinned one is unpinned), or unpins it. */
+export async function pinNote(id: number) {
+  const user = await requirePermission("students.manage");
+  const note = await db.studentNote.findUniqueOrThrow({ where: { id } });
+  await noteStudent(user, note.studentId);
+  await db.$transaction([
+    db.studentNote.updateMany({ where: { studentId: note.studentId, pinned: true }, data: { pinned: false } }),
+    ...(note.pinned ? [] : [db.studentNote.update({ where: { id }, data: { pinned: true } })]),
+  ]);
+  await logAction(user, "student.note", note.pinned ? "Eslatma qadalgan joyidan olindi" : `Eslatma qadaldi: ${note.text.slice(0, 80)}`, { studentId: note.studentId });
+  revalidatePath(`/students/${note.studentId}`);
+}
+
+/** Its author or an admin may delete a note. */
+export async function deleteNote(id: number) {
+  const user = await requirePermission("students.manage");
+  const note = await db.studentNote.findUniqueOrThrow({ where: { id } });
+  await noteStudent(user, note.studentId);
+  if (note.userId !== user.id && !user.isAdmin) throw new Error("Faqat eslatma muallifi yoki administrator o'chira oladi");
+  await db.studentNote.delete({ where: { id } });
+  await logAction(user, "student.note", `Eslatma o'chirildi: ${note.text.slice(0, 80)}`, { studentId: note.studentId });
+  revalidatePath(`/students/${note.studentId}`);
+}
+
+/** The student's tags become exactly the ticked ones; a switched-off tag can stay but can't be newly added. */
+export async function setStudentTags(studentId: number, f: FormData) {
+  const user = await requirePermission("students.manage");
+  const student = await noteStudent(user, studentId);
+  const wanted = f.getAll("tagId").map((x) => check(v.id("Teg"), x));
+  const [current, tags] = await Promise.all([db.studentTag.findMany({ where: { studentId } }), db.tag.findMany()]);
+  const has = new Set(current.map((t) => t.tagId));
+  const added = wanted.filter((id) => !has.has(id) && tags.find((t) => t.id === id)?.active);
+  const removed = current.map((t) => t.tagId).filter((id) => !wanted.includes(id));
+  await db.$transaction([
+    db.studentTag.deleteMany({ where: { studentId, tagId: { in: removed } } }),
+    ...added.map((tagId) => db.studentTag.create({ data: { studentId, tagId } })),
+  ]);
+  const name = (id: number) => tags.find((t) => t.id === id)?.name;
+  const change = [...added.map((id) => `+${name(id)}`), ...removed.map((id) => `−${name(id)}`)].join(", ");
+  if (change) await logAction(user, "student.tag", `Teglar: ${change}`, { studentId: student.id });
+  revalidatePath(`/students/${studentId}`);
+}
+
+const tagSchema = z.object({ name: v.text("Teg nomi", 40), color: v.oneOf(TAG_COLORS, "amber") });
+
+export async function createTag(f: FormData) {
+  const user = await requirePermission("students.tags");
+  const d = parseForm(tagSchema, f);
+  if (await db.tag.findUnique({ where: { name: d.name } })) throw new Error("Bunday teg bor");
+  await db.tag.create({ data: d });
+  await logAction(user, "tag.manage", `Teg qo'shildi: ${d.name}`);
+  revalidatePath("/settings/tags");
+}
+
+export async function updateTag(id: number, f: FormData) {
+  const user = await requirePermission("students.tags");
+  const d = parseForm(tagSchema, f);
+  const before = await db.tag.findUniqueOrThrow({ where: { id } });
+  if (d.name !== before.name && (await db.tag.findUnique({ where: { name: d.name } }))) throw new Error("Bunday teg bor");
+  await db.tag.update({ where: { id }, data: d });
+  await logAction(user, "tag.manage", `Teg o'zgartirildi: ${before.name} → ${d.name}`);
+  revalidatePath("/settings/tags");
+}
+
+export async function toggleTag(id: number) {
+  const user = await requirePermission("students.tags");
+  const t = await db.tag.findUniqueOrThrow({ where: { id } });
+  await db.tag.update({ where: { id }, data: { active: !t.active } });
+  await logAction(user, "tag.manage", `Teg ${t.active ? "o'chirildi" : "yoqildi"}: ${t.name}`);
+  revalidatePath("/settings/tags");
 }
 
 // ---------- Teacher availability ----------

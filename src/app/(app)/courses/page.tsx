@@ -1,5 +1,6 @@
 import { Pencil, Plus } from "lucide-react";
 import { db } from "@/lib/db";
+import { ExportButtons } from "@/components/ExportButtons";
 import { requirePage } from "@/lib/auth";
 import { can } from "@/lib/access";
 import { money } from "@/lib/format";
@@ -38,6 +39,7 @@ export default async function CoursesPage() {
   return (
     <>
       <PageHeader title="Kurslar" subtitle={`${courses.length} ta kurs`}>
+        <ExportButtons href="/courses/export" />
         {manage && <Modal title="Yangi kurs" trigger={<><Plus className="h-4 w-4" /> Kurs qo&apos;shish</>}>
           <form action={createCourse} className="space-y-3"><CourseFields /><SubmitRow /></form>
         </Modal>}

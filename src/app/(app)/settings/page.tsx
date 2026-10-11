@@ -40,7 +40,7 @@ function StaffFields({ roles, u }: { roles: Role[]; u?: Staff }) {
 
 export default async function StaffPage() {
   const me = await requireUser();
-  if (!can(me, "staff.manage")) redirect(can(me, "mcp.use") ? "/settings/mcp" : "/no-access");
+  if (!can(me, "staff.manage")) redirect(can(me, "students.tags") ? "/settings/tags" : can(me, "mcp.use") ? "/settings/mcp" : "/no-access");
   const [users, roles] = await Promise.all([
     db.user.findMany({ include: { role: true }, orderBy: [{ active: "desc" }, { name: "asc" }] }),
     db.role.findMany({ orderBy: { name: "asc" } }),
