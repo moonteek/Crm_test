@@ -6,7 +6,7 @@ const d = (y: number, m: number, day: number) => new Date(Date.UTC(y, m - 1, day
 const iso = (x: Date) => x.toISOString().slice(0, 10);
 const HTML = { id: 1, name: "HTML", months: 1, position: 1 };
 const CSS = { id: 2, name: "CSS", months: 2, position: 2 };
-const group = { startDate: d(2026, 10, 20), days: "EVEN", startSubjectId: null, startLevel: 1 };
+const group = { startDate: d(2026, 10, 20), days: "EVEN", startSubjectId: null, startLevel: 1, holidays: [] as string[] };
 
 test("levels are months from the group's start day; lesson counts vary around 13", () => {
   const w = levelWindows(group, [CSS, HTML]); // order comes from position, not the array
@@ -72,4 +72,13 @@ test("pass mark", () => {
   assert.equal(passed(59, 100, 60), false);
   assert.equal(passed(60, 100, 60), true);
   assert.equal(passed(12, 20, 60), true);
+});
+
+test("holidays aren't lessons: the level counts held lessons and the exam moves to the last one", () => {
+  const w = levelWindows({ ...group, holidays: ["2026-11-10"] }, [HTML]);
+  assert.equal(w[0].lessons.length, 13); // 14 scheduled, one a holiday
+  const onExamDay = levelExams({ ...group, holidays: ["2026-11-19"] }, [HTML]);
+  assert.equal(iso(onExamDay[0].date), "2026-11-17");
+  const allOff = levelWindows(group, [HTML])[0].lessons.map(iso);
+  assert.deepEqual(levelExams({ ...group, holidays: allOff }, [HTML]), []);
 });

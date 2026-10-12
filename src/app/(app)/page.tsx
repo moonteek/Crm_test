@@ -4,7 +4,8 @@ import { AlertCircle, GraduationCap, UserPlus, Users, UsersRound, Wallet } from 
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { can, firstAllowedPage, groupScope, studentScope } from "@/lib/access";
-import { balance } from "@/lib/billing";
+import { balance, withHolidays } from "@/lib/billing";
+import { holidayDays } from "@/lib/holidays-db";
 import { membershipInclude } from "@/lib/billing-include";
 import { centreMonthStart, centreToday, fromMinutes, greeting, scheduleKeysOn, toMinutes, WEEKDAYS } from "@/lib/schedule";
 import { date, money, MONTHS, PAYMENT_METHODS, LEAD_STATUSES } from "@/lib/format";
@@ -43,7 +44,9 @@ export default async function Dashboard() {
     db.sale.aggregate({ _sum: { total: true }, where: { date: { gte: monthStart } } }),
   ]);
 
-  const debtors = students.filter((s) => balance(s.groups, s.payments) < 0).length;
+  const holidays = await holidayDays();
+  const todayClosed = holidays.includes(`${today.year}-${String(today.month).padStart(2, "0")}-${String(today.day).padStart(2, "0")}`);
+  const debtors = students.filter((s) => balance(withHolidays(s.groups, holidays), s.payments) < 0).length;
   const income = (monthPayments._sum.amount ?? 0) + (monthShop._sum.total ?? 0);
   const expense = monthExpenses._sum.amount ?? 0;
   const totalLeads = leadCounts.reduce((s, l) => s + l._count, 0) || 1;
@@ -85,8 +88,8 @@ export default async function Dashboard() {
             <h2 className="font-semibold">Bugungi darslar</h2>
             <Link href="/schedule" className="label-mono hover:text-ink">Jadval →</Link>
           </div>
-          {todayGroups.length === 0 ? (
-            <Empty text="Bugun dars yo'q" />
+          {todayGroups.length === 0 || todayClosed ? (
+            <Empty text={todayClosed ? "Bayram — dars yo'q" : "Bugun dars yo'q"} />
           ) : (
             <div className="space-y-2">
               {todayGroups.map((g) => (

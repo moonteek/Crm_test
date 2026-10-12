@@ -5,7 +5,8 @@ import { db } from "@/lib/db";
 import { centreDay } from "@/lib/membership-db";
 import { requirePage } from "@/lib/auth";
 import { can, canSeeBalances, groupScope } from "@/lib/access";
-import { balance, priceNow } from "@/lib/billing";
+import { balance, priceNow, withHolidays } from "@/lib/billing";
+import { holidayDays } from "@/lib/holidays-db";
 import { upcomingPrice } from "@/lib/prices";
 import { membershipInclude } from "@/lib/billing-include";
 import { date, GROUP_DAYS, isoDate, lessonDates, money, MONTHS } from "@/lib/format";
@@ -71,7 +72,10 @@ export default async function GroupPage({
   ]);
   const thisGroup = { id: group.id, name: group.name, days: group.days, price: group.price, course: group.course, prices: group.prices };
   const upcoming = upcomingPrice(group.prices, now);
-  const cur = curriculumOn(group, group.course.subjects, centreDay());
+  const holidays = await holidayDays();
+  const planGroup = { ...group, holidays };
+  const off = new Set(holidays);
+  const cur = curriculumOn(planGroup, group.course.subjects, centreDay());
   // just opened (?warn=1): hours its teacher / assistant marked as busy, worked out here — never text from the link
   const people = [group.teacher, group.assistant].filter((p): p is NonNullable<typeof p> => p !== null);
   const busyWarnings = warn && people.length
@@ -81,8 +85,8 @@ export default async function GroupPage({
         new Map(people.map((p) => [p.id, p.name])),
       )
     : [];
-  const autoExams = levelExams(group, group.course.subjects);
-  const examCols = examColumns(group, group.course.subjects, exams, centreDay());
+  const autoExams = levelExams(planGroup, group.course.subjects);
+  const examCols = examColumns(planGroup, group.course.subjects, exams, centreDay());
   const mark = new Map(attendance.map((a) => [`${a.studentId}:${isoDate(a.date)}`, a.present]));
   const gradeMap = new Map(grades.map((g) => [`${g.studentId}:${isoDate(g.date)}`, g.score]));
   const prev = new Date(year, month - 1, 1);
@@ -207,14 +211,14 @@ export default async function GroupPage({
                   {tab === "attendance" && allow.balance && <th>Balans</th>}
                   <th className="text-center">{tab === "attendance" ? "Davomat" : "O'rtacha"}</th>
                   {days.map((d) => (
-                    <th key={d.toISOString()} className={`px-1 text-center ${isoDate(d) === today ? "text-accent-ink" : ""}`}>{d.getUTCDate()}</th>
+                    <th key={d.toISOString()} title={off.has(isoDate(d)) ? "Bayram — dars yo'q" : undefined} className={`px-1 text-center ${off.has(isoDate(d)) ? "text-faint line-through" : isoDate(d) === today ? "text-accent-ink" : ""}`}>{d.getUTCDate()}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {group.students.map((gs) => {
                   const { student } = gs;
-                  const b = balance(student.groups, student.payments);
+                  const b = balance(withHolidays(student.groups, holidays), student.payments);
                   const marks = days.map((d) => mark.get(`${student.id}:${isoDate(d)}`)).filter((v) => v !== undefined);
                   const scores = days.map((d) => gradeMap.get(`${student.id}:${isoDate(d)}`)).filter((v): v is number => v !== undefined);
                   return (
@@ -229,7 +233,7 @@ export default async function GroupPage({
                             </p>
                           </div>
                           <MemberMenu
-                            member={toMemberData({ ...gs, group: thisGroup }, { id: student.id, name: student.name }, { money: allow.balance })}
+                            member={toMemberData({ ...gs, group: thisGroup }, { id: student.id, name: student.name }, { money: allow.balance, holidays })}
                             reasons={reasons}
                             groups={transferGroups.map((g) => toMemberGroup(g))}
                             balance={allow.balance ? b : null}
@@ -246,6 +250,7 @@ export default async function GroupPage({
                       </td>
                       {days.map((d) => {
                         const key = isoDate(d);
+                        if (off.has(key)) return <td key={key} className="px-1 text-center"><span className="label-mono text-faint" title="Bayram — dars yo'q">B</span></td>;
                         if (tab === "grades") {
                           return (
                             <td key={key} className="px-1 text-center">

@@ -1,7 +1,8 @@
 import "server-only";
 import { db } from "../db";
 import { canSeeBalances, studentScope, type CurrentUser } from "../access";
-import { balance } from "../billing";
+import { balance, withHolidays } from "../billing";
+import { holidayDays } from "../holidays-db";
 import { MEMBER_STATUS, type Status } from "../membership";
 import { studentWhere, type StudentFilters } from "../student-filters";
 import type { Table } from "../export";
@@ -25,13 +26,14 @@ export async function loadStudents(user: CurrentUser, f: StudentFilters) {
     orderBy: { name: "asc" },
   });
 
+  const holidays = await holidayDays();
   const all = found
     .map((s) => {
       const current = s.groups.filter((g) => !g.leftAt);
       return {
         ...s,
         current,
-        balance: showBalance ? balance(s.groups, s.payments) : null,
+        balance: showBalance ? balance(withHolidays(s.groups, holidays), s.payments) : null,
         teachers: [...new Set(current.flatMap((g) => [g.group.teacher?.name, g.group.assistant?.name]).filter((n): n is string => Boolean(n)))],
         statusLabel: current.length ? [...new Set(current.map((g) => MEMBER_STATUS[g.status as Status]))].join(", ") : "Guruhsiz",
       };

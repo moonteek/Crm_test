@@ -134,6 +134,11 @@ O'quvchilar ma'lumotlari kengaytirilgan versiyada `db:push` dan keyin eski "Izoh
 npm run db:notes-from-izoh
 ```
 
+**Bayram kunlari:** Sozlamalar → Bayram kunlari bo'limida kiritiladi (shu oydan boshlab). Bu kunlarda dars bo'lmaydi:
+oylik narx o'tilgan darslarga qarab kamayadi (narx × o'tilgan ÷ jadvaldagi darslar), o'qituvchiga ham faqat o'tilgan
+darslar hisoblanadi; davomat belgilanmaydi, kurs rejasi va imtihon sanasi shunga moslashadi. "Menejer" rolida
+"Bayram kunlari" ruxsatini Rollar sahifasida bir marta belgilang.
+
 **Chegirmalar:** o'quvchi sahifasidagi "Chegirma" bo'limida beriladi — har oy to'lovdan ayiriladigan summa, tanlangan
 oylar uchun (shu oydan, 2026-yil noyabrdan boshlab). Qisman oyda dars soniga qarab hisoblanadi; o'qituvchi ulushi
 o'zgarmaydi. "Menejer" rolida "Chegirma berish" ruxsatini Rollar sahifasida bir marta belgilang.

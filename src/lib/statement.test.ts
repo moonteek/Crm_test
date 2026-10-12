@@ -7,7 +7,7 @@ const nov = (day: number) => new Date(Date.UTC(2026, 10, day));
 const NOW = nov(15);
 
 const member = (events: StatementMembership["events"]): StatementMembership => ({
-  groupId: 1, group: { name: "ROBO-3", days: "EVEN", course: { price: 600_000 } }, events,
+  groupId: 1, group: { name: "ROBO-3", days: "EVEN", course: { price: 600_000 } }, events, holidays: [],
 });
 const pay = (id: number, amount: number, date: Date) => ({ id, amount, method: "CASH", date, note: null, groupId: 1 });
 

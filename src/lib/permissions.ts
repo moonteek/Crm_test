@@ -71,6 +71,7 @@ export const PERMISSION_GROUPS: { title: string; items: { key: string; label: st
       { key: "courses.view", label: "Kurslarni ko'rish" },
       { key: "courses.manage", label: "Kurs qo'shish va tahrirlash" },
       { key: "rooms.manage", label: "Xonalarni boshqarish" },
+      { key: "holidays.manage", label: "Bayram kunlari" },
     ],
   },
   {
@@ -109,7 +110,7 @@ export const DEFAULT_ROLES: { name: string; isSystem?: boolean; permissions: str
   {
     name: "Menejer",
     permissions: [
-      "dashboard.view", "leads.view", "leads.manage", "students.view", "students.manage", "students.tags", "students.discount",
+      "dashboard.view", "leads.view", "leads.manage", "students.view", "students.manage", "students.tags", "students.discount", "holidays.manage",
       "groups.view", "groups.all", "groups.manage", "attendance.mark", "grades.manage",
       "payments.view", "payments.create", "debtors.view", "sales.view", "shop.view", "shop.sell",
       "teachers.view", "courses.view", "rooms.manage", "mcp.use",

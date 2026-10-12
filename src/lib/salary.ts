@@ -1,11 +1,12 @@
 import { db } from "./db";
 import { monthBounds } from "./month";
 import { salesStats } from "./sales";
-import { billedStudentCount, PER_LESSON_FROM } from "./billing";
+import { billedStudentCount, PER_LESSON_FROM, withHolidays } from "./billing";
 import { teacherEarnings } from "./teacher-pay";
 import { ownsOn } from "./teachers-history";
 import { dayOf } from "./membership-legacy";
 import { membershipInclude } from "./billing-include";
+import { holidayDays } from "./holidays-db";
 
 export const SALARY_TYPES: Record<string, { label: string; unit: string }> = {
   NONE: { label: "Belgilanmagan", unit: "" },
@@ -97,7 +98,8 @@ async function oldRuleStudents(userId: number, month: string) {
   });
   const [y, m] = month.split("-").map(Number);
   const first = new Date(Date.UTC(y, m - 1, 1));
-  return memberships.filter((ms) => ownsOn(ms.group, userId, first) && billedStudentCount([ms], y, m - 1) > 0);
+  const holidays = await holidayDays();
+  return memberships.filter((ms) => ownsOn(ms.group, userId, first) && billedStudentCount([{ ...ms, holidays }], y, m - 1) > 0);
 }
 
 /** Months from the per-lesson switch on pay teachers by the lessons they taught. */
@@ -118,7 +120,7 @@ async function earningsFor(userId: number, salary: { type: "PERCENT" | "PER_STUD
     include: { ...membershipInclude, student: { select: { id: true, name: true } }, group: { include: { course: true, prices: true, teachers: true } } },
   });
   const [y, m] = month.split("-").map(Number);
-  return teacherEarnings(userId, salary, memberships, y, m - 1);
+  return teacherEarnings(userId, salary, withHolidays(memberships, await holidayDays()), y, m - 1);
 }
 
 export type SalaryBreakdown =

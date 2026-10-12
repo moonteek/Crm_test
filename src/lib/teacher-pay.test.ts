@@ -20,6 +20,7 @@ function member(
     student: { id: nextStudent, name: `S${nextStudent++}` },
     group: { ...group, assistantId: group.assistantId ?? null, course: { price: group.price } },
     events: events.map(([type, date, migrated]) => ({ type, date, migrated: migrated ?? false })),
+    holidays: [],
   };
 }
 const ROBO = { id: 6, name: "ROBO-3", days: "EVEN", price: 450_000, teacherId: A };

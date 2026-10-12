@@ -1,7 +1,8 @@
 import "server-only";
 import { db } from "../db";
 import { studentScope, type CurrentUser } from "../access";
-import { balance } from "../billing";
+import { balance, withHolidays } from "../billing";
+import { holidayDays } from "../holidays-db";
 import { membershipInclude } from "../billing-include";
 import type { Table } from "../export";
 
@@ -11,8 +12,9 @@ export async function loadDebtors(user: CurrentUser, _params: Record<string, str
     where: studentScope(user),
     include: { payments: { select: { amount: true } }, groups: { include: membershipInclude } },
   });
+  const holidays = await holidayDays();
   const debtors = students
-    .map((s) => ({ ...s, balance: balance(s.groups, s.payments) }))
+    .map((s) => ({ ...s, balance: balance(withHolidays(s.groups, holidays), s.payments) }))
     .filter((s) => s.balance < 0)
     .sort((a, b) => a.balance - b.balance);
   const total = debtors.reduce((sum, s) => sum + s.balance, 0);

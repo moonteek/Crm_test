@@ -94,6 +94,12 @@ export function lessonWeekdays(days: string) {
   return [1, 2, 3, 4, 5, 6];
 }
 
+/** Lesson dates of a month without the centre's holidays (ISO days): the lessons that actually happen. */
+export function heldLessons(days: string, year: number, month: number, holidays: string[]) {
+  const off = new Set(holidays);
+  return lessonDates(days, year, month).filter((d) => !off.has(d.toISOString().slice(0, 10)));
+}
+
 /** All lesson dates of a group within a given month. */
 export function lessonDates(days: string, year: number, month: number) {
   const weekdays = lessonWeekdays(days);

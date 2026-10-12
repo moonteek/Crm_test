@@ -47,6 +47,7 @@ model User {
   slots     TeacherSlot[]
   studentNotes StudentNote[]
   discounts    Discount[]
+  holidays     Holiday[]
 }
 
 // Personal access tokens used by MCP clients. Only a SHA-256 hash is stored.
@@ -488,4 +489,14 @@ model Discount {
   createdAt      DateTime     @default(now())
 
   @@index([groupStudentId])
+}
+
+// "Bayram kunlari": a day the whole centre is closed (UTC midnight). Not charged, not paid, not a lesson.
+model Holiday {
+  id        Int      @id @default(autoincrement())
+  date      DateTime @unique
+  name      String
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
 }
