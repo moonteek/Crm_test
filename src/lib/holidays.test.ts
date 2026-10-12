@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { heldLessons } from "./format";
-import { canDeleteHoliday, expandRange, holidayProblem } from "./holidays";
+import { canDeleteHoliday, expandRange, holidayProblem, holidayRefusal } from "./holidays";
 
 const d = (y: number, m: number, day: number) => new Date(Date.UTC(y, m - 1, day));
 const iso = (x: Date) => x.toISOString().slice(0, 10);
@@ -32,4 +32,9 @@ test("only future holidays can be deleted", () => {
   const today = new Date("2026-11-10T08:00:00Z"); // 13:00 in Tashkent
   assert.equal(canDeleteHoliday(d(2026, 11, 10), today), false);
   assert.equal(canDeleteHoliday(d(2026, 11, 11), today), true);
+});
+
+test("nothing can be marked on a holiday", () => {
+  assert.equal(holidayRefusal(d(2026, 11, 10), ["2026-11-10"]), "Bayram kuni — dars yo'q");
+  assert.equal(holidayRefusal(d(2026, 11, 11), ["2026-11-10"]), null);
 });

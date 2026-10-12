@@ -112,7 +112,8 @@ function lineFor(m: BillableMembership, events: Ev[], y: number, mo: number): Ch
     return { year: y, month: mo, lessons: lessons.length, billable: on ? lessons.length : 0, amount: on ? price : 0, legacy: true, days: on ? lessons : [], full: on ? price : 0, discount: 0 };
   }
   // a holiday stays in the month's lesson count (the price is per scheduled lesson) but is never charged or taught
-  const off = new Set(m.holidays);
+  // (per-lesson months only: an in-app October still follows the old rules for holidays and teacher pay)
+  const off = new Set(monthKey(y, mo) >= PER_LESSON_KEY ? m.holidays : []);
   const days = lessons.filter((day) => billableOn(events, day) && !off.has(day.toISOString().slice(0, 10)));
   const share = (monthly: number) => (lessons.length ? Math.round((Math.max(0, monthly) * days.length) / lessons.length) : 0);
   const full = share(price);

@@ -21,7 +21,7 @@ import {
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
-import { holidayDays } from "@/lib/holidays-db";
+import { assertNotHoliday, holidayDays } from "@/lib/holidays-db";
 import { canDeleteHoliday, expandRange, holidayProblem } from "@/lib/holidays";
 import { canDelete, canEnd, discountProblem, lastMonth } from "@/lib/discounts";
 import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, fitsDay, groupClashes, needsClashCheck, teacherGrid, type DayType, type LessonLike } from "@/lib/availability";
@@ -478,7 +478,7 @@ export async function toggleAttendance(groupId: number, studentId: number, isoDa
   const user = await requirePermission("attendance.mark");
   await assertGroupAccess(user, groupId);
   const date = check(v.isoDay(), isoDay);
-  await refuseHoliday(date);
+  await assertNotHoliday(date);
   const key = { groupId_studentId_date: { groupId, studentId, date } };
   const existing = await db.attendance.findUnique({ where: key });
   if (!existing) await db.attendance.create({ data: { groupId, studentId, date, present: true } });
@@ -750,16 +750,11 @@ export async function deleteExpense(id: number) {
 const gradeScore = z.number().int().min(1, "Baho 1 dan 5 gacha bo'lishi kerak").max(5, "Baho 1 dan 5 gacha bo'lishi kerak").nullable();
 
 /** Sets (or clears, when score is empty) a student's 1–5 lesson grade for a date. */
-/** A holiday is not a lesson: nothing can be marked or graded on it. */
-async function refuseHoliday(date: Date) {
-  if ((await holidayDays()).includes(date.toISOString().slice(0, 10))) throw new Error("Bayram kuni — dars yo'q");
-}
-
 export async function setGrade(groupId: number, studentId: number, isoDay: string, score: number | null) {
   const user = await requirePermission("grades.manage");
   await assertGroupAccess(user, groupId);
   const date = check(v.isoDay(), isoDay);
-  await refuseHoliday(date);
+  await assertNotHoliday(date);
   const value = check(gradeScore, score);
   const key = { groupId_studentId_date: { groupId, studentId, date } };
   if (value === null) {

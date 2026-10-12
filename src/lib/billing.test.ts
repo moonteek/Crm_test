@@ -267,3 +267,10 @@ test("legacy October ignores holidays", () => {
   const l = lineOf(closed(even(["ACTIVATE", d(2026, 10, 15)]), "2026-10-20"), 2026, 9);
   assert.deepEqual([l?.amount, l?.legacy], [600_000, true]);
 });
+
+test("an October changed in the app (per-lesson) still ignores holidays", () => {
+  const m: BillableMembership = { groupId: 2, holidays: ["2026-10-23"], group: { name: "FE-14", days: "ODD", course: { price: 600_000 } }, events: [
+    { type: "ACTIVATE", date: oct(20), migrated: false },
+  ] };
+  assert.equal(chargeLines(m, d(2026, 11, 15)).find((l) => l.month === 9)?.amount, 230_769);
+});

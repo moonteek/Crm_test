@@ -33,3 +33,7 @@ export function holidayProblem(dates: Date[], existing: { date: Date; name: stri
 
 /** Today's or a past holiday was already charged and paid for; only future ones can go. */
 export const canDeleteHoliday = (date: Date, now: Date) => date.getTime() > centreDate(now);
+
+/** Attendance and grades can't be recorded on a holiday: it isn't a lesson. */
+export const holidayRefusal = (date: Date, holidays: string[]) =>
+  holidays.includes(date.toISOString().slice(0, 10)) ? "Bayram kuni — dars yo'q" : null;
