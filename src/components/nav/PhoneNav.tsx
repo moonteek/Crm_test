@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LogOut, Menu, X } from "lucide-react";
 import { logout } from "@/app/login/actions";
-import { allowedNav, isActive, phoneTabs } from "@/lib/nav";
+import { allowedNav, isActive, navSections, phoneTabs } from "@/lib/nav";
 import type { Theme } from "@/lib/theme";
 import { LogoMark } from "../brand/Logo";
 import { ThemeToggle } from "../ThemeToggle";
@@ -101,8 +101,12 @@ export function PhoneNav({ name, roleName, permissions, theme, alerts, canSeeAle
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="grid grid-cols-3 gap-2 overflow-y-auto px-4">
-              {items.map(({ href, label, icon: Icon }) => {
+            <div className="space-y-3 overflow-y-auto px-4">
+              {navSections(permissions).map((section) => (
+                <div key={section.title ?? "top"}>
+                  {section.title && <p className="label-mono mb-1.5">{section.title}</p>}
+                  <div className="grid grid-cols-3 gap-2">
+              {section.items.map(({ href, label, icon: Icon }) => {
                 const active = isActive(href, pathname);
                 return (
                   <Link
@@ -117,6 +121,9 @@ export function PhoneNav({ name, roleName, permissions, theme, alerts, canSeeAle
                   </Link>
                 );
               })}
+                  </div>
+                </div>
+              ))}
             </div>
             <div className="flex items-center gap-3 border-t border-line px-4 py-3 mt-4">
               <div className="flex-1"><ThemeToggle initial={theme} /></div>

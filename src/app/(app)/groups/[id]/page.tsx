@@ -19,6 +19,7 @@ import { LevelExamDialog } from "@/components/LevelExamDialog";
 import { examColumns } from "@/lib/group-exams";
 import { ExportButtons } from "@/components/ExportButtons";
 import { TodayLesson } from "@/components/TodayLesson";
+import { GroupMenu } from "@/components/GroupMenu";
 import { attendancePercent, type Mark } from "@/lib/attendance";
 import { busyMarkMessages } from "@/lib/availability";
 import { GradeCell } from "@/components/GradeCell";
@@ -117,11 +118,7 @@ export default async function GroupPage({
           </div>
           <div className="flex flex-wrap gap-2">
             {allow.edit && <EditGroupDialog group={group} courses={courses} teachers={teachers} rooms={rooms} />}
-            {allow.remove && (
-              <form action={deleteGroup.bind(null, group.id)}>
-                <button className="btn-danger"><Trash2 className="h-4 w-4" /> O&apos;chirish</button>
-              </form>
-            )}
+            {allow.remove && <GroupMenu groupName={group.name} remove={deleteGroup.bind(null, group.id)} />}
           </div>
         </div>
         <div className={`mt-5 grid grid-cols-2 gap-2.5 text-sm ${group.assistant ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>

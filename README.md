@@ -134,6 +134,12 @@ O'quvchilar ma'lumotlari kengaytirilgan versiyada `db:push` dan keyin eski "Izoh
 npm run db:notes-from-izoh
 ```
 
+**Kundalik ish:** yuqoridagi qidiruv (Ctrl+K) o'quvchini ism yoki telefon bo'yicha topadi; to'lov oynasi qarzni
+ko'rsatadi va summani taklif qiladi, "Qaysi oy uchun" faqat belgi; to'lovni kim qabul qilgani (Hodim) saqlanadi.
+To'lovni tahrirlash uchun "To'lovni tahrirlash" ruxsati kerak (standart: faqat Administrator), har bir o'zgarish
+to'lov ostida ko'rinadi. Guruh sahifasida dars kuni "Bugungi dars" chiqadi (Keldi / Kechikdi / Kelmadi, "Hammasi
+keldi"); bosh sahifada davomat qilinmagan guruhlar ko'rinadi.
+
 **Bayram kunlari:** Sozlamalar → Bayram kunlari bo'limida kiritiladi (shu oydan boshlab). Bu kunlarda dars bo'lmaydi:
 oylik narx o'tilgan darslarga qarab kamayadi (narx × o'tilgan ÷ jadvaldagi darslar), o'qituvchiga ham faqat o'tilgan
 darslar hisoblanadi; davomat belgilanmaydi, kurs rejasi va imtihon sanasi shunga moslashadi. "Menejer" rolida
