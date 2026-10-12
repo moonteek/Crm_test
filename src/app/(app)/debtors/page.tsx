@@ -5,7 +5,8 @@ import { loadDebtors } from "@/lib/lists/debtors";
 import { ExportButtons } from "@/components/ExportButtons";
 import { money } from "@/lib/format";
 import { Modal } from "@/components/Modal";
-import { PaymentForm } from "@/components/forms";
+import { PaymentForm } from "@/components/PaymentForm";
+import { priceNow } from "@/lib/billing";
 import { Empty, PageHeader, Segmented } from "@/components/ui";
 import { DEBTOR_STATUSES } from "@/lib/debtor-status";
 
@@ -34,7 +35,7 @@ export default async function DebtorsPage({ searchParams }: { searchParams: Prom
                   <td data-label="Qarz" className="font-semibold text-danger">{money(-s.balance)}</td>
                   <td>
                     {can(user, "payments.create") && <Modal title={`To'lov — ${s.name}`} triggerClassName="btn-secondary py-1 text-xs max-md:mt-2 max-md:w-full" trigger="To'lov qilish">
-                      <PaymentForm studentId={s.id} groups={active} />
+                      <PaymentForm studentId={s.id} groups={active.map((g) => ({ id: g.id, name: g.name, price: priceNow(g) }))} balance={s.balance} />
                     </Modal>}
                   </td>
                 </tr>

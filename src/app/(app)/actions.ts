@@ -24,6 +24,7 @@ import { levelExams } from "@/lib/curriculum";
 import { assertNotHoliday, holidayDays } from "@/lib/holidays-db";
 import { canDeleteHoliday, expandRange, holidayProblem } from "@/lib/holidays";
 import { canDelete, canEnd, discountProblem, lastMonth } from "@/lib/discounts";
+import { editDiff } from "@/lib/payments";
 import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, fitsDay, groupClashes, needsClashCheck, teacherGrid, type DayType, type LessonLike } from "@/lib/availability";
 import { check, parseForm, v } from "@/lib/validation";
 import { phoneKey } from "@/lib/phone";
@@ -692,6 +693,7 @@ const paymentSchema = z.object({
   method: v.oneOf(PAYMENT_METHODS, "CASH"),
   note: v.optText(500),
   date: v.optDate(),
+  month: z.preprocess((x) => (typeof x === "string" && /^\d{4}-\d{2}$/.test(x) ? new Date(`${x}-01T00:00:00Z`) : null), z.date().nullable()),
 });
 
 export async function createPayment(f: FormData) {
@@ -707,11 +709,39 @@ export async function createPayment(f: FormData) {
   }
   const payment = await db.payment.create({
     include: { student: true },
-    data: { studentId: d.studentId, groupId, amount: d.amount, method: d.method, note: d.note, date: d.date ?? new Date() },
+    data: { studentId: d.studentId, groupId, amount: d.amount, method: d.method, note: d.note, date: d.date ?? new Date(), month: d.month, userId: user.id },
   });
   await logAction(user, "payment.create", `To'lov: ${payment.student.name} — ${money(payment.amount)}`, { studentId: payment.studentId });
   revalidatePath(`/students/${d.studentId}`);
   revalidatePath("/payments");
+}
+
+const snapshot = (p: { amount: number; method: string; date: Date; month: Date | null; note: string | null }) => ({
+  amount: p.amount, method: p.method, date: p.date.toISOString().slice(0, 10), month: p.month ? p.month.toISOString().slice(0, 7) : null, note: p.note,
+});
+
+/** Edits a payment (amount, method, date, month, note); the before/after is kept and shown under the payment. */
+export async function editPayment(_: MemberActionState, f: FormData): Promise<MemberActionState> {
+  try {
+    const user = await requirePermission("payments.edit");
+    const id = check(v.id("To'lov"), f.get("id"));
+    const before = await db.payment.findUniqueOrThrow({ where: { id }, include: { student: true } });
+    await assertStudentAccess(user, before.studentId);
+    const d = parseForm(paymentSchema.omit({ studentId: true, groupId: true }), f);
+    const data = { amount: d.amount, method: d.method, note: d.note, date: d.date ?? before.date, month: d.month };
+    const after = snapshot(data);
+    if (JSON.stringify(after) === JSON.stringify(snapshot(before))) return { ok: true };
+    await db.$transaction([
+      db.payment.update({ where: { id }, data }),
+      db.paymentEdit.create({ data: { paymentId: id, userId: user.id, before: JSON.stringify(snapshot(before)), after: JSON.stringify(after) } }),
+    ]);
+    await logAction(user, "payment.edit", `To'lov tahrirlandi: ${before.student.name} — ${editDiff(snapshot(before), after)}`, { studentId: before.studentId });
+    revalidatePath("/payments");
+    revalidatePath(`/students/${before.studentId}`);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
 
 export async function deletePayment(id: number) {

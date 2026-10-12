@@ -14,7 +14,8 @@ import { membershipInclude } from "@/lib/billing-include";
 import { date, GENDERS, GROUP_DAYS, isoDate, money } from "@/lib/format";
 import { studentHistory } from "@/lib/student-history";
 import { Modal } from "@/components/Modal";
-import { PaymentForm, StudentFields } from "@/components/forms";
+import { StudentFields } from "@/components/forms";
+import { PaymentForm } from "@/components/PaymentForm";
 import { Empty, Field, SubmitRow } from "@/components/ui";
 import { MemberMenu } from "@/components/members/MemberMenu";
 import { StatusBadge } from "@/components/members/StatusBadge";
@@ -172,7 +173,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
             <p className="mt-1 text-xs text-muted">{b < 0 ? "Qarzdorlik mavjud" : "Qarzdorlik yo'q"}</p>
             {allow.pay && <div className="mt-4">
               <Modal title="To'lov qabul qilish" trigger={<><Wallet className="h-4 w-4" /> To&apos;lov qilish</>}>
-                <PaymentForm studentId={student.id} groups={activeGroups} />
+                <PaymentForm studentId={student.id} groups={activeGroups.map((g) => ({ id: g.id, name: g.name, price: priceNow(g) }))} balance={allow.balance ? b : null} />
               </Modal>
             </div>}
           </div>}

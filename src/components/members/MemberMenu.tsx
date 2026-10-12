@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeftRight, CircleDollarSign, LogOut, MoreHorizontal, Pause, Play, RotateCcw, UserCheck } from "lucide-react";
 import { menuActions, type Status } from "@/lib/membership";
-import { PaymentForm } from "../forms";
+import { PaymentForm } from "../PaymentForm";
+import { priceNow } from "@/lib/billing";
 import { DialogFrame } from "../Modal";
 import { MemberDialog, type MemberDialogKind } from "./MemberDialog";
 import type { MemberData, MemberGroup, ReasonOption } from "./types";
@@ -91,7 +92,11 @@ export function MemberMenu({
       {dialog === "PAY" && (
         <DialogFrame title={`To'lov — ${member.student.name}`} onClose={close}>
           <div onSubmit={() => setTimeout(close, 0)}>
-            <PaymentForm studentId={member.student.id} groups={[{ id: member.group.id, name: member.group.name, course: member.group.course }]} />
+            <PaymentForm
+              studentId={member.student.id}
+              groups={[{ id: member.group.id, name: member.group.name, price: priceNow({ ...member.group, prices: member.group.prices.map((p) => ({ price: p.price, from: new Date(p.from) })) }) }]}
+              balance={balance}
+            />
           </div>
         </DialogFrame>
       )}

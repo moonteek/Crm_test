@@ -48,6 +48,8 @@ model User {
   studentNotes StudentNote[]
   discounts    Discount[]
   holidays     Holiday[]
+  takenPayments Payment[]   @relation("PaymentTaker")
+  paymentEdits  PaymentEdit[]
 }
 
 // Personal access tokens used by MCP clients. Only a SHA-256 hash is stored.
@@ -253,6 +255,27 @@ model Payment {
   method    String   @default("CASH") // CASH | CARD | TRANSFER
   note      String?
   date      DateTime @default(now())
+  // who took it ("Hodim"); empty for payments from before this was recorded
+  userId    Int?
+  user      User?    @relation("PaymentTaker", fields: [userId], references: [id], onDelete: SetNull)
+  // "Qaysi oy uchun": a label only (UTC 1st) — the balance doesn't depend on it
+  month     DateTime?
+  createdAt DateTime @default(now())
+  edits     PaymentEdit[]
+}
+
+// One edit of a payment: what it was and what it became (JSON), and who changed it.
+model PaymentEdit {
+  id        Int      @id @default(autoincrement())
+  paymentId Int
+  payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  before    String
+  after     String
+  createdAt DateTime @default(now())
+
+  @@index([paymentId])
 }
 
 model Expense {
