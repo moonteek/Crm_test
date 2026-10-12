@@ -14,7 +14,8 @@
     "check:colors": "node scripts/check-colors.mjs",
     "db:migrate-statuses": "tsx prisma/migrate-statuses.ts",
     "db:lesson-length": "tsx prisma/lesson-length.ts",
-    "db:notes-from-izoh": "tsx prisma/notes-from-izoh.ts"
+    "db:notes-from-izoh": "tsx prisma/notes-from-izoh.ts",
+    "db:absence-reasons": "tsx prisma/absence-reasons.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

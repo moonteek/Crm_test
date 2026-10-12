@@ -50,6 +50,8 @@ model User {
   holidays     Holiday[]
   takenPayments Payment[]   @relation("PaymentTaker")
   paymentEdits  PaymentEdit[]
+  substitutions LessonChange[] @relation("Substitutions")
+  lessonChanges LessonChange[] @relation("LessonChangeAuthor")
 }
 
 // Personal access tokens used by MCP clients. Only a SHA-256 hash is stored.
@@ -129,6 +131,7 @@ model Group {
   startSubjectId Int?
   startSubject   Subject? @relation(fields: [startSubjectId], references: [id], onDelete: SetNull)
   startLevel     Int      @default(1)
+  lessonChanges LessonChange[]
 }
 
 /// Who taught a group from a date on (TEACHER or ASSISTANT); lessons before keep the earlier person.
@@ -242,6 +245,9 @@ model Attendance {
   present   Boolean
   // kechikdi: came late (only with present = true); counts as present
   late      Boolean  @default(false)
+  // why the student was absent (optional; only when present = false)
+  reasonId  Int?
+  reason    AbsenceReason? @relation(fields: [reasonId], references: [id], onDelete: SetNull)
 
   @@unique([groupId, studentId, date])
 }
@@ -524,4 +530,33 @@ model Holiday {
   userId    Int?
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
+}
+
+// "Kelmaganlik sabablari": why a student missed a lesson (Settings → Sabablar).
+model AbsenceReason {
+  id     Int          @id @default(autoincrement())
+  name   String       @unique
+  color  String // one of TAG_COLORS
+  active Boolean      @default(true)
+  marks  Attendance[]
+}
+
+// One group's lesson on one day: CANCEL (a closed day for that group) or SUBSTITUTE (someone else teaches it and is
+// paid for it). role = TEACHER | ASSISTANT for substitutes.
+model LessonChange {
+  id           Int      @id @default(autoincrement())
+  groupId      Int
+  group        Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  date         DateTime
+  kind         String
+  role         String?
+  substituteId Int?
+  substitute   User?    @relation("Substitutions", fields: [substituteId], references: [id], onDelete: SetNull)
+  reason       String?
+  userId       Int?
+  user         User?    @relation("LessonChangeAuthor", fields: [userId], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+
+  @@unique([groupId, date, kind, role])
+  @@index([date])
 }
