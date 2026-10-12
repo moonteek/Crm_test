@@ -21,7 +21,7 @@ import {
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
-import { assertNotHoliday, holidayDays } from "@/lib/holidays-db";
+import { assertNotHoliday, closedDaysOf } from "@/lib/holidays-db";
 import { canDeleteHoliday, expandRange, holidayProblem } from "@/lib/holidays";
 import { canDelete, canEnd, discountProblem, lastMonth } from "@/lib/discounts";
 import { editDiff } from "@/lib/payments";
@@ -875,7 +875,7 @@ export async function saveLevelExamScores(_: MemberActionState, f: FormData): Pr
       where: { id: groupId },
       include: { course: { include: { subjects: true } }, students: { where: { leftAt: null }, select: { studentId: true } } },
     });
-    const auto = levelExams({ ...group, holidays: await holidayDays() }, group.course.subjects).find((e) => e.level === level);
+    const auto = levelExams({ ...group, holidays: (await closedDaysOf())(group.id) }, group.course.subjects).find((e) => e.level === level);
     if (!auto) throw new Error("Bu daraja imtihoni topilmadi");
     if (auto.date > centreDay()) throw new Error("Imtihon kuni hali kelmagan");
     const maxScore = check(v.int("Maksimal ball", { min: 1, max: 10_000, fallback: 100 }), f.get("maxScore"));

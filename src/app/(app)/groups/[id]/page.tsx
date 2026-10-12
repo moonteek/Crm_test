@@ -6,7 +6,7 @@ import { centreDay } from "@/lib/membership-db";
 import { requirePage } from "@/lib/auth";
 import { can, canSeeBalances, groupScope } from "@/lib/access";
 import { balance, priceNow, withHolidays } from "@/lib/billing";
-import { holidayDays } from "@/lib/holidays-db";
+import { closedDaysOf } from "@/lib/holidays-db";
 import { upcomingPrice } from "@/lib/prices";
 import { membershipInclude } from "@/lib/billing-include";
 import { date, GROUP_DAYS, isoDate, lessonDates, lessonWeekdays, money, MONTHS } from "@/lib/format";
@@ -75,7 +75,9 @@ export default async function GroupPage({
   ]);
   const thisGroup = { id: group.id, name: group.name, days: group.days, price: group.price, course: group.course, prices: group.prices };
   const upcoming = upcomingPrice(group.prices, now);
-  const holidays = await holidayDays();
+  // this group's closed days: the centre's holidays and its own cancelled lessons
+  const closed = await closedDaysOf();
+  const holidays = closed(id);
   const planGroup = { ...group, holidays };
   const off = new Set(holidays);
   const cur = curriculumOn(planGroup, group.course.subjects, centreDay());
@@ -224,7 +226,7 @@ export default async function GroupPage({
               <tbody>
                 {group.students.map((gs) => {
                   const { student } = gs;
-                  const b = balance(withHolidays(student.groups, holidays), student.payments);
+                  const b = balance(withHolidays(student.groups, closed), student.payments);
                   const marks = days.map((d) => mark.get(`${student.id}:${isoDate(d)}`)).filter((v) => v !== undefined);
                   const scores = days.map((d) => gradeMap.get(`${student.id}:${isoDate(d)}`)).filter((v): v is number => v !== undefined);
                   return (

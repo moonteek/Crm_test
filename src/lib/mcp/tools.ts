@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { balance, priceNow, withHolidays } from "@/lib/billing";
-import { assertNotHoliday, holidayDays } from "@/lib/holidays-db";
+import { assertNotHoliday, closedDaysOf } from "@/lib/holidays-db";
 import { plainMark } from "@/lib/attendance";
 import { studentBillingInclude } from "@/lib/billing-include";
 import {
@@ -64,7 +64,7 @@ export function buildServer(user: CurrentUser) {
   };
 
   tool("dashboard.view", "get_overview", "Markaz bo'yicha umumiy ko'rsatkichlar: faol o'quvchilar, guruhlar, ochiq lidlar, shu oy tushum va xarajat, qarzdorlar soni.", {}, async () => {
-    const holidays = await holidayDays();
+    const holidays = await closedDaysOf();
     const { from } = monthRange();
     const [students, groups, leads, income, expense] = await Promise.all([
       db.student.findMany({ where: { AND: [{ groups: { some: { leftAt: null } } }, studentScope(user)] }, include: enrollmentInclude }),
@@ -88,7 +88,7 @@ export function buildServer(user: CurrentUser) {
     query: z.string().optional().describe("Ism yoki telefon raqam qismi"),
     limit: z.number().int().min(1).max(200).optional(),
   }, async ({ query, limit }) => {
-    const holidays = await holidayDays();
+    const holidays = await closedDaysOf();
     const students = await db.student.findMany({
       where: { AND: [studentScope(user), query ? { OR: [{ name: { contains: query } }, { phone: { contains: query } }] } : { groups: { some: { leftAt: null } } }] },
       include: enrollmentInclude,
@@ -107,7 +107,7 @@ export function buildServer(user: CurrentUser) {
   tool("students.view", "get_student", "Bitta o'quvchi haqida to'liq ma'lumot: guruhlari, davomati, balansi va to'lovlari.", {
     student_id: z.number().int(),
   }, async ({ student_id }) => {
-    const holidays = await holidayDays();
+    const holidays = await closedDaysOf();
     await assertStudentAccess(user, student_id);
     const s = await db.student.findUniqueOrThrow({
       where: { id: student_id },
@@ -279,7 +279,7 @@ export function buildServer(user: CurrentUser) {
   }, false);
 
   tool("debtors.view", "list_debtors", "Qarzdor o'quvchilar ro'yxati, eng katta qarzdan boshlab.", {}, async () => {
-    const holidays = await holidayDays();
+    const holidays = await closedDaysOf();
     const students = await db.student.findMany({ where: studentScope(user), include: enrollmentInclude });
     return students
       .map((s) => ({ s, b: balance(withHolidays(s.groups, holidays), s.payments) }))

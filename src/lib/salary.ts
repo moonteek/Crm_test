@@ -6,7 +6,7 @@ import { teacherEarnings } from "./teacher-pay";
 import { ownsOn } from "./teachers-history";
 import { dayOf } from "./membership-legacy";
 import { membershipInclude } from "./billing-include";
-import { holidayDays } from "./holidays-db";
+import { closedDaysOf } from "./holidays-db";
 
 export const SALARY_TYPES: Record<string, { label: string; unit: string }> = {
   NONE: { label: "Belgilanmagan", unit: "" },
@@ -77,7 +77,10 @@ export async function salariesForMonth(month: string, { allActive = false } = {}
 }
 
 /** Groups the person teaches now or taught at some point (current teacher/assistant or in the history). */
-const taughtBy = (userId: number) => ({ OR: [{ teacherId: userId }, { assistantId: userId }, { teachers: { some: { userId } } }] });
+// groups the person teaches or taught, or where they stood in for someone (a substitute is paid for that lesson)
+const taughtBy = (userId: number) => ({
+  OR: [{ teacherId: userId }, { assistantId: userId }, { teachers: { some: { userId } } }, { lessonChanges: { some: { kind: "SUBSTITUTE", substituteId: userId } } }],
+});
 
 /** Before November: payments recorded to a group while this person taught it (the payment day decides). */
 async function oldRulePayments(userId: number, from: Date, to: Date) {
@@ -98,8 +101,8 @@ async function oldRuleStudents(userId: number, month: string) {
   });
   const [y, m] = month.split("-").map(Number);
   const first = new Date(Date.UTC(y, m - 1, 1));
-  const holidays = await holidayDays();
-  return memberships.filter((ms) => ownsOn(ms.group, userId, first) && billedStudentCount([{ ...ms, holidays }], y, m - 1) > 0);
+  const closed = await closedDaysOf();
+  return memberships.filter((ms) => ownsOn(ms.group, userId, first) && billedStudentCount([{ ...ms, holidays: closed(ms.groupId) }], y, m - 1) > 0);
 }
 
 /** Months from the per-lesson switch on pay teachers by the lessons they taught. */
@@ -120,7 +123,9 @@ async function earningsFor(userId: number, salary: { type: "PERCENT" | "PER_STUD
     include: { ...membershipInclude, student: { select: { id: true, name: true } }, group: { include: { course: true, prices: true, teachers: true } } },
   });
   const [y, m] = month.split("-").map(Number);
-  return teacherEarnings(userId, salary, withHolidays(memberships, await holidayDays()), y, m - 1);
+  const substitutes = await db.lessonChange.findMany({ where: { kind: "SUBSTITUTE", date: { gte: from, lt: to } } });
+  const withSubs = memberships.map((ms) => ({ ...ms, group: { ...ms.group, substitutes: substitutes.filter((s) => s.groupId === ms.groupId) } }));
+  return teacherEarnings(userId, salary, withHolidays(withSubs, await closedDaysOf()), y, m - 1);
 }
 
 export type SalaryBreakdown =

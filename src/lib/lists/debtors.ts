@@ -2,7 +2,7 @@ import "server-only";
 import { db } from "../db";
 import { studentScope, type CurrentUser } from "../access";
 import { balance, withHolidays } from "../billing";
-import { holidayDays } from "../holidays-db";
+import { closedDaysOf } from "../holidays-db";
 import { membershipInclude } from "../billing-include";
 import type { Table } from "../export";
 import { DEBTOR_STATUSES, debtorMatches, type DebtorStatus } from "../debtor-status";
@@ -15,7 +15,7 @@ export async function loadDebtors(user: CurrentUser, params: { status?: string }
     where: studentScope(user),
     include: { payments: { select: { amount: true } }, groups: { include: membershipInclude } },
   });
-  const holidays = await holidayDays();
+  const holidays = await closedDaysOf();
   const debtors = students
     .map((s) => ({ ...s, balance: balance(withHolidays(s.groups, holidays), s.payments) }))
     .filter((s) => s.balance < 0 && debtorMatches(s, status))

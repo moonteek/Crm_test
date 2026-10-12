@@ -5,7 +5,7 @@ import { priceNow } from "../billing";
 import { curriculumOn, type Progress } from "../curriculum";
 import { GROUP_DAYS } from "../format";
 import { centreDay } from "../membership-db";
-import { holidayDays } from "../holidays-db";
+import { closedDaysOf } from "../holidays-db";
 import { loadUnmarkedToday } from "./unmarked";
 import { fmtDate, type Table } from "../export";
 
@@ -37,11 +37,11 @@ export async function loadGroups(user: CurrentUser, params: GroupFilters) {
   // a subject of another course (left in the link after switching course) is ignored
   const subjectId = subjectOptions.some((s) => s.id === asked) ? asked : null;
   const today = centreDay();
-  const holidays = await holidayDays();
+  const closed = await closedDaysOf();
   // "Davomat qilinmagan": only groups whose lesson started today and aren't marked
   const unmarkedIds = params.unmarked === "1" ? new Set((await loadUnmarkedToday(user)).map((g) => g.id)) : null;
   const groups = all
-    .map((g) => ({ ...g, cur: curriculumOn({ ...g, holidays }, g.course.subjects, today) }))
+    .map((g) => ({ ...g, cur: curriculumOn({ ...g, holidays: closed(g.id) }, g.course.subjects, today) }))
     .filter((g) => (!subjectId || (g.cur.progress.state !== "finished" && g.cur.progress.window?.subjectId === subjectId)) && (!progress || g.cur.progress.state === progress))
     .filter((g) => !unmarkedIds || unmarkedIds.has(g.id));
   const where = (g: (typeof groups)[number]) => {

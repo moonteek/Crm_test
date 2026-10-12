@@ -4,7 +4,7 @@ import { groupScope, type CurrentUser } from "../access";
 import { isoDate, lessonDates, MONTHS } from "../format";
 import { centreDay } from "../membership-db";
 import { examColumns } from "../group-exams";
-import { holidayDays } from "../holidays-db";
+import { closedDaysOf } from "../holidays-db";
 import { fmtDate, type Table } from "../export";
 
 /** One group page tab as a table: attendance or grades of the shown month, or exam scores. Null when not allowed. */
@@ -20,7 +20,7 @@ export async function groupSheet(user: CurrentUser, groupId: number, params: { t
 
   if (params.tab === "exams") {
     const exams = await db.exam.findMany({ where: { groupId }, include: { results: true }, orderBy: { date: "asc" } });
-    const cols = examColumns({ ...group, holidays: await holidayDays() }, group.course.subjects, exams, centreDay());
+    const cols = examColumns({ ...group, holidays: (await closedDaysOf())(groupId) }, group.course.subjects, exams, centreDay());
     return {
       title: `${group.name} imtihonlar`,
       columns: ["O'quvchi", ...cols.map((c) => `${c.title} (${fmtDate(c.date)}, ${c.maxScore})`)],
@@ -29,7 +29,7 @@ export async function groupSheet(user: CurrentUser, groupId: number, params: { t
   }
 
   const days = lessonDates(group.days, year, month);
-  const off = new Set(await holidayDays());
+  const off = new Set((await closedDaysOf())(groupId));
   const range = { gte: days[0] ?? new Date(), lte: days.at(-1) ?? new Date() };
   const grades = params.tab === "grades";
   const marks = grades
