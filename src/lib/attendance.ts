@@ -5,6 +5,9 @@ import { centreToday, toMinutes } from "./schedule";
 
 export type Mark = { present: boolean; late: boolean };
 
+/** A plain keldi / kelmadi (the AI tools): never late, so an earlier "kechikdi" doesn't linger. */
+export const plainMark = (present: boolean): Mark => ({ present, late: false });
+
 /** One tap on a grid cell: empty → keldi → kechikdi → kelmadi → empty. */
 export function nextMark(current: Mark | null): Mark | null {
   if (!current) return { present: true, late: false };
@@ -25,12 +28,20 @@ export const fillPresent = (studentIds: number[], existing: Map<number, Mark>) =
  * Active groups whose lesson today has started (centre time), today isn't a holiday, and nobody is marked yet:
  * "davomat qilinmagan".
  */
-export function unmarkedToday(groups: { id: number; days: string; time: string; status: string }[], marked: Set<number>, now: Date, holidays: string[]) {
+export function unmarkedToday(
+  groups: { id: number; days: string; time: string; status: string; startDate?: Date; members?: number }[],
+  marked: Set<number>,
+  now: Date,
+  holidays: string[],
+) {
   const t = centreToday(now);
   const today = `${t.year}-${String(t.month).padStart(2, "0")}-${String(t.day).padStart(2, "0")}`;
   if (holidays.includes(today)) return [];
   const minutes = t.hour * 60 + t.minute;
   return groups
+    // a group that hasn't started yet, or has nobody to mark, can't be "not marked"
+    .filter((g) => !g.startDate || g.startDate.getTime() <= Date.UTC(t.year, t.month - 1, t.day, 23, 59))
+    .filter((g) => g.members === undefined || g.members > 0)
     .filter((g) => g.status === "ACTIVE" && lessonWeekdays(g.days).includes(t.weekday) && toMinutes(g.time) <= minutes && !marked.has(g.id))
     .map((g) => g.id);
 }

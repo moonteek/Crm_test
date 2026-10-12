@@ -92,7 +92,7 @@ export default async function GroupPage({
   const examCols = examColumns(planGroup, group.course.subjects, exams, centreDay());
   // "Bugungi dars": on the group's lesson day (not a holiday) its current students with today's mark
   const todayIso = isoDate(centreDay());
-  const todayRows = group.status === "ACTIVE" && lessonWeekdays(group.days).includes(centreDay().getUTCDay()) && !holidays.includes(todayIso)
+  const todayRows = group.status === "ACTIVE" && group.startDate.getTime() <= Date.now() && lessonWeekdays(group.days).includes(centreDay().getUTCDay()) && !holidays.includes(todayIso)
     ? await todayMarks(id, group.students.filter((gs) => gs.status === "ACTIVE" || gs.status === "TRIAL").map((gs) => ({ id: gs.student.id, name: gs.student.name })))
     : null;
   const mark = new Map(attendance.map((a) => [`${a.studentId}:${isoDate(a.date)}`, { present: a.present, late: a.late }]));
