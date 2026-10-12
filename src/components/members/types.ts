@@ -9,6 +9,8 @@ export type MemberData = {
   group: MemberGroup;
   student: { id: number; name: string };
   discounts?: { from: string; to: string; amount: number }[];
+  /** the centre's holidays (ISO days), for cost previews */
+  holidays: string[];
 };
 export type ReasonOption = { id: number; name: string };
 
@@ -21,13 +23,14 @@ type MembershipRow = {
 };
 
 /** `money: false` leaves the discount amounts out (they would reach the browser of staff who can't see payments). */
-export function toMemberData(gs: MembershipRow, student: { id: number; name: string }, opts: { money: boolean }): MemberData {
+export function toMemberData(gs: MembershipRow, student: { id: number; name: string }, opts: { money: boolean; holidays: string[] }): MemberData {
   return {
     id: gs.id,
     status: gs.status,
     events: gs.events.map((e) => ({ type: e.type, date: e.date.toISOString(), migrated: e.migrated })),
     group: toMemberGroup(gs.group),
     student,
+    holidays: opts.holidays,
     discounts: opts.money ? (gs.discounts ?? []).map((d) => ({ from: d.from.toISOString(), to: d.to.toISOString(), amount: d.amount })) : [],
   };
 }
@@ -41,11 +44,12 @@ export function toMemberGroup(g: MembershipRow["group"]): MemberGroup {
   };
 }
 
-export function toBillable(m: Pick<MemberData, "events" | "group" | "discounts">): BillableMembership {
+export function toBillable(m: Pick<MemberData, "events" | "group" | "discounts" | "holidays">): BillableMembership {
   const group = { ...m.group, prices: m.group.prices.map((p) => ({ price: p.price, from: new Date(p.from) })) };
   return {
     groupId: m.group.id, group,
     events: m.events.map((e) => ({ type: e.type, date: new Date(e.date), migrated: e.migrated })),
     discounts: (m.discounts ?? []).map((d) => ({ from: new Date(d.from), to: new Date(d.to), amount: d.amount })),
+    holidays: m.holidays,
   };
 }

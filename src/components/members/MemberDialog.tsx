@@ -69,7 +69,7 @@ export function MemberDialog({
   const now = new Date();
   let delta = chargeChangeIf(toBillable(member), { type: kind === "TRANSFER" ? "LEAVE" : (kind as EventType), date }, now);
   if (kind === "TRANSFER" && target && mode === "ACTIVE") {
-    delta += totalCharges([toBillable({ events: [{ type: "ACTIVATE", date: date.toISOString(), migrated: false }], group: target })], now);
+    delta += totalCharges([toBillable({ events: [{ type: "ACTIVATE", date: date.toISOString(), migrated: false }], group: target, holidays: member.holidays })], now);
   }
 
   return (

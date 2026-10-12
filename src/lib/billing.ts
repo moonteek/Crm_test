@@ -30,6 +30,8 @@ export type BillableMembership = {
   leftAt?: Date | null;
   /** so'm off each month of [from, to] (UTC 1sts, inclusive); lowers the charge, never lessonValues */
   discounts?: { from: Date; to: Date; amount: number }[];
+  /** the centre's holidays (ISO days): never billable, never taught. Required, so no caller can forget them. */
+  holidays: string[];
 };
 
 export type ChargeLine = { year: number; month: number; lessons: number; billable: number; amount: number; legacy: boolean; discount: number };
@@ -86,6 +88,9 @@ function enrolledDuringMonth(events: Ev[], y: number, m: number) {
   return enrolled;
 }
 
+/** Gives loaded memberships the centre's holidays (from holidayDays()), which every charge needs. */
+export const withHolidays = <T extends object>(memberships: T[], holidays: string[]) => memberships.map((m) => ({ ...m, holidays }));
+
 /** The discount (so'm off the monthly price) for one month; discounts of a membership never overlap. */
 export function discountIn(discounts: { from: Date; to: Date; amount: number }[] | undefined, y: number, mo: number) {
   const key = monthKey(y, mo);
@@ -106,7 +111,9 @@ function lineFor(m: BillableMembership, events: Ev[], y: number, mo: number): Ch
     // legacy months are never discounted (discounts start in the per-lesson era)
     return { year: y, month: mo, lessons: lessons.length, billable: on ? lessons.length : 0, amount: on ? price : 0, legacy: true, days: on ? lessons : [], full: on ? price : 0, discount: 0 };
   }
-  const days = lessons.filter((day) => billableOn(events, day));
+  // a holiday stays in the month's lesson count (the price is per scheduled lesson) but is never charged or taught
+  const off = new Set(m.holidays);
+  const days = lessons.filter((day) => billableOn(events, day) && !off.has(day.toISOString().slice(0, 10)));
   const share = (monthly: number) => (lessons.length ? Math.round((Math.max(0, monthly) * days.length) / lessons.length) : 0);
   const full = share(price);
   const amount = share(price - discountIn(m.discounts, y, mo));

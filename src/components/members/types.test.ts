@@ -8,6 +8,6 @@ const gs = {
 };
 
 test("discount amounts reach the browser only for staff who see money", () => {
-  assert.equal(toMemberData(gs, { id: 1, name: "Ali" }, { money: true }).discounts?.[0].amount, 200_000);
-  assert.deepEqual(toMemberData(gs, { id: 1, name: "Ali" }, { money: false }).discounts, []);
+  assert.equal(toMemberData(gs, { id: 1, name: "Ali" }, { money: true, holidays: [] }).discounts?.[0].amount, 200_000);
+  assert.deepEqual(toMemberData(gs, { id: 1, name: "Ali" }, { money: false, holidays: [] }).discounts, []);
 });

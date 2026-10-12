@@ -10,7 +10,7 @@ const nov = (day: number) => d(2026, 11, day);
 const NOW = nov(15);
 
 function member(days: string, price: number, ...events: [EventType, Date][]): BillableMembership {
-  return { groupId: 1, group: { name: "G", days, course: { price } }, events: events.map(([type, date]) => ({ type, date })) };
+  return { groupId: 1, group: { name: "G", days, course: { price } }, events: events.map(([type, date]) => ({ type, date })), holidays: [] };
 }
 const even = (...e: [EventType, Date][]) => member("EVEN", 600_000, ...e);
 const odd = (...e: [EventType, Date][]) => member("ODD", 650_000, ...e);
@@ -150,11 +150,11 @@ test("a group's own price overrides the course price", () => {
 });
 
 test("a transfer made in the new screens in October is split per lesson in both groups", () => {
-  const old: BillableMembership = { groupId: 1, group: { name: "ROBO-3", days: "EVEN", course: { price: 450_000 } }, events: [
+  const old: BillableMembership = { groupId: 1, holidays: [], group: { name: "ROBO-3", days: "EVEN", course: { price: 450_000 } }, events: [
     { type: "ACTIVATE", date: d(2026, 9, 1), migrated: true },
     { type: "LEAVE", date: oct(20), migrated: false },
   ] };
-  const next: BillableMembership = { groupId: 2, group: { name: "FE-14", days: "ODD", course: { price: 600_000 } }, events: [
+  const next: BillableMembership = { groupId: 2, holidays: [], group: { name: "FE-14", days: "ODD", course: { price: 600_000 } }, events: [
     { type: "ACTIVATE", date: oct(20), migrated: false },
   ] };
   const now = d(2026, 11, 15);
@@ -163,7 +163,7 @@ test("a transfer made in the new screens in October is split per lesson in both 
 });
 
 test("months with only migrated history keep the full-month rule", () => {
-  const m: BillableMembership = { groupId: 1, group: { name: "G", days: "EVEN", course: { price: 450_000 } }, events: [
+  const m: BillableMembership = { groupId: 1, holidays: [], group: { name: "G", days: "EVEN", course: { price: 450_000 } }, events: [
     { type: "ACTIVATE", date: d(2026, 9, 1), migrated: true },
     { type: "LEAVE", date: oct(20), migrated: true },
   ] };
@@ -171,7 +171,7 @@ test("months with only migrated history keep the full-month rule", () => {
 });
 
 test("previewing an action in October shows the per-lesson amount", () => {
-  const m: BillableMembership = { groupId: 1, group: { name: "G", days: "EVEN", course: { price: 450_000 } }, events: [
+  const m: BillableMembership = { groupId: 1, holidays: [], group: { name: "G", days: "EVEN", course: { price: 450_000 } }, events: [
     { type: "ACTIVATE", date: d(2026, 9, 1), migrated: true },
   ] };
   const p = previewCharge(m, { type: "FREEZE", date: oct(20) });
@@ -239,4 +239,31 @@ test("menu previews use the discounted price", () => {
   const m = withDiscount(even(["ACTIVATE", nov(1)]), off(200_000, nov(1), nov(1)));
   // leaving on 10 Nov keeps 4 of 12 lessons: 400 000 → 133 333
   assert.equal(chargeChangeIf(m, { type: "LEAVE", date: nov(10) }, d(2026, 11, 30)), 133_333 - 400_000);
+});
+
+// ---------- holidays (the centre is closed: not charged, not paid; the month's lesson count stays) ----------
+const closed = (m: BillableMembership, ...days: string[]): BillableMembership => ({ ...m, holidays: days });
+
+test("holiday on a lesson day: 11 of 12 lessons charged", () => {
+  const l = lineOf(closed(even(["ACTIVATE", nov(1)]), "2026-11-10"), 2026, 10);
+  assert.deepEqual([l?.amount, l?.billable, l?.lessons], [550_000, 11, 12]);
+});
+
+test("holiday: teacher basis is the held lessons only", () => {
+  const v = lessonValues(closed(even(["ACTIVATE", nov(1)]), "2026-11-10"), 2026, 10, d(2026, 12, 1));
+  assert.deepEqual([v.length, v.reduce((s, x) => s + x.value, 0)], [11, 550_000]);
+});
+
+test("holiday and discount together", () => {
+  const m = { ...closed(even(["ACTIVATE", nov(1)]), "2026-11-10"), discounts: [off(200_000, nov(1), nov(1))] };
+  assert.equal(lineOf(m, 2026, 10)?.amount, 366_667);
+});
+
+test("holiday on a day the group has no lesson changes nothing", () => {
+  assert.equal(lineOf(closed(even(["ACTIVATE", nov(1)]), "2026-11-09"), 2026, 10)?.amount, 600_000);
+});
+
+test("legacy October ignores holidays", () => {
+  const l = lineOf(closed(even(["ACTIVATE", d(2026, 10, 15)]), "2026-10-20"), 2026, 9);
+  assert.deepEqual([l?.amount, l?.legacy], [600_000, true]);
 });
