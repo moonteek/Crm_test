@@ -4,12 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { logout } from "@/app/login/actions";
-import { allowedNav, isActive } from "@/lib/nav";
+import { isActive, navSections } from "@/lib/nav";
 import type { Theme } from "@/lib/theme";
 import { Logo, LogoMark } from "./brand/Logo";
 import { ThemeToggle } from "./ThemeToggle";
 import { PhoneNav } from "./nav/PhoneNav";
 import { AlertsBell } from "./AlertsBell";
+import { SearchDialog } from "./SearchDialog";
 import type { AlertItem } from "@/lib/alerts";
 
 type Props = { name: string; roleName: string; permissions: string[]; theme: Theme; alerts: AlertItem[]; canSeeAlerts: boolean };
@@ -17,7 +18,7 @@ type Props = { name: string; roleName: string; permissions: string[]; theme: The
 /** Desktop sidebar (icon rail on tablets) plus the phone navigation. */
 export function Sidebar({ name, roleName, permissions, theme, alerts, canSeeAlerts }: Props) {
   const pathname = usePathname();
-  const items = allowedNav(permissions);
+  const sections = navSections(permissions);
 
   return (
     <>
@@ -29,11 +30,17 @@ export function Sidebar({ name, roleName, permissions, theme, alerts, canSeeAler
             <LogoMark className="h-7 w-auto lg:hidden" />
             <span className="hidden lg:block"><Logo /></span>
           </Link>
-          {canSeeAlerts && <AlertsBell alerts={alerts} />}
+          <div className="flex flex-col items-center gap-1 lg:flex-row">
+            {permissions.includes("students.view") && <SearchDialog compact shortcuts />}
+            {canSeeAlerts && <AlertsBell alerts={alerts} />}
+          </div>
         </div>
 
-        <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-2">
-          {items.map(({ href, label, icon: Icon }) => {
+        <nav className="flex-1 overflow-y-auto px-2.5 py-2">
+          {sections.map((section, i) => (
+            <div key={section.title ?? "top"} className={`space-y-0.5 ${i > 0 ? "mt-3 border-t border-line pt-3 lg:border-0 lg:pt-0" : ""}`}>
+              {section.title && <p className="label-mono hidden px-3 pb-1 lg:block">{section.title}</p>}
+              {section.items.map(({ href, label, icon: Icon }) => {
             const active = isActive(href, pathname);
             return (
               <Link
@@ -49,7 +56,9 @@ export function Sidebar({ name, roleName, permissions, theme, alerts, canSeeAler
                 <span className="hidden truncate lg:inline">{label}</span>
               </Link>
             );
-          })}
+              })}
+            </div>
+          ))}
         </nav>
 
         <div className="space-y-3 border-t border-line p-3">

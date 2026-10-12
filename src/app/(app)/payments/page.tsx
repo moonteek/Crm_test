@@ -1,46 +1,77 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { Search, Trash2 } from "lucide-react";
+import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
-import { can } from "@/lib/access";
+import { can, groupScope } from "@/lib/access";
 import { date, money, MONTHS, PAYMENT_METHODS } from "@/lib/format";
 import { Empty, PageHeader } from "@/components/ui";
 import { ExportButtons } from "@/components/ExportButtons";
+import { PaymentEditDialog } from "@/components/PaymentEditDialog";
 import { loadPayments } from "@/lib/lists/payments";
 import { deletePayment } from "../actions";
 
-export default async function PaymentsPage({ searchParams }: { searchParams: Promise<{ m?: string; method?: string }> }) {
+const iso = (d: Date) => d.toISOString().slice(0, 10);
+const monthLabel = (d: Date | null) => (d ? `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}` : "—");
+const stamp = (d: Date) => `${date(d)} ${d.toLocaleTimeString("en-GB", { timeZone: "Asia/Tashkent", hour: "2-digit", minute: "2-digit" })}`;
+
+export default async function PaymentsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await requirePage("payments.view");
-  const { year, month, from, method, payments } = await loadPayments(user, await searchParams);
-  const total = payments.reduce((s, p) => s + p.amount, 0);
-  const byMethod = Object.keys(PAYMENT_METHODS).map((k) => ({
-    k, sum: payments.filter((p) => p.method === k).reduce((s, p) => s + p.amount, 0),
-  }));
-  const ym = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}`;
-  const q = (extra: Record<string, string | undefined>) => {
-    const p = new URLSearchParams();
-    const all = { m: ym(from), method, ...extra };
-    Object.entries(all).forEach(([k, v]) => v && p.set(k, v));
-    return `/payments?${p}`;
+  const params = await searchParams;
+  const [{ filters: f, payments, total }, groups, teachers, staff] = await Promise.all([
+    loadPayments(user, params),
+    db.group.findMany({ where: groupScope(user), select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    db.user.findMany({ where: { isTeacher: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    db.user.findMany({ where: { takenPayments: { some: {} } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+  ]);
+  const byMethod = Object.keys(PAYMENT_METHODS).map((k) => ({ k, sum: payments.filter((p) => p.method === k).reduce((s, p) => s + p.amount, 0) }));
+  // keeps every filter and changes one
+  const link = (change: Record<string, string | undefined>) => {
+    const q = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => typeof e[1] === "string"));
+    for (const [k, v] of Object.entries(change)) if (v) q.set(k, v); else q.delete(k);
+    return `/payments?${q}`;
   };
+  const allow = { edit: can(user, "payments.edit"), remove: can(user, "payments.delete") };
+  const filtered = Boolean(params.from || params.to || f.q || f.groupId || f.teacherId || f.userId || f.method);
 
   return (
     <>
-      <PageHeader title="To'lovlar" subtitle="To'lovlar o'quvchi sahifasidan qabul qilinadi">
+      <PageHeader title="To'lovlar" subtitle={`Jami: ${money(total)} / ${payments.length} ta`}>
         <ExportButtons href="/payments/export" />
-        <div className="flex items-center gap-2">
-          <Link href={q({ m: ym(new Date(year, month - 1, 1)) })} className="btn-secondary px-2"><ChevronLeft className="h-4 w-4" /></Link>
-          <span className="w-32 text-center text-sm font-medium tabular-nums">{MONTHS[month]} {year}</span>
-          <Link href={q({ m: ym(new Date(year, month + 1, 1)) })} className="btn-secondary px-2"><ChevronRight className="h-4 w-4" /></Link>
-        </div>
       </PageHeader>
 
+      <form className="card mb-4 grid grid-cols-2 gap-2 p-4 md:grid-cols-4 xl:grid-cols-8" aria-label="Filtrlar">
+        <label className="text-xs text-muted">Dan<input type="date" name="from" defaultValue={iso(f.from)} className="input mt-1" /></label>
+        <label className="text-xs text-muted">Gacha<input type="date" name="to" defaultValue={iso(f.to)} className="input mt-1" /></label>
+        <div className="relative col-span-2 self-end">
+          <Search className="absolute top-3 left-3.5 h-4 w-4 text-faint" />
+          <input name="q" defaultValue={f.q} placeholder="O'quvchi ismi..." className="input pl-10" aria-label="O'quvchi ismi" />
+        </div>
+        <select name="group" defaultValue={f.groupId ?? ""} className="input min-w-0 self-end" aria-label="Guruh">
+          <option value="">Barcha guruhlar</option>
+          {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+        </select>
+        <select name="teacher" defaultValue={f.teacherId ?? ""} className="input min-w-0 self-end" aria-label="O'qituvchi">
+          <option value="">Barcha o&apos;qituvchilar</option>
+          {teachers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+        <select name="hodim" defaultValue={f.userId ?? ""} className="input min-w-0 self-end" aria-label="Hodim">
+          <option value="">Barcha hodimlar</option>
+          {staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <div className="flex gap-2 self-end">
+          {f.method && <input type="hidden" name="method" value={f.method} />}
+          <button className="btn-secondary flex-1">Filtrlash</button>
+          {filtered && <Link href="/payments" className="btn-ghost px-2">Tozalash</Link>}
+        </div>
+      </form>
+
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4 md:mb-6 md:gap-4">
-        <Link href={q({ method: undefined })} className={`card press block min-w-0 p-4 ${!method ? "border-ink" : "hover:border-line-strong"}`}>
+        <Link href={link({ method: undefined })} className={`card press block min-w-0 p-4 ${!f.method ? "border-ink" : "hover:border-line-strong"}`}>
           <p className="label-mono">Jami</p>
-          <p className="mt-2 truncate text-lg font-semibold text-success">{money(total)}</p>
+          <p className="mt-2 truncate text-lg font-semibold text-success">{money(f.method ? byMethod.reduce((s, m) => s + m.sum, 0) : total)}</p>
         </Link>
         {byMethod.map(({ k, sum }) => (
-          <Link key={k} href={q({ method: k })} className={`card press block min-w-0 p-4 ${method === k ? "border-ink" : "hover:border-line-strong"}`}>
+          <Link key={k} href={link({ method: k })} className={`card press block min-w-0 p-4 ${f.method === k ? "border-ink" : "hover:border-line-strong"}`}>
             <p className="label-mono">{PAYMENT_METHODS[k]}</p>
             <p className="mt-2 truncate text-lg font-semibold">{money(sum)}</p>
           </Link>
@@ -49,7 +80,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
 
       <div className="card md:overflow-x-auto">
         <table className="table table-stack">
-          <thead><tr><th>Sana</th><th>O&apos;quvchi</th><th>Guruh</th><th>Summa</th><th>Turi</th><th>Izoh</th>{can(user, "payments.delete") && <th></th>}</tr></thead>
+          <thead><tr><th>Sana</th><th>O&apos;quvchi</th><th>Guruh</th><th>Summa</th><th>Turi</th><th>Qaysi oy</th><th>Hodim</th><th>Izoh</th>{(allow.edit || allow.remove) && <th></th>}</tr></thead>
           <tbody>
             {payments.map((p) => (
               <tr key={p.id}>
@@ -58,19 +89,33 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                 <td data-label="Guruh">{p.group?.name ?? "—"}</td>
                 <td data-label="Summa" className="font-semibold text-success">{money(p.amount)}</td>
                 <td data-label="Turi">{PAYMENT_METHODS[p.method]}</td>
+                <td data-label="Qaysi oy" className="text-muted">{monthLabel(p.month)}</td>
+                <td data-label="Hodim" className="whitespace-normal">
+                  {p.user?.name ?? "—"}
+                  {p.history.map((h, i) => (
+                    <p key={i} className="text-xs text-muted">{h.who} · {stamp(h.at)}: {h.text}</p>
+                  ))}
+                </td>
                 <td data-label="Izoh" className="text-muted">{p.note ?? ""}</td>
-                {can(user, "payments.delete") && (
+                {(allow.edit || allow.remove) && (
                   <td>
-                    <form action={deletePayment.bind(null, p.id)}>
-                      <button className="text-faint hover:text-danger" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
-                    </form>
+                    <div className="flex items-center gap-2">
+                      {allow.edit && (
+                        <PaymentEditDialog payment={{ id: p.id, amount: p.amount, method: p.method, date: iso(p.date), month: p.month ? iso(p.month).slice(0, 7) : null, note: p.note, student: p.student.name }} />
+                      )}
+                      {allow.remove && (
+                        <form action={deletePayment.bind(null, p.id)}>
+                          <button className="text-faint hover:text-danger" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
+                        </form>
+                      )}
+                    </div>
                   </td>
                 )}
               </tr>
             ))}
           </tbody>
         </table>
-        {payments.length === 0 && <Empty text="Bu oyda to'lovlar yo'q" />}
+        {payments.length === 0 && <Empty text="Bu davrda to'lovlar yo'q" />}
       </div>
     </>
   );

@@ -57,6 +57,7 @@ export const PERMISSION_GROUPS: { title: string; items: { key: string; label: st
       { key: "payments.view", label: "To'lovlarni ko'rish" },
       { key: "payments.create", label: "To'lov qabul qilish" },
       { key: "payments.delete", label: "To'lovni o'chirish" },
+      { key: "payments.edit", label: "To'lovni tahrirlash" },
       { key: "debtors.view", label: "Qarzdorlarni ko'rish" },
       { key: "finance.view", label: "Moliya hisobotlarini ko'rish (tushum, xarajat, foyda)" },
       { key: "finance.manage", label: "Xarajat qo'shish va o'chirish" },

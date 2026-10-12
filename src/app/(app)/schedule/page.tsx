@@ -5,6 +5,7 @@ import { requirePage } from "@/lib/auth";
 import { can, groupScope } from "@/lib/access";
 import { centreWeekday, findClashes, fromMinutes, scheduleKeysOn, toMinutes, WEEKDAYS } from "@/lib/schedule";
 import { DotMeter, Empty, PageHeader } from "@/components/ui";
+import { ExportButtons } from "@/components/ExportButtons";
 import { CurriculumBadge } from "@/components/CurriculumBar";
 import { curriculumOn, type Progress } from "@/lib/curriculum";
 import { centreDay } from "@/lib/membership-db";
@@ -79,7 +80,9 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 
   return (
     <>
-      <PageHeader eyebrow="Haftalik jadval" title="Dars jadvali" subtitle={`${dayLabel} · ${lessons.length} ta dars · ${totalStudents} o'quvchi`} />
+      <PageHeader eyebrow="Haftalik jadval" title="Dars jadvali" subtitle={`${dayLabel} · ${lessons.length} ta dars · ${totalStudents} o'quvchi`}>
+        <ExportButtons href="/schedule/export" extra={{ d: String(day) }} />
+      </PageHeader>
 
       <nav className="mb-5 flex gap-1 overflow-x-auto rounded-full border border-line bg-surface p-1" aria-label="Hafta kunlari">
         {WEEKDAYS.map((w) => (

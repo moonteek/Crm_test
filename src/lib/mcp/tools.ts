@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { balance, priceNow, withHolidays } from "@/lib/billing";
 import { assertNotHoliday, holidayDays } from "@/lib/holidays-db";
+import { plainMark } from "@/lib/attendance";
 import { studentBillingInclude } from "@/lib/billing-include";
 import {
   assertGroupAccess, assertLeadAccess, assertStudentAccess, can, canSeeBalances, groupScope, leadScope, studentScope, type CurrentUser,
@@ -190,8 +191,8 @@ export function buildServer(user: CurrentUser) {
       if (!members.has(studentId)) continue;
       await db.attendance.upsert({
         where: { groupId_studentId_date: { groupId: group_id, studentId, date: day } },
-        create: { groupId: group_id, studentId, date: day, present },
-        update: { present },
+        create: { groupId: group_id, studentId, date: day, ...plainMark(present) },
+        update: plainMark(present),
       });
     }
     const g = await db.group.findUniqueOrThrow({ where: { id: group_id } });
@@ -305,7 +306,7 @@ export function buildServer(user: CurrentUser) {
       if (active.length === 1) groupId = active[0].groupId;
     }
     const p = await db.payment.create({
-      data: { studentId: student_id, amount, method, groupId, note, date: date ? new Date(date) : new Date() },
+      data: { studentId: student_id, amount, method, groupId, note, date: date ? new Date(date) : new Date(), userId: user.id },
       include: { student: true },
     });
     await logAction(user, "payment.create", `To'lov (AI orqali): ${p.student.name} — ${money(amount)}`);

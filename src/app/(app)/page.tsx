@@ -11,6 +11,8 @@ import { centreMonthStart, centreToday, fromMinutes, greeting, scheduleKeysOn, t
 import { date, money, MONTHS, PAYMENT_METHODS, LEAD_STATUSES } from "@/lib/format";
 import { DotMeter, Empty, PageHeader, StatCard } from "@/components/ui";
 import { alertsFor } from "@/lib/alerts-db";
+import { loadDebtors } from "@/lib/lists/debtors";
+import { loadUnmarkedToday } from "@/lib/lists/unmarked";
 
 export default async function Dashboard() {
   const user = await requireUser();
@@ -46,12 +48,15 @@ export default async function Dashboard() {
 
   const holidays = await holidayDays();
   const todayClosed = holidays.includes(`${today.year}-${String(today.month).padStart(2, "0")}-${String(today.day).padStart(2, "0")}`);
-  const debtors = students.filter((s) => balance(withHolidays(s.groups, holidays), s.payments) < 0).length;
+  // the same count as the Qarzdorlar page (everyone who owes, current and former students)
+  const debtors = show.debtors ? (await loadDebtors(user)).debtors.length : 0;
   const income = (monthPayments._sum.amount ?? 0) + (monthShop._sum.total ?? 0);
   const expense = monthExpenses._sum.amount ?? 0;
   const totalLeads = leadCounts.reduce((s, l) => s + l._count, 0) || 1;
 
   const courseEnds = await alertsFor(user);
+  // managers see the whole centre's unmarked groups
+  const unmarked = can(user, "groups.all") ? await loadUnmarkedToday(user) : [];
   const weekday = WEEKDAYS.find((w) => w.day === today.weekday)?.label ?? "Yakshanba";
   const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -138,6 +143,23 @@ export default async function Dashboard() {
           </div>
         )}
       </div>
+
+      {unmarked.length > 0 && (
+        <div className="card mt-4 p-4 md:mt-6 md:p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-semibold">Davomat qilinmagan guruhlar</h2>
+            <Link href="/groups?unmarked=1" className="label-mono hover:text-ink">Hammasi →</Link>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {unmarked.map((g) => (
+              <Link key={g.id} href={`/groups/${g.id}`} className="press flex items-center justify-between gap-3 rounded-xl border border-line bg-raised px-3.5 py-3 hover:border-line-strong">
+                <span className="min-w-0 truncate font-medium">{g.name}<span className="block truncate text-xs font-normal text-muted">{g.teacher?.name ?? "O'qituvchi yo'q"}</span></span>
+                <span className="badge shrink-0 bg-warning-tint text-warning">{g.time}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {courseEnds.length > 0 && (
         <div className="card mt-4 p-4 md:mt-6 md:p-5">

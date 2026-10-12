@@ -34,7 +34,7 @@ export async function groupSheet(user: CurrentUser, groupId: number, params: { t
   const grades = params.tab === "grades";
   const marks = grades
     ? new Map((await db.grade.findMany({ where: { groupId, date: range } })).map((g) => [`${g.studentId}:${isoDate(g.date)}`, g.score as number | string]))
-    : new Map((await db.attendance.findMany({ where: { groupId, date: range } })).map((a) => [`${a.studentId}:${isoDate(a.date)}`, a.present ? "✓" : "✗"]));
+    : new Map((await db.attendance.findMany({ where: { groupId, date: range } })).map((a) => [`${a.studentId}:${isoDate(a.date)}`, a.late ? "K" : a.present ? "✓" : "✗"]));
   return {
     title: `${group.name} ${grades ? "baholar" : "davomat"} ${MONTHS[month]} ${year}`,
     columns: ["O'quvchi", ...days.map((d) => fmtDate(d).slice(0, 5))],

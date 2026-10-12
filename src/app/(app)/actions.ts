@@ -17,13 +17,15 @@ import { nextMonthStart, schedulePrice } from "@/lib/prices-db";
 import { changeTeacher } from "@/lib/teachers-db";
 import { menuActions, systemLeaveDate, type EventType, type Status } from "@/lib/membership";
 import {
-  ACTIVITY_TYPES, isoDate, CALL_RESULTS, MONTHS, EXPENSE_CATEGORIES, GENDERS, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_SOURCES, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES, TAG_COLORS,
+  ACTIVITY_TYPES, isoDate, CALL_RESULTS, lessonWeekdays, MONTHS, EXPENSE_CATEGORIES, GENDERS, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_SOURCES, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES, TAG_COLORS,
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
 import { assertNotHoliday, holidayDays } from "@/lib/holidays-db";
 import { canDeleteHoliday, expandRange, holidayProblem } from "@/lib/holidays";
 import { canDelete, canEnd, discountProblem, lastMonth } from "@/lib/discounts";
+import { editDiff } from "@/lib/payments";
+import { fillPresent, nextMark } from "@/lib/attendance";
 import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, fitsDay, groupClashes, needsClashCheck, teacherGrid, type DayType, type LessonLike } from "@/lib/availability";
 import { check, parseForm, v } from "@/lib/validation";
 import { phoneKey } from "@/lib/phone";
@@ -481,9 +483,51 @@ export async function toggleAttendance(groupId: number, studentId: number, isoDa
   await assertNotHoliday(date);
   const key = { groupId_studentId_date: { groupId, studentId, date } };
   const existing = await db.attendance.findUnique({ where: key });
-  if (!existing) await db.attendance.create({ data: { groupId, studentId, date, present: true } });
-  else if (existing.present) await db.attendance.update({ where: key, data: { present: false } });
-  else await db.attendance.delete({ where: key });
+  // keldi → kechikdi → kelmadi → empty
+  const next = nextMark(existing ? { present: existing.present, late: existing.late } : null);
+  if (!next) await db.attendance.delete({ where: key });
+  else await db.attendance.upsert({ where: key, create: { groupId, studentId, date, ...next }, update: next });
+  revalidatePath(`/groups/${groupId}`);
+}
+
+/** Today's lesson for the group (or a refusal): the day must be one of its lesson days and not a holiday. */
+async function todayLessonOf(groupId: number) {
+  const date = centreDay();
+  const group = await db.group.findUniqueOrThrow({ where: { id: groupId } });
+  if (!lessonWeekdays(group.days).includes(date.getUTCDay())) throw new Error("Bugun bu guruhda dars yo'q");
+  await assertNotHoliday(date);
+  return { group, date };
+}
+
+const TODAY_MARKS = { present: { present: true, late: false }, late: { present: true, late: true }, absent: { present: false, late: false } } as const;
+
+/** "Bugungi dars": one tap sets today's mark for a student (keldi / kechikdi / kelmadi). */
+export async function markToday(groupId: number, studentId: number, mark: keyof typeof TODAY_MARKS) {
+  const user = await requirePermission("attendance.mark");
+  await assertGroupAccess(user, groupId);
+  const { date } = await todayLessonOf(groupId);
+  const value = TODAY_MARKS[check(z.enum(["present", "late", "absent"]), mark)];
+  if (!(await db.groupStudent.findFirst({ where: { groupId, studentId, leftAt: null } }))) throw new Error("O'quvchi bu guruhda emas");
+  await db.attendance.upsert({
+    where: { groupId_studentId_date: { groupId, studentId, date } },
+    create: { groupId, studentId, date, ...value },
+    update: value,
+  });
+  revalidatePath(`/groups/${groupId}`);
+}
+
+/** "Hammasi keldi": everyone not marked yet today (and not frozen) becomes present; given marks are kept. */
+export async function markAllPresent(groupId: number) {
+  const user = await requirePermission("attendance.mark");
+  await assertGroupAccess(user, groupId);
+  const { group, date } = await todayLessonOf(groupId);
+  const [members, marked] = await Promise.all([
+    db.groupStudent.findMany({ where: { groupId, leftAt: null, status: { in: ["ACTIVE", "TRIAL"] } }, select: { studentId: true } }),
+    db.attendance.findMany({ where: { groupId, date } }),
+  ]);
+  const todo = fillPresent(members.map((m) => m.studentId), new Map(marked.map((a) => [a.studentId, { present: a.present, late: a.late }])));
+  if (todo.length) await db.attendance.createMany({ data: todo.map((studentId) => ({ groupId, studentId, date, present: true })) });
+  await logAction(user, "group.attendance", `Davomat: ${group.name} — hammasi keldi (${todo.length} ta)`);
   revalidatePath(`/groups/${groupId}`);
 }
 
@@ -692,6 +736,7 @@ const paymentSchema = z.object({
   method: v.oneOf(PAYMENT_METHODS, "CASH"),
   note: v.optText(500),
   date: v.optDate(),
+  month: z.preprocess((x) => (typeof x === "string" && /^\d{4}-\d{2}$/.test(x) ? new Date(`${x}-01T00:00:00Z`) : null), z.date().nullable()),
 });
 
 export async function createPayment(f: FormData) {
@@ -707,11 +752,39 @@ export async function createPayment(f: FormData) {
   }
   const payment = await db.payment.create({
     include: { student: true },
-    data: { studentId: d.studentId, groupId, amount: d.amount, method: d.method, note: d.note, date: d.date ?? new Date() },
+    data: { studentId: d.studentId, groupId, amount: d.amount, method: d.method, note: d.note, date: d.date ?? new Date(), month: d.month, userId: user.id },
   });
   await logAction(user, "payment.create", `To'lov: ${payment.student.name} — ${money(payment.amount)}`, { studentId: payment.studentId });
   revalidatePath(`/students/${d.studentId}`);
   revalidatePath("/payments");
+}
+
+const snapshot = (p: { amount: number; method: string; date: Date; month: Date | null; note: string | null }) => ({
+  amount: p.amount, method: p.method, date: p.date.toISOString().slice(0, 10), month: p.month ? p.month.toISOString().slice(0, 7) : null, note: p.note,
+});
+
+/** Edits a payment (amount, method, date, month, note); the before/after is kept and shown under the payment. */
+export async function editPayment(_: MemberActionState, f: FormData): Promise<MemberActionState> {
+  try {
+    const user = await requirePermission("payments.edit");
+    const id = check(v.id("To'lov"), f.get("id"));
+    const before = await db.payment.findUniqueOrThrow({ where: { id }, include: { student: true } });
+    await assertStudentAccess(user, before.studentId);
+    const d = parseForm(paymentSchema.omit({ studentId: true, groupId: true }), f);
+    const data = { amount: d.amount, method: d.method, note: d.note, date: d.date ?? before.date, month: d.month };
+    const after = snapshot(data);
+    if (JSON.stringify(after) === JSON.stringify(snapshot(before))) return { ok: true };
+    await db.$transaction([
+      db.payment.update({ where: { id }, data }),
+      db.paymentEdit.create({ data: { paymentId: id, userId: user.id, before: JSON.stringify(snapshot(before)), after: JSON.stringify(after) } }),
+    ]);
+    await logAction(user, "payment.edit", `To'lov tahrirlandi: ${before.student.name} — ${editDiff(snapshot(before), after)}`, { studentId: before.studentId });
+    revalidatePath("/payments");
+    revalidatePath(`/students/${before.studentId}`);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
 
 export async function deletePayment(id: number) {

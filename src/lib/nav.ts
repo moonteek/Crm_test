@@ -42,3 +42,18 @@ export function phoneTabs(permissions: string[]) {
 
 /** Whether `href` is the page being shown (home only matches exactly). */
 export const isActive = (href: string, pathname: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+
+/** The sidebar's groups, in order; the first has no title (Bosh sahifa, Analitika). */
+export const NAV_SECTIONS: { title: string | null; hrefs: string[] }[] = [
+  { title: null, hrefs: ["/", "/analytics"] },
+  { title: "O'quv", hrefs: ["/students", "/groups", "/schedule", "/teachers", "/availability", "/courses", "/rooms"] },
+  { title: "Sotuv", hrefs: ["/leads", "/sales"] },
+  { title: "Moliya", hrefs: ["/payments", "/debtors", "/finance", "/salaries", "/shop"] },
+  { title: "Tizim", hrefs: ["/activity", "/settings"] },
+];
+
+/** The allowed pages grouped into sections; a section with nothing allowed is left out. */
+export function navSections(permissions: string[]) {
+  const allowed = allowedNav(permissions);
+  return NAV_SECTIONS.map((s) => ({ title: s.title, items: s.hrefs.flatMap((h) => allowed.filter((n) => n.href === h)) })).filter((s) => s.items.length);
+}

@@ -6,6 +6,7 @@ import { curriculumOn, type Progress } from "../curriculum";
 import { GROUP_DAYS } from "../format";
 import { centreDay } from "../membership-db";
 import { holidayDays } from "../holidays-db";
+import { loadUnmarkedToday } from "./unmarked";
 import { fmtDate, type Table } from "../export";
 
 export const PROGRESS: Record<Progress["state"], string> = {
@@ -16,7 +17,7 @@ export const PROGRESS: Record<Progress["state"], string> = {
   none: "Fanlarsiz",
 };
 
-export type GroupFilters = { status?: string; course?: string; subject?: string; progress?: string };
+export type GroupFilters = { status?: string; course?: string; subject?: string; progress?: string; unmarked?: string };
 
 /** The groups list (Faol / Arxiv, course, current subject, progress): the page and its export. */
 export async function loadGroups(user: CurrentUser, params: GroupFilters) {
@@ -37,9 +38,12 @@ export async function loadGroups(user: CurrentUser, params: GroupFilters) {
   const subjectId = subjectOptions.some((s) => s.id === asked) ? asked : null;
   const today = centreDay();
   const holidays = await holidayDays();
+  // "Davomat qilinmagan": only groups whose lesson started today and aren't marked
+  const unmarkedIds = params.unmarked === "1" ? new Set((await loadUnmarkedToday(user)).map((g) => g.id)) : null;
   const groups = all
     .map((g) => ({ ...g, cur: curriculumOn({ ...g, holidays }, g.course.subjects, today) }))
-    .filter((g) => (!subjectId || (g.cur.progress.state !== "finished" && g.cur.progress.window?.subjectId === subjectId)) && (!progress || g.cur.progress.state === progress));
+    .filter((g) => (!subjectId || (g.cur.progress.state !== "finished" && g.cur.progress.window?.subjectId === subjectId)) && (!progress || g.cur.progress.state === progress))
+    .filter((g) => !unmarkedIds || unmarkedIds.has(g.id));
   const where = (g: (typeof groups)[number]) => {
     const p = g.cur.progress;
     return p.state === "none" ? g.level : p.state === "finished" ? "Kurs tugadi" : p.window ? `${p.window.subject} ${p.window.levelInSubject}-daraja` : PROGRESS[p.state];
@@ -52,5 +56,5 @@ export async function loadGroups(user: CurrentUser, params: GroupFilters) {
       g.room?.name ?? null, g._count.students, priceNow(g), fmtDate(g.startDate),
     ]),
   };
-  return { status, courseId, subjectId, progress, courses, subjectOptions, groups, table };
+  return { status, courseId, subjectId, progress, unmarked: Boolean(unmarkedIds), courses, subjectOptions, groups, table };
 }
