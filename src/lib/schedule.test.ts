@@ -4,11 +4,11 @@ import { centreMonthStart, centreToday, greeting } from "./schedule";
 
 test("centreToday uses Tashkent time, not the server's", () => {
   // 20:00 UTC on Saturday 10 Oct is already 01:00 on Sunday 11 Oct in Tashkent
-  assert.deepEqual(centreToday(new Date("2026-10-10T20:00:00Z")), { weekday: 0, day: 11, month: 10, year: 2026, hour: 1 });
+  assert.deepEqual(centreToday(new Date("2026-10-10T20:00:00Z")), { weekday: 0, day: 11, month: 10, year: 2026, hour: 1, minute: 0 });
 });
 
 test("centreToday on a Tashkent afternoon", () => {
-  assert.deepEqual(centreToday(new Date("2026-10-10T09:30:00Z")), { weekday: 6, day: 10, month: 10, year: 2026, hour: 14 });
+  assert.deepEqual(centreToday(new Date("2026-10-10T09:30:00Z")), { weekday: 6, day: 10, month: 10, year: 2026, hour: 14, minute: 30 });
 });
 
 test("greeting follows the time of day", () => {

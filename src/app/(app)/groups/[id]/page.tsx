@@ -9,7 +9,7 @@ import { balance, priceNow, withHolidays } from "@/lib/billing";
 import { holidayDays } from "@/lib/holidays-db";
 import { upcomingPrice } from "@/lib/prices";
 import { membershipInclude } from "@/lib/billing-include";
-import { date, GROUP_DAYS, isoDate, lessonDates, money, MONTHS } from "@/lib/format";
+import { date, GROUP_DAYS, isoDate, lessonDates, lessonWeekdays, money, MONTHS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { EditGroupDialog } from "@/components/EditGroupDialog";
 import { BalanceBadge, Empty, Field, SubmitRow } from "@/components/ui";
@@ -18,6 +18,8 @@ import { curriculumOn, levelExams, passed } from "@/lib/curriculum";
 import { LevelExamDialog } from "@/components/LevelExamDialog";
 import { examColumns } from "@/lib/group-exams";
 import { ExportButtons } from "@/components/ExportButtons";
+import { TodayLesson } from "@/components/TodayLesson";
+import { attendancePercent, type Mark } from "@/lib/attendance";
 import { busyMarkMessages } from "@/lib/availability";
 import { GradeCell } from "@/components/GradeCell";
 import { MemberMenu } from "@/components/members/MemberMenu";
@@ -87,7 +89,12 @@ export default async function GroupPage({
     : [];
   const autoExams = levelExams(planGroup, group.course.subjects);
   const examCols = examColumns(planGroup, group.course.subjects, exams, centreDay());
-  const mark = new Map(attendance.map((a) => [`${a.studentId}:${isoDate(a.date)}`, a.present]));
+  // "Bugungi dars": on the group's lesson day (not a holiday) its current students with today's mark
+  const todayIso = isoDate(centreDay());
+  const todayRows = group.status === "ACTIVE" && lessonWeekdays(group.days).includes(centreDay().getUTCDay()) && !holidays.includes(todayIso)
+    ? await todayMarks(id, group.students.filter((gs) => gs.status === "ACTIVE" || gs.status === "TRIAL").map((gs) => ({ id: gs.student.id, name: gs.student.name })))
+    : null;
+  const mark = new Map(attendance.map((a) => [`${a.studentId}:${isoDate(a.date)}`, { present: a.present, late: a.late }]));
   const gradeMap = new Map(grades.map((g) => [`${g.studentId}:${isoDate(g.date)}`, g.score]));
   const prev = new Date(year, month - 1, 1);
   const next = new Date(year, month + 1, 1);
@@ -131,6 +138,8 @@ export default async function GroupPage({
           </div>
         )}
       </div>
+
+      {todayRows && <TodayLesson groupId={id} rows={todayRows} editable={allow.attendance} />}
 
       <div className="card mt-4 md:mt-6">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 pt-3">
@@ -198,7 +207,7 @@ export default async function GroupPage({
           </div>
         </div>
 
-        {tab === "attendance" && allow.attendance && <p className="px-5 pt-3 text-xs text-muted">Katakchani bosing: <span className="text-success">✓ keldi</span> → <span className="text-danger">✗ kelmadi</span> → bo&apos;sh</p>}
+        {tab === "attendance" && allow.attendance && <p className="px-5 pt-3 text-xs text-muted">Katakchani bosing: <span className="text-success">✓ keldi</span> → <span className="text-warning">K kechikdi</span> → <span className="text-danger">✗ kelmadi</span> → bo&apos;sh</p>}
         <div className="px-5 pt-3"><StatusLegend /></div>
         {tab === "grades" && <p className="px-5 pt-3 text-xs text-muted">Har bir dars uchun 1–5 baho. {allow.grades ? "Katakchani bosib baho tanlang." : ""}</p>}
 
@@ -245,7 +254,7 @@ export default async function GroupPage({
                       {tab === "attendance" && allow.balance && <td><BalanceBadge value={b} label={money(b)} /></td>}
                       <td className="text-center font-semibold">
                         {tab === "attendance"
-                          ? (marks.length ? `${Math.round((marks.filter(Boolean).length / marks.length) * 100)}%` : "—")
+                          ? (attendancePercent(marks as Mark[]) === null ? "—" : `${attendancePercent(marks as Mark[])}%`)
                           : (scores.length ? (scores.reduce((x, y) => x + y, 0) / scores.length).toFixed(1) : "—")}
                       </td>
                       {days.map((d) => {
@@ -265,12 +274,13 @@ export default async function GroupPage({
                               <button
                                 disabled={!allow.attendance}
                                 className={`press h-7 w-7 rounded-full border text-sm font-bold ${
-                                  v === true ? "border-success/40 bg-success-tint text-success"
-                                  : v === false ? "border-danger/40 bg-danger-tint text-danger"
+                                  v?.late ? "border-warning/40 bg-warning-tint text-warning"
+                                  : v?.present ? "border-success/40 bg-success-tint text-success"
+                                  : v ? "border-danger/40 bg-danger-tint text-danger"
                                   : "border-line bg-raised text-faint hover:border-ink"
                                 }`}
                               >
-                                {v === true ? "✓" : v === false ? "✗" : "·"}
+                                {v?.late ? "K" : v?.present ? "✓" : v ? "✗" : "·"}
                               </button>
                             </form>
                           </td>
@@ -366,4 +376,14 @@ function Info({ k, v }: { k: string; v: string }) {
       <p className="mt-1 truncate font-medium">{v}</p>
     </div>
   );
+}
+
+/** Today's marks for the "Bugungi dars" card. */
+async function todayMarks(groupId: number, students: { id: number; name: string }[]) {
+  const marks = await db.attendance.findMany({ where: { groupId, date: centreDay() } });
+  const of = (id: number) => {
+    const a = marks.find((m) => m.studentId === id);
+    return a ? (a.late ? "late" : a.present ? "present" : "absent") : null;
+  };
+  return students.map((st) => ({ ...st, mark: of(st.id) as "present" | "late" | "absent" | null }));
 }

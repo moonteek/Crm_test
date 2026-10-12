@@ -240,6 +240,8 @@ model Attendance {
   student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   date      DateTime
   present   Boolean
+  // kechikdi: came late (only with present = true); counts as present
+  late      Boolean  @default(false)
 
   @@unique([groupId, studentId, date])
 }

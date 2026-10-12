@@ -15,12 +15,12 @@ import { NewGroupDialog } from "@/components/NewGroupDialog";
 export default async function GroupsPage({ searchParams }: { searchParams: Promise<GroupFilters> }) {
   const user = await requirePage("groups.view");
   const params = await searchParams;
-  const [{ status, courseId, subjectId, progress, courses, subjectOptions, groups }, teachers, rooms] = await Promise.all([
+  const [{ status, courseId, subjectId, progress, unmarked, courses, subjectOptions, groups }, teachers, rooms] = await Promise.all([
     loadGroups(user, params),
     db.user.findMany({ where: { isTeacher: true, active: true }, orderBy: { name: "asc" } }),
     db.room.findMany({ orderBy: { name: "asc" } }),
   ]);
-  const filtered = Boolean(courseId || subjectId || progress);
+  const filtered = Boolean(courseId || subjectId || progress || unmarked);
   const archive = status === "FINISHED";
   const href = (s: string) => `/groups?status=${s}`;
 
@@ -52,6 +52,11 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
           <option value="">Har qanday holat</option>
           {Object.entries(PROGRESS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
         </select>
+        {status === "ACTIVE" && (
+          <label className="col-span-2 flex items-center gap-2 text-sm text-muted sm:col-span-1">
+            <input type="checkbox" name="unmarked" value="1" defaultChecked={unmarked} className="h-4 w-4 accent-accent" /> Davomat qilinmagan
+          </label>
+        )}
         <button className="btn-secondary">Filtrlash</button>
         {filtered && <Link href={href(status)} className="btn-ghost">Tozalash</Link>}
       </form>

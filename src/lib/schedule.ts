@@ -19,13 +19,13 @@ const CENTRE_TZ = "Asia/Tashkent";
 const WEEKDAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
 const CENTRE_PARTS = new Intl.DateTimeFormat("en-US", {
-  timeZone: CENTRE_TZ, weekday: "short", day: "numeric", month: "numeric", year: "numeric", hour: "numeric", hourCycle: "h23",
+  timeZone: CENTRE_TZ, weekday: "short", day: "numeric", month: "numeric", year: "numeric", hour: "numeric", minute: "numeric", hourCycle: "h23",
 });
 
 /** The date and hour at the centre (month is 1-based), whatever timezone the server runs in. */
 export function centreToday(d = new Date()) {
   const p = Object.fromEntries(CENTRE_PARTS.formatToParts(d).map((x) => [x.type, x.value]));
-  return { weekday: WEEKDAY_INDEX[p.weekday], day: Number(p.day), month: Number(p.month), year: Number(p.year), hour: Number(p.hour) };
+  return { weekday: WEEKDAY_INDEX[p.weekday], day: Number(p.day), month: Number(p.month), year: Number(p.year), hour: Number(p.hour), minute: Number(p.minute) };
 }
 
 /** Weekday (0 = Sunday) at the centre. */
