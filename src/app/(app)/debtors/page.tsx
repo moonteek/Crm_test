@@ -6,15 +6,17 @@ import { ExportButtons } from "@/components/ExportButtons";
 import { money } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { PaymentForm } from "@/components/forms";
-import { Empty, PageHeader } from "@/components/ui";
+import { Empty, PageHeader, Segmented } from "@/components/ui";
+import { DEBTOR_STATUSES } from "@/lib/debtor-status";
 
-export default async function DebtorsPage() {
+export default async function DebtorsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const user = await requirePage("debtors.view");
-  const { debtors, total } = await loadDebtors(user);
+  const { debtors, total, status } = await loadDebtors(user, await searchParams);
 
   return (
     <>
       <PageHeader title="Qarzdorlar" subtitle={`${debtors.length} ta o'quvchi · jami qarz ${money(-total)}`}>
+        <Segmented options={Object.entries(DEBTOR_STATUSES).map(([k, label]) => ({ href: `/debtors?status=${k}`, label, active: status === k }))} />
         <ExportButtons href="/debtors/export" />
       </PageHeader>
       <div className="card md:overflow-x-auto">

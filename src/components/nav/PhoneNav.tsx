@@ -10,6 +10,7 @@ import type { Theme } from "@/lib/theme";
 import { LogoMark } from "../brand/Logo";
 import { ThemeToggle } from "../ThemeToggle";
 import { AlertsBell } from "../AlertsBell";
+import { SearchDialog } from "../SearchDialog";
 import type { AlertItem } from "@/lib/alerts";
 
 type Props = { name: string; roleName: string; permissions: string[]; theme: Theme; alerts: AlertItem[]; canSeeAlerts: boolean };
@@ -39,7 +40,10 @@ export function PhoneNav({ name, roleName, permissions, theme, alerts, canSeeAle
       <header className="sticky top-0 z-30 flex h-14 md:hidden items-center gap-3 border-b border-line bg-page/85 px-4 backdrop-blur-md">
         <Link href="/" aria-label="Bosh sahifa"><LogoMark className="h-6 w-auto" /></Link>
         <span className="truncate font-semibold">{current?.label ?? "Algoritm"}</span>
-        {canSeeAlerts && <div className="ml-auto"><AlertsBell alerts={alerts} align="right" /></div>}
+        <div className="ml-auto flex items-center gap-1">
+          {permissions.includes("students.view") && <SearchDialog compact />}
+          {canSeeAlerts && <AlertsBell alerts={alerts} align="right" />}
+        </div>
       </header>
 
       <nav

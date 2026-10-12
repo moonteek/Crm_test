@@ -11,6 +11,7 @@ import { centreMonthStart, centreToday, fromMinutes, greeting, scheduleKeysOn, t
 import { date, money, MONTHS, PAYMENT_METHODS, LEAD_STATUSES } from "@/lib/format";
 import { DotMeter, Empty, PageHeader, StatCard } from "@/components/ui";
 import { alertsFor } from "@/lib/alerts-db";
+import { loadDebtors } from "@/lib/lists/debtors";
 
 export default async function Dashboard() {
   const user = await requireUser();
@@ -46,7 +47,8 @@ export default async function Dashboard() {
 
   const holidays = await holidayDays();
   const todayClosed = holidays.includes(`${today.year}-${String(today.month).padStart(2, "0")}-${String(today.day).padStart(2, "0")}`);
-  const debtors = students.filter((s) => balance(withHolidays(s.groups, holidays), s.payments) < 0).length;
+  // the same count as the Qarzdorlar page (everyone who owes, current and former students)
+  const debtors = show.debtors ? (await loadDebtors(user)).debtors.length : 0;
   const income = (monthPayments._sum.amount ?? 0) + (monthShop._sum.total ?? 0);
   const expense = monthExpenses._sum.amount ?? 0;
   const totalLeads = leadCounts.reduce((s, l) => s + l._count, 0) || 1;

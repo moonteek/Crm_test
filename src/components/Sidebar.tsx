@@ -10,6 +10,7 @@ import { Logo, LogoMark } from "./brand/Logo";
 import { ThemeToggle } from "./ThemeToggle";
 import { PhoneNav } from "./nav/PhoneNav";
 import { AlertsBell } from "./AlertsBell";
+import { SearchDialog } from "./SearchDialog";
 import type { AlertItem } from "@/lib/alerts";
 
 type Props = { name: string; roleName: string; permissions: string[]; theme: Theme; alerts: AlertItem[]; canSeeAlerts: boolean };
@@ -29,7 +30,10 @@ export function Sidebar({ name, roleName, permissions, theme, alerts, canSeeAler
             <LogoMark className="h-7 w-auto lg:hidden" />
             <span className="hidden lg:block"><Logo /></span>
           </Link>
-          {canSeeAlerts && <AlertsBell alerts={alerts} />}
+          <div className="flex flex-col items-center gap-1 lg:flex-row">
+            {permissions.includes("students.view") && <SearchDialog compact shortcuts />}
+            {canSeeAlerts && <AlertsBell alerts={alerts} />}
+          </div>
         </div>
 
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-2">
