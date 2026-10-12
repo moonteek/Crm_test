@@ -8,6 +8,7 @@ import { DotMeter, Empty, PageHeader } from "@/components/ui";
 import { CurriculumBadge } from "@/components/CurriculumBar";
 import { curriculumOn, type Progress } from "@/lib/curriculum";
 import { centreDay } from "@/lib/membership-db";
+import { holidayDays } from "@/lib/holidays-db";
 
 const NO_ROOM = 0;
 
@@ -42,8 +43,11 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   };
   // the shown weekday's date in this week (Monday first; on Sunday, the coming week): where each group is in its course that day, and exam days
   const shown = new Date(centreDay().getTime() + (((day + 6) % 7) - ((today + 6) % 7) + (today === 0 ? 7 : 0)) * 86_400_000);
-  const lessons = (perDay.get(day) ?? []).map(withTimes).map((l) => {
-    const cur = curriculumOn(l, l.course.subjects, shown);
+  const holidays = await holidayDays();
+  // the centre is closed that day: no lessons to show
+  const closed = holidays.includes(shown.toISOString().slice(0, 10));
+  const lessons = (closed ? [] : perDay.get(day) ?? []).map(withTimes).map((l) => {
+    const cur = curriculumOn({ ...l, holidays }, l.course.subjects, shown);
     return { ...l, progress: cur.progress, exam: cur.nextExam !== null && cur.nextExam.date.getTime() === shown.getTime() };
   });
   const clashes = findClashes(
@@ -94,7 +98,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       </nav>
 
       {lessons.length === 0 ? (
-        <div className="card"><Empty text="Bu kunda darslar yo'q" /></div>
+        <div className="card"><Empty text={closed ? "Bayram — dars yo'q" : "Bu kunda darslar yo'q"} /></div>
       ) : (
         <>
           {/* phones: one list ordered by time */}

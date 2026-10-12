@@ -73,7 +73,9 @@ export default async function GroupPage({
   const thisGroup = { id: group.id, name: group.name, days: group.days, price: group.price, course: group.course, prices: group.prices };
   const upcoming = upcomingPrice(group.prices, now);
   const holidays = await holidayDays();
-  const cur = curriculumOn(group, group.course.subjects, centreDay());
+  const planGroup = { ...group, holidays };
+  const off = new Set(holidays);
+  const cur = curriculumOn(planGroup, group.course.subjects, centreDay());
   // just opened (?warn=1): hours its teacher / assistant marked as busy, worked out here — never text from the link
   const people = [group.teacher, group.assistant].filter((p): p is NonNullable<typeof p> => p !== null);
   const busyWarnings = warn && people.length
@@ -83,8 +85,8 @@ export default async function GroupPage({
         new Map(people.map((p) => [p.id, p.name])),
       )
     : [];
-  const autoExams = levelExams(group, group.course.subjects);
-  const examCols = examColumns(group, group.course.subjects, exams, centreDay());
+  const autoExams = levelExams(planGroup, group.course.subjects);
+  const examCols = examColumns(planGroup, group.course.subjects, exams, centreDay());
   const mark = new Map(attendance.map((a) => [`${a.studentId}:${isoDate(a.date)}`, a.present]));
   const gradeMap = new Map(grades.map((g) => [`${g.studentId}:${isoDate(g.date)}`, g.score]));
   const prev = new Date(year, month - 1, 1);
@@ -209,7 +211,7 @@ export default async function GroupPage({
                   {tab === "attendance" && allow.balance && <th>Balans</th>}
                   <th className="text-center">{tab === "attendance" ? "Davomat" : "O'rtacha"}</th>
                   {days.map((d) => (
-                    <th key={d.toISOString()} className={`px-1 text-center ${isoDate(d) === today ? "text-accent-ink" : ""}`}>{d.getUTCDate()}</th>
+                    <th key={d.toISOString()} title={off.has(isoDate(d)) ? "Bayram — dars yo'q" : undefined} className={`px-1 text-center ${off.has(isoDate(d)) ? "text-faint line-through" : isoDate(d) === today ? "text-accent-ink" : ""}`}>{d.getUTCDate()}</th>
                   ))}
                 </tr>
               </thead>
@@ -248,6 +250,7 @@ export default async function GroupPage({
                       </td>
                       {days.map((d) => {
                         const key = isoDate(d);
+                        if (off.has(key)) return <td key={key} className="px-1 text-center"><span className="label-mono text-faint" title="Bayram — dars yo'q">B</span></td>;
                         if (tab === "grades") {
                           return (
                             <td key={key} className="px-1 text-center">

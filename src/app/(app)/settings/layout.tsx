@@ -9,6 +9,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
       ? [{ href: "/settings", label: "Xodimlar" }, { href: "/settings/roles", label: "Rollar va ruxsatlar" }, { href: "/settings/reasons", label: "Sabablar" }]
       : []),
     ...(can(user, "students.tags") ? [{ href: "/settings/tags", label: "Teglar" }] : []),
+    ...(can(user, "holidays.manage") ? [{ href: "/settings/holidays", label: "Bayram kunlari" }] : []),
     ...(can(user, "mcp.use") ? [{ href: "/settings/mcp", label: "Integratsiyalar (AI, Instagram, Telegram)" }] : []),
   ];
   return (

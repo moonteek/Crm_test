@@ -1,11 +1,12 @@
-import { lessonDates } from "./format";
+import { heldLessons } from "./format";
 import { centreToday } from "./schedule";
 
 // A course is an ordered list of subjects, each so many months long. A group moves through them one level a
 // month, counted from its own start day (start 20 Oct → level 1 = 20 Oct–19 Nov). A level has however many lessons
 // fall in that month on the group's days — about 13 on odd/even days, so 12–14 in practice.
 
-export type CurriculumGroup = { startDate: Date; days: string; startSubjectId: number | null; startLevel: number };
+/** `holidays`: the centre's closed days (ISO) — not lessons, so they don't count toward a level. */
+export type CurriculumGroup = { startDate: Date; days: string; startSubjectId: number | null; startLevel: number; holidays: string[] };
 export type CurriculumSubject = { id: number; name: string; months: number; position: number };
 
 export type Window = {
@@ -36,10 +37,10 @@ export function addMonthsClamped(date: Date, n: number) {
   return new Date(Date.UTC(y, m, Math.min(date.getUTCDate(), last)));
 }
 
-function lessonsBetween(days: string, from: Date, to: Date) {
+function lessonsBetween(days: string, from: Date, to: Date, holidays: string[]) {
   const out: Date[] = [];
   for (let y = from.getUTCFullYear(), m = from.getUTCMonth(); y * 12 + m <= to.getUTCFullYear() * 12 + to.getUTCMonth(); m === 11 ? (y++, (m = 0)) : m++) {
-    for (const l of lessonDates(days, y, m)) if (l >= from && l <= to) out.push(l);
+    for (const l of heldLessons(days, y, m, holidays)) if (l >= from && l <= to) out.push(l);
   }
   return out;
 }
@@ -63,7 +64,7 @@ export function levelWindows(group: CurriculumGroup, subjects: CurriculumSubject
       subjectLevels: x.s.months,
       from,
       to,
-      lessons: lessonsBetween(group.days, from, to),
+      lessons: lessonsBetween(group.days, from, to, group.holidays),
     };
   });
 }

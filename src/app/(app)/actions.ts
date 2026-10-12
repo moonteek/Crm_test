@@ -21,6 +21,8 @@ import {
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
+import { holidayDays } from "@/lib/holidays-db";
+import { canDeleteHoliday, expandRange, holidayProblem } from "@/lib/holidays";
 import { canDelete, canEnd, discountProblem, lastMonth } from "@/lib/discounts";
 import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, fitsDay, groupClashes, needsClashCheck, teacherGrid, type DayType, type LessonLike } from "@/lib/availability";
 import { check, parseForm, v } from "@/lib/validation";
@@ -476,6 +478,7 @@ export async function toggleAttendance(groupId: number, studentId: number, isoDa
   const user = await requirePermission("attendance.mark");
   await assertGroupAccess(user, groupId);
   const date = check(v.isoDay(), isoDay);
+  await refuseHoliday(date);
   const key = { groupId_studentId_date: { groupId, studentId, date } };
   const existing = await db.attendance.findUnique({ where: key });
   if (!existing) await db.attendance.create({ data: { groupId, studentId, date, present: true } });
@@ -747,10 +750,16 @@ export async function deleteExpense(id: number) {
 const gradeScore = z.number().int().min(1, "Baho 1 dan 5 gacha bo'lishi kerak").max(5, "Baho 1 dan 5 gacha bo'lishi kerak").nullable();
 
 /** Sets (or clears, when score is empty) a student's 1–5 lesson grade for a date. */
+/** A holiday is not a lesson: nothing can be marked or graded on it. */
+async function refuseHoliday(date: Date) {
+  if ((await holidayDays()).includes(date.toISOString().slice(0, 10))) throw new Error("Bayram kuni — dars yo'q");
+}
+
 export async function setGrade(groupId: number, studentId: number, isoDay: string, score: number | null) {
   const user = await requirePermission("grades.manage");
   await assertGroupAccess(user, groupId);
   const date = check(v.isoDay(), isoDay);
+  await refuseHoliday(date);
   const value = check(gradeScore, score);
   const key = { groupId_studentId_date: { groupId, studentId, date } };
   if (value === null) {
@@ -798,7 +807,7 @@ export async function saveLevelExamScores(_: MemberActionState, f: FormData): Pr
       where: { id: groupId },
       include: { course: { include: { subjects: true } }, students: { where: { leftAt: null }, select: { studentId: true } } },
     });
-    const auto = levelExams(group, group.course.subjects).find((e) => e.level === level);
+    const auto = levelExams({ ...group, holidays: await holidayDays() }, group.course.subjects).find((e) => e.level === level);
     if (!auto) throw new Error("Bu daraja imtihoni topilmadi");
     if (auto.date > centreDay()) throw new Error("Imtihon kuni hali kelmagan");
     const maxScore = check(v.int("Maksimal ball", { min: 1, max: 10_000, fallback: 100 }), f.get("maxScore"));
@@ -984,6 +993,34 @@ export async function endDiscount(id: number) {
   await db.discount.update({ where: { id }, data: { to } });
   await logAction(user, "student.discount", `Chegirma tugatildi: ${d.groupStudent.group.name} — ${monthName(to)} oxirgi oy`, { studentId: d.groupStudent.studentId });
   revalidatePath(`/students/${d.groupStudent.studentId}`);
+}
+
+// ---------- Holidays (Bayram kunlari) ----------
+/** One day or a range (1–3 yanvar), each day a row; this month onward; a day already a holiday is refused. */
+export async function createHolidays(_: MemberActionState, f: FormData): Promise<MemberActionState> {
+  try {
+    const user = await requirePermission("holidays.manage");
+    const d = parseForm(z.object({ from: v.isoDay(), to: v.optDate(), name: v.text("Nomi", 80) }), f);
+    const dates = expandRange(d.from, d.to);
+    const problem = holidayProblem(dates, await db.holiday.findMany({ select: { date: true, name: true } }), new Date());
+    if (problem) return { error: problem };
+    await db.holiday.createMany({ data: dates.map((date) => ({ date, name: d.name, userId: user.id })) });
+    await logAction(user, "holiday.manage", `Bayram: ${d.name} — ${dates.map((x) => x.toISOString().slice(0, 10)).join(", ")}`);
+    revalidatePath("/settings/holidays");
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** Only future ones: a past or today's holiday was already charged and paid for. */
+export async function deleteHoliday(id: number) {
+  const user = await requirePermission("holidays.manage");
+  const h = await db.holiday.findUniqueOrThrow({ where: { id } });
+  if (!canDeleteHoliday(h.date, new Date())) throw new Error("O'tgan yoki bugungi bayramni o'chirib bo'lmaydi");
+  await db.holiday.delete({ where: { id } });
+  await logAction(user, "holiday.manage", `Bayram o'chirildi: ${h.name} — ${h.date.toISOString().slice(0, 10)}`);
+  revalidatePath("/settings/holidays");
 }
 
 // ---------- Teacher availability ----------

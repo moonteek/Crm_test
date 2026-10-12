@@ -45,6 +45,7 @@ export default async function Dashboard() {
   ]);
 
   const holidays = await holidayDays();
+  const todayClosed = holidays.includes(`${today.year}-${String(today.month).padStart(2, "0")}-${String(today.day).padStart(2, "0")}`);
   const debtors = students.filter((s) => balance(withHolidays(s.groups, holidays), s.payments) < 0).length;
   const income = (monthPayments._sum.amount ?? 0) + (monthShop._sum.total ?? 0);
   const expense = monthExpenses._sum.amount ?? 0;
@@ -87,8 +88,8 @@ export default async function Dashboard() {
             <h2 className="font-semibold">Bugungi darslar</h2>
             <Link href="/schedule" className="label-mono hover:text-ink">Jadval →</Link>
           </div>
-          {todayGroups.length === 0 ? (
-            <Empty text="Bugun dars yo'q" />
+          {todayGroups.length === 0 || todayClosed ? (
+            <Empty text={todayClosed ? "Bayram — dars yo'q" : "Bugun dars yo'q"} />
           ) : (
             <div className="space-y-2">
               {todayGroups.map((g) => (

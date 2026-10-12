@@ -5,7 +5,7 @@ import { courseEndAlerts } from "./alerts";
 const d = (y: number, m: number, day: number) => new Date(Date.UTC(y, m - 1, day));
 const AI = { id: 1, name: "AI", months: 2, position: 1 };
 const g = (id: number, start: Date, extra: Partial<{ status: string; subjects: typeof AI[] }> = {}) => ({
-  id, name: `G${id}`, status: extra.status ?? "ACTIVE", startDate: start, days: "ODD", startSubjectId: null, startLevel: 1,
+  id, name: `G${id}`, status: extra.status ?? "ACTIVE", startDate: start, days: "ODD", startSubjectId: null, startLevel: 1, holidays: [] as string[],
   course: { subjects: extra.subjects ?? [AI] },
 });
 
