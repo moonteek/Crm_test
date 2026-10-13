@@ -8,8 +8,9 @@ import { Modal } from "@/components/Modal";
 import { Empty, Field, PageHeader, SubmitRow } from "@/components/ui";
 import { createCourse, updateCourse } from "../actions";
 import { SubjectEditor } from "@/components/SubjectEditor";
+import { COURSE_COLOR_LABEL, COURSE_COLORS, COURSE_TONE, courseColor } from "@/lib/timetable";
 
-type C = { name: string; price: number; durationMon: number; lessonMin: number; description: string | null; passPercent: number; subjects?: unknown[] };
+type C = { name: string; price: number; durationMon: number; lessonMin: number; description: string | null; passPercent: number; color: string | null; subjects?: unknown[] };
 
 function CourseFields({ c }: { c?: C }) {
   return (
@@ -23,6 +24,12 @@ function CourseFields({ c }: { c?: C }) {
         <Field label="Dars (daqiqa)"><input name="lessonMin" type="number" className="input" defaultValue={c?.lessonMin ?? 120} /></Field>
         <Field label="O'tish bali, %"><input name="passPercent" type="number" min={1} max={100} className="input" defaultValue={c?.passPercent ?? 60} /></Field>
       </div>
+      <Field label="Rang (dars jadvalida)">
+        <select name="color" className="input" defaultValue={c?.color ?? ""}>
+          <option value="">Avtomatik</option>
+          {COURSE_COLORS.map((k) => <option key={k} value={k}>{COURSE_COLOR_LABEL[k]}</option>)}
+        </select>
+      </Field>
       <Field label="Tavsif"><textarea name="description" className="input" rows={3} defaultValue={c?.description ?? ""} /></Field>
     </>
   );
@@ -67,6 +74,7 @@ export default async function CoursesPage() {
             <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3 text-xs text-muted">
               <span className="badge bg-ink/5">{c.durationMon} oy</span>
               <span className="badge bg-ink/5">{c.lessonMin} daqiqa</span>
+              <span className={`badge border ${COURSE_TONE[courseColor(c)].card} ${COURSE_TONE[courseColor(c)].ink}`} title="Dars jadvalidagi rang">{COURSE_COLOR_LABEL[courseColor(c)]}</span>
               <span className="badge bg-accent-tint text-accent-ink">{c.groups.length} guruh</span>
               <span className="badge bg-success-tint text-success">{c.groups.reduce((s, g) => s + g._count.students, 0)} o&apos;quvchi</span>
             </div>

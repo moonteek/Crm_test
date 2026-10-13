@@ -33,6 +33,22 @@
   --panel: #161817;
   --panel-ink: #f4f2ee;
   --panel-muted: #9a968e;
+  --course-amber-tint: #fff1c2;
+  --course-amber: #7a5a00;
+  --course-green-tint: #e3f3ea;
+  --course-green: #1f7a4d;
+  --course-blue-tint: #e3edfc;
+  --course-blue: #1d4ed8;
+  --course-purple-tint: #efe7fb;
+  --course-purple: #6b3fb5;
+  --course-pink-tint: #fce7f1;
+  --course-pink: #b0306a;
+  --course-teal-tint: #ddf3f1;
+  --course-teal: #0f766e;
+  --course-orange-tint: #fde9da;
+  --course-orange: #b45309;
+  --course-grey-tint: #ecebe8;
+  --course-grey: #57534e;
   color-scheme: light;
 }
 
@@ -63,6 +79,22 @@
   --panel: #0e0e0e;
   --panel-ink: #edebe6;
   --panel-muted: #8a8780;
+  --course-amber-tint: #2a2000;
+  --course-amber: #ffd34d;
+  --course-green-tint: #0e2a1d;
+  --course-green: #5dd39e;
+  --course-blue-tint: #0d1a33;
+  --course-blue: #7aa7ff;
+  --course-purple-tint: #1f1430;
+  --course-purple: #b794f6;
+  --course-pink-tint: #2e0f1e;
+  --course-pink: #f58bbd;
+  --course-teal-tint: #0b2624;
+  --course-teal: #5fd4c7;
+  --course-orange-tint: #2e1a0b;
+  --course-orange: #fdae6b;
+  --course-grey-tint: #1c1c1c;
+  --course-grey: #b5b2ab;
   color-scheme: dark;
 }
 
@@ -94,6 +126,22 @@
     --panel: #0e0e0e;
     --panel-ink: #edebe6;
     --panel-muted: #8a8780;
+    --course-amber-tint: #2a2000;
+    --course-amber: #ffd34d;
+    --course-green-tint: #0e2a1d;
+    --course-green: #5dd39e;
+    --course-blue-tint: #0d1a33;
+    --course-blue: #7aa7ff;
+    --course-purple-tint: #1f1430;
+    --course-purple: #b794f6;
+    --course-pink-tint: #2e0f1e;
+    --course-pink: #f58bbd;
+    --course-teal-tint: #0b2624;
+    --course-teal: #5fd4c7;
+    --course-orange-tint: #2e1a0b;
+    --course-orange: #fdae6b;
+    --course-grey-tint: #1c1c1c;
+    --course-grey: #b5b2ab;
     color-scheme: dark;
   }
 }
@@ -126,6 +174,22 @@
   --color-panel: var(--panel);
   --color-panel-ink: var(--panel-ink);
   --color-panel-muted: var(--panel-muted);
+  --color-course-amber-tint: var(--course-amber-tint);
+  --color-course-amber: var(--course-amber);
+  --color-course-green-tint: var(--course-green-tint);
+  --color-course-green: var(--course-green);
+  --color-course-blue-tint: var(--course-blue-tint);
+  --color-course-blue: var(--course-blue);
+  --color-course-purple-tint: var(--course-purple-tint);
+  --color-course-purple: var(--course-purple);
+  --color-course-pink-tint: var(--course-pink-tint);
+  --color-course-pink: var(--course-pink);
+  --color-course-teal-tint: var(--course-teal-tint);
+  --color-course-teal: var(--course-teal);
+  --color-course-orange-tint: var(--course-orange-tint);
+  --color-course-orange: var(--course-orange);
+  --color-course-grey-tint: var(--course-grey-tint);
+  --color-course-grey: var(--course-grey);
   --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
   --font-dot: var(--font-doto), ui-monospace, monospace;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;

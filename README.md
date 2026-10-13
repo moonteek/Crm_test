@@ -166,6 +166,11 @@ o'zgarmaydi. "Menejer" rolida "Chegirma berish" ruxsatini Rollar sahifasida bir 
 tugmasi sahifada ko'rinib turgan ma'lumotni (filtrlar bilan, barcha sahifalari) .xlsx qilib yuklaydi; "Google Sheets"
 tugmasi shu jadvalni nusxalaydi — Google Sheets'da Ctrl+V bosing.
 
+**Dars jadvali:** kompyuterda "Gorizontal" ko'rinish — xonalar pastga, 08:00–22:00 soatlar yon tomonga; har bir dars
+o'z vaqtida kartochka (guruh, kurs, o'qituvchi, vaqt, o'quvchilar / o'rinlar, o'tilgan darslar, daraja). "Vertikal"
+— avvalgi jadval; telefonda ro'yxat. Kartochka rangi kursdan: Kurslar → tahrirlash → "Rang" (tanlanmasa avtomatik).
+Bekor qilingan dars kulrang ko'rinadi. Yangilangandan keyin `npm run db:push`.
+
 **O'qituvchilar vaqti:** har bir o'qituvchi "Mening vaqtim" sahifasida toq (Du/Chor/Ju) va juft (Se/Pay/Sha)
 kunlar uchun 08:00–20:00 oralig'idagi soatlarini bo'sh yoki band deb belgilaydi; dars soatlari guruhlardan
 avtomatik olinadi. Guruh ochish/tahrirlashda o'qituvchi, yordamchi yoki xona boshqa guruhda band bo'lsa saqlanmaydi.
