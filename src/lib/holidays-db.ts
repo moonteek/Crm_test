@@ -32,3 +32,10 @@ export const closedDaysOf = cache(async (): Promise<(groupId: number) => string[
     return cached.get(groupId)!;
   };
 });
+
+/** Throws when the group has no lesson that day: a holiday, or the lesson was cancelled ("Darsni qoldirish"). */
+export async function assertLessonOpen(groupId: number, date: Date) {
+  const day = date.toISOString().slice(0, 10);
+  if ((await holidayDays()).includes(day)) throw new Error("Bayram kuni — dars yo'q");
+  if ((await closedDaysOf())(groupId).includes(day)) throw new Error("Dars bekor qilingan");
+}

@@ -40,3 +40,8 @@ export function whoTaught(day: Date, role: string, regular: number | null, subs:
   const sub = subs.find((s) => s.role === role && iso(s.date) === iso(day));
   return sub ? sub.substituteId : regular;
 }
+
+/** Attendance and grades go only on lessons that already happened: today or earlier. */
+export function markProblem(date: Date, today: Date): string | null {
+  return date.getTime() > today.getTime() ? "Hali bo'lmagan darsni belgilab bo'lmaydi" : null;
+}

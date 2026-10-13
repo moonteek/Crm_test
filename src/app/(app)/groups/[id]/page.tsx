@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Flag } from "lucide-react";
 import { db } from "@/lib/db";
 import { centreDay } from "@/lib/membership-db";
 import { requirePage } from "@/lib/auth";
 import { can, canSeeBalances, groupScope } from "@/lib/access";
 import { balance, priceNow, withHolidays } from "@/lib/billing";
-import { closedDaysOf } from "@/lib/holidays-db";
+import { closedDaysOf, holidayDays } from "@/lib/holidays-db";
 import { upcomingPrice } from "@/lib/prices";
 import { membershipInclude } from "@/lib/billing-include";
 import { date, GROUP_DAYS, isoDate, lessonDates, lessonWeekdays, money, MONTHS } from "@/lib/format";
@@ -20,6 +20,13 @@ import { examColumns } from "@/lib/group-exams";
 import { ExportButtons } from "@/components/ExportButtons";
 import { TodayLesson } from "@/components/TodayLesson";
 import { GroupMenu } from "@/components/GroupMenu";
+import { LessonDateMenu } from "@/components/LessonDateMenu";
+
+// absence reason colours (same tints as tags)
+const REASON_TONE: Record<string, string> = {
+  amber: "bg-accent-tint text-accent-ink", green: "bg-success-tint text-success", red: "bg-danger-tint text-danger",
+  orange: "bg-warning-tint text-warning", grey: "bg-ink/5 text-muted",
+};
 import { attendancePercent, type Mark } from "@/lib/attendance";
 import { busyMarkMessages } from "@/lib/availability";
 import { GradeCell } from "@/components/GradeCell";
@@ -62,8 +69,8 @@ export default async function GroupPage({
 
   const days = lessonDates(group.days, year, month);
   const range = { gte: days[0] ?? new Date(), lte: days.at(-1) ?? new Date() };
-  const [attendance, grades, exams, courses, teachers, rooms, others, reasons, transferGroups] = await Promise.all([
-    db.attendance.findMany({ where: { groupId: id, date: range } }),
+  const [attendance, grades, exams, courses, teachers, rooms, others, reasons, transferGroups, changes, absenceReasons, centreHolidays] = await Promise.all([
+    db.attendance.findMany({ where: { groupId: id, date: range }, include: { reason: true } }),
     db.grade.findMany({ where: { groupId: id, date: range } }),
     db.exam.findMany({ where: { groupId: id }, include: { results: true }, orderBy: { date: "asc" } }),
     db.course.findMany({ orderBy: { name: "asc" }, include: { subjects: { orderBy: { position: "asc" } } } }),
@@ -72,7 +79,13 @@ export default async function GroupPage({
     db.student.findMany({ where: { groups: { none: { groupId: id, leftAt: null } } }, orderBy: { name: "asc" } }),
     db.reason.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     db.group.findMany({ where: { status: "ACTIVE", NOT: { id }, ...groupScope(user) }, select: { id: true, name: true, days: true, price: true, course: { select: { name: true, price: true } }, prices: { select: { price: true, from: true } } }, orderBy: { name: "asc" } }),
+    db.lessonChange.findMany({ where: { groupId: id, date: range }, include: { substitute: { select: { name: true } } } }),
+    db.absenceReason.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    holidayDays(),
   ]);
+  // this month's lesson changes: cancelled days (with reason) and substitutes by day
+  const cancelledOn = new Map(changes.filter((c) => c.kind === "CANCEL").map((c) => [isoDate(c.date), c.reason ?? ""]));
+  const subsOn = (day: string) => changes.filter((c) => c.kind === "SUBSTITUTE" && isoDate(c.date) === day).map((c) => ({ role: c.role ?? "TEACHER", name: c.substitute?.name ?? "—" }));
   const thisGroup = { id: group.id, name: group.name, days: group.days, price: group.price, course: group.course, prices: group.prices };
   const upcoming = upcomingPrice(group.prices, now);
   // this group's closed days: the centre's holidays and its own cancelled lessons
@@ -97,7 +110,7 @@ export default async function GroupPage({
   const todayRows = group.status === "ACTIVE" && group.startDate.getTime() <= Date.now() && lessonWeekdays(group.days).includes(centreDay().getUTCDay()) && !holidays.includes(todayIso)
     ? await todayMarks(id, group.students.filter((gs) => gs.status === "ACTIVE" || gs.status === "TRIAL").map((gs) => ({ id: gs.student.id, name: gs.student.name })))
     : null;
-  const mark = new Map(attendance.map((a) => [`${a.studentId}:${isoDate(a.date)}`, { present: a.present, late: a.late }]));
+  const mark = new Map(attendance.map((a) => [`${a.studentId}:${isoDate(a.date)}`, { present: a.present, late: a.late, reason: a.reason }]));
   const gradeMap = new Map(grades.map((g) => [`${g.studentId}:${isoDate(g.date)}`, g.score]));
   const prev = new Date(year, month - 1, 1);
   const next = new Date(year, month + 1, 1);
@@ -138,7 +151,16 @@ export default async function GroupPage({
         )}
       </div>
 
-      {todayRows && <TodayLesson groupId={id} rows={todayRows} editable={allow.attendance} />}
+      {todayRows && (
+        <TodayLesson
+          groupId={id} day={todayIso} rows={todayRows} editable={allow.attendance}
+          reasons={absenceReasons.map((r) => ({ id: r.id, name: r.name }))}
+          substitute={subsOn(todayIso).map((s) => `Bugun: ${(s.role === "ASSISTANT" ? group.assistant?.name : group.teacher?.name) ?? "—"} o'rniga ${s.name}`).join(" · ") || null}
+        />
+      )}
+      {cancelledOn.has(todayIso) && (
+        <p className="card mt-4 p-4 text-sm text-muted md:mt-6">Bugungi dars bekor qilindi{cancelledOn.get(todayIso) ? `: ${cancelledOn.get(todayIso)}` : ""}.</p>
+      )}
 
       <div className="card mt-4 md:mt-6">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 pt-3">
@@ -218,9 +240,28 @@ export default async function GroupPage({
                   <th className="sticky left-0 z-10 min-w-48 bg-surface">O&apos;quvchi</th>
                   {tab === "attendance" && allow.balance && <th>Balans</th>}
                   <th className="text-center">{tab === "attendance" ? "Davomat" : "O'rtacha"}</th>
-                  {days.map((d) => (
-                    <th key={d.toISOString()} title={off.has(isoDate(d)) ? "Bayram — dars yo'q" : undefined} className={`px-1 text-center ${off.has(isoDate(d)) ? "text-faint line-through" : isoDate(d) === today ? "text-accent-ink" : ""}`}>{d.getUTCDate()}</th>
-                  ))}
+                  {days.map((d) => {
+                    const key = isoDate(d);
+                    if (centreHolidays.includes(key)) return <th key={key} title="Bayram — dars yo'q" className="px-1 text-center text-faint line-through">{d.getUTCDate()}</th>;
+                    return (
+                      <th key={key} className={`px-1 text-center ${key === today ? "text-accent-ink" : ""}`}>
+                        <LessonDateMenu
+                          groupId={id} day={key} label={String(d.getUTCDate())}
+                          cancelled={cancelledOn.has(key) ? cancelledOn.get(key)! : null}
+                          substitutes={subsOn(key)}
+                          canMark={allow.attendance} canManage={can(user, "lessons.manage")}
+                          teachers={teachers.filter((t) => t.id !== group.teacherId && t.id !== group.assistantId).map((t) => ({ id: t.id, name: t.name }))}
+                          hasAssistant={group.assistantId !== null}
+                          absent={group.students.flatMap((gs) => {
+                            const a = attendance.find((x) => x.studentId === gs.student.id && isoDate(x.date) === key);
+                            return a && !a.present ? [{ studentId: gs.student.id, name: gs.student.name, reasonId: a.reasonId }] : [];
+                          })}
+                          reasons={absenceReasons.map((r) => ({ id: r.id, name: r.name, color: r.color }))}
+                          past={key <= today}
+                        />
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
@@ -258,11 +299,12 @@ export default async function GroupPage({
                       </td>
                       {days.map((d) => {
                         const key = isoDate(d);
+                        if (cancelledOn.has(key)) return <td key={key} className="px-1 text-center"><span className="label-mono text-faint" title="Dars bekor qilingan">—</span></td>;
                         if (off.has(key)) return <td key={key} className="px-1 text-center"><span className="label-mono text-faint" title="Bayram — dars yo'q">B</span></td>;
                         if (tab === "grades") {
                           return (
                             <td key={key} className="px-1 text-center">
-                              <GradeCell groupId={id} studentId={student.id} day={key} value={gradeMap.get(`${student.id}:${key}`)} editable={allow.grades} />
+                              <GradeCell groupId={id} studentId={student.id} day={key} value={gradeMap.get(`${student.id}:${key}`)} editable={allow.grades && key <= today} />
                             </td>
                           );
                         }
@@ -271,15 +313,18 @@ export default async function GroupPage({
                           <td key={key} className="px-1 text-center">
                             <form action={toggleAttendance.bind(null, id, student.id, key)}>
                               <button
-                                disabled={!allow.attendance}
+                                disabled={!allow.attendance || key > today /* lessons yet to happen can't be marked */}
+                                title={v && !v.present ? (v.reason ? `Kelmadi: ${v.reason.name}` : "Kelmadi — sabab kiritilmagan") : undefined}
                                 className={`press h-7 w-7 rounded-full border text-sm font-bold ${
                                   v?.late ? "border-warning/40 bg-warning-tint text-warning"
                                   : v?.present ? "border-success/40 bg-success-tint text-success"
+                                  : v?.reason ? `border-line ${REASON_TONE[v.reason.color] ?? REASON_TONE.grey}`
                                   : v ? "border-danger/40 bg-danger-tint text-danger"
+                                  : key > today ? "border-line/50 text-faint/50"
                                   : "border-line bg-raised text-faint hover:border-ink"
                                 }`}
                               >
-                                {v?.late ? "K" : v?.present ? "✓" : v ? "✗" : "·"}
+                                {v?.late ? "K" : v?.present ? "✓" : v?.reason ? "✗" : v ? <Flag className="mx-auto h-3.5 w-3.5" /> : "·"}
                               </button>
                             </form>
                           </td>
@@ -384,5 +429,5 @@ async function todayMarks(groupId: number, students: { id: number; name: string 
     const a = marks.find((m) => m.studentId === id);
     return a ? (a.late ? "late" : a.present ? "present" : "absent") : null;
   };
-  return students.map((st) => ({ ...st, mark: of(st.id) as "present" | "late" | "absent" | null }));
+  return students.map((st) => ({ ...st, mark: of(st.id) as "present" | "late" | "absent" | null, reasonId: marks.find((m) => m.studentId === st.id)?.reasonId ?? null }));
 }

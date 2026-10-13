@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { closedDays, lessonChangeProblem, whoTaught } from "./lesson-changes";
+import { closedDays, lessonChangeProblem, markProblem, whoTaught } from "./lesson-changes";
 
 const d = (y: number, m: number, day: number) => new Date(Date.UTC(y, m - 1, day));
 const today = new Date("2026-11-04T08:00:00Z");
@@ -27,4 +27,11 @@ test("a substitute takes their role's lesson that day only", () => {
   assert.equal(whoTaught(d(2026, 11, 10), "TEACHER", 1, subs), 9);
   assert.equal(whoTaught(d(2026, 11, 10), "ASSISTANT", 2, subs), 2);
   assert.equal(whoTaught(d(2026, 11, 12), "TEACHER", 1, subs), 1);
+});
+
+test("marks: only lessons that already happened (today included)", () => {
+  const today = new Date("2026-10-12T00:00:00Z");
+  assert.equal(markProblem(new Date("2026-10-12T00:00:00Z"), today), null);
+  assert.equal(markProblem(new Date("2026-10-10T00:00:00Z"), today), null);
+  assert.equal(markProblem(new Date("2026-10-13T00:00:00Z"), today), "Hali bo'lmagan darsni belgilab bo'lmaydi");
 });

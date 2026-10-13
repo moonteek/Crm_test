@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { balance, priceNow, withHolidays } from "@/lib/billing";
-import { assertNotHoliday, closedDaysOf } from "@/lib/holidays-db";
+import { assertLessonOpen, closedDaysOf } from "@/lib/holidays-db";
 import { plainMark } from "@/lib/attendance";
 import { studentBillingInclude } from "@/lib/billing-include";
 import {
@@ -181,7 +181,7 @@ export function buildServer(user: CurrentUser) {
       (await db.groupStudent.findMany({ where: { groupId: group_id, leftAt: null } })).map((m) => m.studentId),
     );
     const day = new Date(date);
-    await assertNotHoliday(day); // a holiday is not a lesson: nothing to mark
+    await assertLessonOpen(group_id, day); // a holiday or cancelled lesson: nothing to mark
     const marks = [
       ...present_student_ids.map((id) => [id, true] as const),
       ...absent_student_ids.map((id) => [id, false] as const),
@@ -414,7 +414,7 @@ export function buildServer(user: CurrentUser) {
     await assertGroupAccess(user, group_id);
     const members = new Set((await db.groupStudent.findMany({ where: { groupId: group_id, leftAt: null } })).map((m) => m.studentId));
     const day = new Date(date);
-    await assertNotHoliday(day); // a holiday is not a lesson: nothing to mark
+    await assertLessonOpen(group_id, day); // a holiday or cancelled lesson: nothing to mark
     let saved = 0;
     for (const g of grades) {
       if (!members.has(g.student_id)) continue;

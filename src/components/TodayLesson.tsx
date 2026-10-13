@@ -2,10 +2,10 @@
 
 import { useOptimistic, useState, useTransition } from "react";
 import { Check, Clock, X } from "lucide-react";
-import { markAllPresent, markToday } from "@/app/(app)/actions";
+import { markAllPresent, markToday, setAbsenceReason } from "@/app/(app)/actions";
 
 type MarkKey = "present" | "late" | "absent";
-type Row = { id: number; name: string; mark: MarkKey | null };
+type Row = { id: number; name: string; mark: MarkKey | null; reasonId: number | null };
 
 const BUTTONS: { key: MarkKey; label: string; icon: typeof Check; on: string }[] = [
   { key: "present", label: "Keldi", icon: Check, on: "border-success bg-success-tint text-success" },
@@ -14,7 +14,9 @@ const BUTTONS: { key: MarkKey; label: string; icon: typeof Check; on: string }[]
 ];
 
 /** "Bugungi dars": today's list with one big button per mark; each tap is saved at once. */
-export function TodayLesson({ groupId, rows, editable }: { groupId: number; rows: Row[]; editable: boolean }) {
+export function TodayLesson({
+  groupId, day, rows, editable, reasons, substitute,
+}: { groupId: number; day: string; rows: Row[]; editable: boolean; reasons: { id: number; name: string }[]; substitute: string | null }) {
   const [marks, setMark] = useOptimistic(new Map(rows.map((r) => [r.id, r.mark])), (m, [id, mark]: [number, MarkKey]) => new Map(m).set(id, mark));
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +41,7 @@ export function TodayLesson({ groupId, rows, editable }: { groupId: number; rows
         <div>
           <h2 className="font-semibold">Bugungi dars</h2>
           <p className="text-sm text-muted">Belgilandi: {done} / {rows.length}</p>
+          {substitute && <p className="mt-1 text-sm text-accent-ink">{substitute}</p>}
         </div>
         {editable && done < rows.length && (
           <button type="button" className="btn-secondary" onClick={all} disabled={pending}><Check className="h-4 w-4" /> Hammasi keldi</button>
@@ -50,7 +53,21 @@ export function TodayLesson({ groupId, rows, editable }: { groupId: number; rows
           return (
             <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
               <span className="min-w-0 truncate font-medium">{r.name}</span>
-              <div className="flex gap-1.5">
+              <div className="flex flex-wrap items-center justify-end gap-1.5">
+                {mark === "absent" && editable && reasons.length > 0 && (
+                  <select
+                    className="input h-10 w-40 py-1 text-sm"
+                    defaultValue={r.reasonId ?? ""}
+                    aria-label={`${r.name} — kelmaganlik sababi`}
+                    onChange={(e) => start(async () => {
+                      setError(null);
+                      try { await setAbsenceReason(groupId, r.id, day, e.target.value ? Number(e.target.value) : null); } catch (err) { setError((err as Error).message); }
+                    })}
+                  >
+                    <option value="">Sabab…</option>
+                    {reasons.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                  </select>
+                )}
                 {BUTTONS.map(({ key, label, icon: Icon, on }) => (
                   <button
                     key={key}
