@@ -8,7 +8,7 @@ import { centreToday } from "@/lib/schedule";
 import { memberAction, transferStudent, type MemberActionState } from "@/app/(app)/actions";
 import { DialogFrame } from "../Modal";
 import { Field } from "../ui";
-import { toBillable, type MemberData, type MemberGroup, type ReasonOption } from "./types";
+import { joinBillable, toBillable, type MemberData, type MemberGroup, type ReasonOption } from "./types";
 
 export type MemberDialogKind = "ACTIVATE" | "FREEZE" | "UNFREEZE" | "BACK_TO_TRIAL" | "LEAVE" | "TRANSFER";
 
@@ -69,7 +69,7 @@ export function MemberDialog({
   const now = new Date();
   let delta = chargeChangeIf(toBillable(member), { type: kind === "TRANSFER" ? "LEAVE" : (kind as EventType), date }, now);
   if (kind === "TRANSFER" && target && mode === "ACTIVE") {
-    delta += totalCharges([toBillable({ events: [{ type: "ACTIVATE", date: date.toISOString(), migrated: false }], group: target, holidays: member.holidays })], now);
+    delta += totalCharges([joinBillable(target, date)], now);
   }
 
   return (

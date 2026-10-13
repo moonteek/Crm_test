@@ -15,14 +15,14 @@ import { logAction } from "@/lib/audit";
 import { centreDay, recordEvent, startMembership } from "@/lib/membership-db";
 import { nextMonthStart, schedulePrice } from "@/lib/prices-db";
 import { changeTeacher } from "@/lib/teachers-db";
-import { menuActions, systemLeaveDate, type EventType, type Status } from "@/lib/membership";
+import { menuActions, statusOn, systemLeaveDate, type EventType, type Status } from "@/lib/membership";
 import {
   ACTIVITY_TYPES, isoDate, CALL_RESULTS, lessonWeekdays, MONTHS, EXPENSE_CATEGORIES, GENDERS, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_SOURCES, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES, TAG_COLORS,
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
 import { assertLessonOpen, closedDaysOf, holidayDays } from "@/lib/holidays-db";
-import { lessonChangeProblem, markProblem } from "@/lib/lesson-changes";
+import { lessonChangeProblem } from "@/lib/lesson-changes";
 import { canDeleteHoliday, expandRange, holidayProblem } from "@/lib/holidays";
 import { canDelete, canEnd, discountProblem, lastMonth } from "@/lib/discounts";
 import { editDiff } from "@/lib/payments";
@@ -481,7 +481,6 @@ export async function toggleAttendance(groupId: number, studentId: number, isoDa
   const user = await requirePermission("attendance.mark");
   await assertGroupAccess(user, groupId);
   const date = check(v.isoDay(), isoDay);
-  assertMarkable(date);
   await assertLessonOpen(groupId, date);
   const key = { groupId_studentId_date: { groupId, studentId, date } };
   const existing = await db.attendance.findUnique({ where: key });
@@ -496,13 +495,8 @@ export async function toggleAttendance(groupId: number, studentId: number, isoDa
 async function lessonOf(groupId: number, date: Date) {
   const group = await db.group.findUniqueOrThrow({ where: { id: groupId } });
   if (!lessonWeekdays(group.days).includes(date.getUTCDay())) throw new Error("Bu kunda guruhda dars yo'q");
-  assertMarkable(date);
   await assertLessonOpen(groupId, date);
   return { group, date };
-}
-function assertMarkable(date: Date) {
-  const problem = markProblem(date, centreDay());
-  if (problem) throw new Error(problem);
 }
 const todayLessonOf = (groupId: number) => lessonOf(groupId, centreDay());
 
@@ -528,10 +522,13 @@ export async function markAllPresent(groupId: number, isoDay?: string) {
   const user = await requirePermission("attendance.mark");
   await assertGroupAccess(user, groupId);
   const { group, date } = await lessonOf(groupId, isoDay ? check(v.isoDay(), isoDay) : centreDay());
-  const [members, marked] = await Promise.all([
-    db.groupStudent.findMany({ where: { groupId, leftAt: null, status: { in: ["ACTIVE", "TRIAL"] } }, select: { studentId: true } }),
+  const [all, marked] = await Promise.all([
+    db.groupStudent.findMany({ where: { groupId }, select: { studentId: true, status: true, leftAt: true, events: { select: { type: true, date: true }, orderBy: [{ date: "asc" }, { id: "asc" }] } } }),
     db.attendance.findMany({ where: { groupId, date } }),
   ]);
+  // only students who were in the group (active or on trial) on that day — the date may be in the past
+  // (a membership without history yet falls back to its current status)
+  const members = all.filter((m) => ["ACTIVE", "TRIAL"].includes((m.events.length ? statusOn(m.events as { type: EventType; date: Date }[], date) : m.leftAt ? null : m.status) ?? ""));
   const todo = fillPresent(members.map((m) => m.studentId), new Map(marked.map((a) => [a.studentId, { present: a.present, late: a.late }])));
   if (todo.length) await db.attendance.createMany({ data: todo.map((studentId) => ({ groupId, studentId, date, present: true })) });
   await logAction(user, "group.attendance", `Davomat: ${group.name} — hammasi keldi (${todo.length} ta)`);
@@ -834,7 +831,6 @@ export async function setGrade(groupId: number, studentId: number, isoDay: strin
   const user = await requirePermission("grades.manage");
   await assertGroupAccess(user, groupId);
   const date = check(v.isoDay(), isoDay);
-  assertMarkable(date);
   await assertLessonOpen(groupId, date);
   const value = check(gradeScore, score);
   const key = { groupId_studentId_date: { groupId, studentId, date } };

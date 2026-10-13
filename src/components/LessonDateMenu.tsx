@@ -104,7 +104,7 @@ export function LessonDateMenu({
                   onChange={(e) => run(() => setAbsenceReason(groupId, a.studentId, day, e.target.value ? Number(e.target.value) : null))}
                   aria-label={`${a.name} — sabab`}
                 >
-                  <option value="">Sababsiz belgilanmagan</option>
+                  <option value="">Sabab tanlanmagan</option>
                   {reasons.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
               </li>

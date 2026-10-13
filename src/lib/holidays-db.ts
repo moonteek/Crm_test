@@ -2,7 +2,8 @@ import "server-only";
 import { cache } from "react";
 import { db } from "./db";
 import { holidayRefusal } from "./holidays";
-import { closedDays } from "./lesson-changes";
+import { closedDays, markProblem } from "./lesson-changes";
+import { centreDay } from "./membership-db";
 
 /** The centre's holidays as ISO days ("2026-11-10"), loaded once per request; billing and the course plan need them. */
 export const holidayDays = cache(async (): Promise<string[]> =>
@@ -33,8 +34,13 @@ export const closedDaysOf = cache(async (): Promise<(groupId: number) => string[
   };
 });
 
-/** Throws when the group has no lesson that day: a holiday, or the lesson was cancelled ("Darsni qoldirish"). */
+/**
+ * Throws when that day's lesson can't be marked (attendance, grades — in the app and over MCP): it hasn't happened
+ * yet, it's a holiday, or the lesson was cancelled ("Darsni qoldirish").
+ */
 export async function assertLessonOpen(groupId: number, date: Date) {
+  const future = markProblem(date, centreDay());
+  if (future) throw new Error(future);
   const day = date.toISOString().slice(0, 10);
   if ((await holidayDays()).includes(day)) throw new Error("Bayram kuni — dars yo'q");
   if ((await closedDaysOf())(groupId).includes(day)) throw new Error("Dars bekor qilingan");

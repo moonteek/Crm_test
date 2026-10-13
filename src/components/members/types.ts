@@ -1,7 +1,11 @@
 import type { BillableMembership } from "@/lib/billing";
 
 // Plain-data shapes passed from server pages to the member menu (dates as ISO strings).
-export type MemberGroup = { id: number; name: string; days: string; price: number | null; course: { name: string; price: number }; prices: { price: number; from: string }[] };
+export type MemberGroup = {
+  id: number; name: string; days: string; price: number | null; course: { name: string; price: number }; prices: { price: number; from: string }[];
+  /** a transfer target's own closed days (holidays + its cancelled lessons), for the cost preview */
+  holidays?: string[];
+};
 export type MemberData = {
   id: number;
   status: string;
@@ -9,7 +13,7 @@ export type MemberData = {
   group: MemberGroup;
   student: { id: number; name: string };
   discounts?: { from: string; to: string; amount: number }[];
-  /** the centre's holidays (ISO days), for cost previews */
+  /** this membership's group's closed days (ISO), for cost previews */
   holidays: string[];
 };
 export type ReasonOption = { id: number; name: string };
@@ -36,9 +40,9 @@ export function toMemberData(gs: MembershipRow, student: { id: number; name: str
 }
 
 /** Plain-data group (dates as ISO strings) for client components. */
-export function toMemberGroup(g: MembershipRow["group"]): MemberGroup {
+export function toMemberGroup(g: MembershipRow["group"], holidays?: string[]): MemberGroup {
   return {
-    id: g.id, name: g.name, days: g.days, price: g.price,
+    id: g.id, name: g.name, days: g.days, price: g.price, holidays,
     course: { name: g.course.name, price: g.course.price },
     prices: g.prices.map((p) => ({ price: p.price, from: p.from.toISOString() })),
   };
@@ -52,4 +56,9 @@ export function toBillable(m: Pick<MemberData, "events" | "group" | "discounts" 
     discounts: (m.discounts ?? []).map((d) => ({ from: new Date(d.from), to: new Date(d.to), amount: d.amount })),
     holidays: m.holidays,
   };
+}
+
+/** A student joining `target` on `date`, billed by the target's own closed days (transfer preview). */
+export function joinBillable(target: MemberGroup, date: Date): BillableMembership {
+  return toBillable({ events: [{ type: "ACTIVATE", date: date.toISOString(), migrated: false }], group: target, holidays: target.holidays ?? [] });
 }

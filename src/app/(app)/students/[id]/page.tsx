@@ -245,7 +245,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
                       <MemberMenu
                         member={toMemberData(gs, { id: student.id, name: student.name }, { money: allow.balance, holidays: closed(gs.groupId) })}
                         reasons={reasons}
-                        groups={allGroups.map((g) => toMemberGroup(g))}
+                        groups={allGroups.map((g) => toMemberGroup(g, closed(g.id)))}
                         balance={allow.balance ? b : null}
                         canManage={allow.manage}
                         canPay={allow.pay}

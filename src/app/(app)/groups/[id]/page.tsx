@@ -284,7 +284,7 @@ export default async function GroupPage({
                           <MemberMenu
                             member={toMemberData({ ...gs, group: thisGroup }, { id: student.id, name: student.name }, { money: allow.balance, holidays })}
                             reasons={reasons}
-                            groups={transferGroups.map((g) => toMemberGroup(g))}
+                            groups={transferGroups.map((g) => toMemberGroup(g, closed(g.id)))}
                             balance={allow.balance ? b : null}
                             canManage={allow.students}
                             canPay={allow.pay}
