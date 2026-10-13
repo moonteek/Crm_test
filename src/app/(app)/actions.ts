@@ -27,6 +27,7 @@ import { canDeleteHoliday, expandRange, holidayProblem } from "@/lib/holidays";
 import { canDelete, canEnd, discountProblem, lastMonth } from "@/lib/discounts";
 import { editDiff } from "@/lib/payments";
 import { fillPresent, MARK_KEYS, markWrite, type MarkKey } from "@/lib/attendance";
+import { COURSE_COLORS } from "@/lib/timetable";
 import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, fitsDay, groupClashes, needsClashCheck, teacherGrid, type DayType, type LessonLike } from "@/lib/availability";
 import { check, parseForm, v } from "@/lib/validation";
 import { phoneKey } from "@/lib/phone";
@@ -545,6 +546,8 @@ const courseSchema = z.object({
   lessonMin: v.int("Dars davomiyligi (daqiqa)", { min: 10, max: 600, fallback: 120 }),
   description: v.optText(2000),
   passPercent: v.int("O'tish bali", { min: 1, max: 100, fallback: 60 }),
+  // timetable colour; empty = picked automatically
+  color: v.oneOf(COURSE_COLORS, null),
 });
 
 export async function createCourse(f: FormData) {

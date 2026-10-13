@@ -3,20 +3,25 @@ import { AlertTriangle, DoorOpen, User, Users } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
 import { can, groupScope } from "@/lib/access";
-import { centreWeekday, findClashes, fromMinutes, scheduleKeysOn, toMinutes, WEEKDAYS } from "@/lib/schedule";
+import { centreToday, centreWeekday, findClashes, fromMinutes, scheduleKeysOn, toMinutes, WEEKDAYS } from "@/lib/schedule";
 import { DotMeter, Empty, PageHeader } from "@/components/ui";
 import { ExportButtons } from "@/components/ExportButtons";
 import { CurriculumBadge } from "@/components/CurriculumBar";
 import { curriculumOn, type Progress } from "@/lib/curriculum";
 import { centreDay } from "@/lib/membership-db";
 import { closedDaysOf, holidayDays } from "@/lib/holidays-db";
+import { COURSE_TONE, courseColor, lessonsPassed } from "@/lib/timetable";
+import { HorizontalTimetable } from "@/components/schedule/HorizontalTimetable";
 
 const NO_ROOM = 0;
 
-export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ d?: string }> }) {
+export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ d?: string; v?: string }> }) {
   const user = await requirePage("groups.view");
   const today = centreWeekday();
-  const picked = Number((await searchParams).d);
+  const params = await searchParams;
+  const picked = Number(params.d);
+  // computers: horizontal (rooms down, hours across) unless "Vertikal" is picked; phones always get the list
+  const vertical = params.v === "v";
   // Sunday has no lessons, so it opens on Monday
   const day = WEEKDAYS.some((w) => w.day === picked) ? picked : today === 0 ? 1 : today;
   const seesAll = can(user, "groups.all");
@@ -48,12 +53,19 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const closedFor = await closedDaysOf();
   // the centre is closed that day: no lessons to show
   const closed = holidays.includes(shown.toISOString().slice(0, 10));
+  const shownIso = shown.toISOString().slice(0, 10);
   const lessons = (closed ? [] : perDay.get(day) ?? []).map(withTimes).map((l) => {
     const cur = curriculumOn({ ...l, holidays: closedFor(l.id) }, l.course.subjects, shown);
-    return { ...l, progress: cur.progress, exam: cur.nextExam !== null && cur.nextExam.date.getTime() === shown.getTime() };
+    return {
+      ...l, progress: cur.progress, exam: cur.nextExam !== null && cur.nextExam.date.getTime() === shown.getTime(),
+      color: courseColor(l.course),
+      cancelled: closedFor(l.id).includes(shownIso), // "Darsni qoldirish" for that day
+      passed: lessonsPassed(l, closedFor(l.id), shown),
+    };
   });
+  // a cancelled lesson doesn't hold its room or teacher
   const clashes = findClashes(
-    (centreGroups?.map(withTimes) ?? lessons).map((l) => ({
+    (centreGroups?.map(withTimes) ?? lessons).filter((l) => !closedFor(l.id).includes(shownIso)).map((l) => ({
       id: l.id, start: l.start, end: l.end, roomId: l.roomId,
       teacherIds: [l.teacherId, l.assistantId].filter((t): t is number => t !== null),
     })),
@@ -85,11 +97,24 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
         <ExportButtons href="/schedule/export" extra={{ d: String(day) }} />
       </PageHeader>
 
+      <nav className="mb-3 hidden w-fit gap-1 rounded-full border border-line bg-surface p-1 md:flex" aria-label="Ko'rinish">
+        {[{ v: "", label: "Gorizontal" }, { v: "v", label: "Vertikal" }].map((o) => (
+          <Link
+            key={o.label}
+            href={`/schedule?d=${day}${o.v ? `&v=${o.v}` : ""}`}
+            aria-current={(o.v === "v") === vertical ? "page" : undefined}
+            className={`press rounded-full px-4 py-1.5 text-sm font-medium ${(o.v === "v") === vertical ? "bg-nav-active text-nav-active-ink" : "text-muted hover:bg-ink/5 hover:text-ink"}`}
+          >
+            {o.label}
+          </Link>
+        ))}
+      </nav>
+
       <nav className="mb-5 flex gap-1 overflow-x-auto rounded-full border border-line bg-surface p-1" aria-label="Hafta kunlari">
         {WEEKDAYS.map((w) => (
           <Link
             key={w.day}
-            href={`/schedule?d=${w.day}`}
+            href={`/schedule?d=${w.day}${vertical ? "&v=v" : ""}`}
             aria-current={w.day === day ? "page" : undefined}
             className={`press flex shrink-0 flex-1 flex-col items-center rounded-full px-3 py-1.5 text-sm ${w.day === day ? "bg-nav-active text-nav-active-ink" : "text-muted hover:bg-ink/5 hover:text-ink"}`}
           >
@@ -110,8 +135,18 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
             {lessons.map((l) => <LessonCard key={l.id} lesson={l} clash={clashes.get(l.id)} showRoom />)}
           </div>
 
-          {/* wider screens: rooms across, start times down */}
-          <div className="card hidden overflow-x-auto md:block">
+          {/* wider screens: rooms down, hours across */}
+          {!vertical && (
+            <div className="hidden md:block">
+              <HorizontalTimetable
+                rooms={rooms} lessons={lessons} clashes={clashes}
+                now={day === today ? centreToday().hour * 60 + centreToday().minute : null}
+              />
+            </div>
+          )}
+
+          {/* or rooms across, start times down */}
+          {vertical && <div className="card hidden overflow-x-auto md:block">
             <table className="w-full table-fixed border-collapse text-sm" style={{ minWidth: `${6 + rooms.length * 14}rem` }}>
               <thead>
                 <tr className="border-b border-line text-left">
@@ -148,7 +183,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
                 ))}
               </tbody>
             </table>
-          </div>
+          </div>}
         </>
       )}
     </>
@@ -157,6 +192,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 
 type Lesson = {
   id: number; name: string; level: string | null; start: number; end: number; progress: Progress; exam: boolean;
+  color: keyof typeof COURSE_TONE; cancelled: boolean; passed: number;
   course: { name: string }; teacher: { name: string } | null; assistant: { name: string } | null;
   room: { name: string; capacity: number } | null; _count: { students: number };
 };
@@ -166,7 +202,7 @@ function LessonCard({ lesson: l, clash, showRoom = false }: { lesson: Lesson; cl
   return (
     <Link
       href={`/groups/${l.id}`}
-      className={`press block rounded-xl border p-3 ${clash ? "border-warning bg-warning-tint" : "border-line bg-raised hover:border-line-strong"}`}
+      className={`press block rounded-xl border border-l-4 p-3 ${l.cancelled ? "border-line bg-raised text-faint" : clash ? "border-warning bg-warning-tint" : `${COURSE_TONE[l.color].card} hover:brightness-95`}`}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="font-dot text-lg leading-none font-black text-ink">{fromMinutes(l.start)}<span className="label-mono ml-1.5 align-middle">→ {fromMinutes(l.end)}</span></span>
@@ -175,8 +211,8 @@ function LessonCard({ lesson: l, clash, showRoom = false }: { lesson: Lesson; cl
           <CurriculumBadge progress={l.progress} level={l.level} />
         </span>
       </div>
-      <p className="mt-1 truncate font-medium text-ink">{l.name}</p>
-      <p className="truncate text-xs text-muted">{l.course.name}</p>
+      <p className={`mt-1 truncate font-medium ${l.cancelled ? "line-through" : "text-ink"}`}>{l.name}</p>
+      <p className={`truncate text-xs ${l.cancelled ? "" : COURSE_TONE[l.color].ink}`}>{l.course.name}{l.cancelled ? " · Bekor qilingan" : ` · ${l.passed}-dars`}</p>
       <div className="mt-2 space-y-1 text-xs text-muted">
         <p className="flex items-center gap-1.5">
           <User className="h-3.5 w-3.5 shrink-0 text-faint" />
