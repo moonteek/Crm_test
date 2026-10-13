@@ -1,12 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { attendancePercent, fillPresent, nextMark, plainMark, unmarkedToday } from "./attendance";
+import { attendancePercent, fillPresent, markWrite, plainMark, unmarkedToday } from "./attendance";
 
-test("tapping a cell: empty → keldi → kechikdi → kelmadi → empty", () => {
-  assert.deepEqual(nextMark(null), { present: true, late: false });
-  assert.deepEqual(nextMark({ present: true, late: false }), { present: true, late: true });
-  assert.deepEqual(nextMark({ present: true, late: true }), { present: false, late: false });
-  assert.equal(nextMark({ present: false, late: false }), null);
+test("cell popover: each choice writes its mark; keldi/kechikdi drop a reason, kelmadi keeps it", () => {
+  assert.deepEqual(markWrite("present"), { present: true, late: false, reasonId: null });
+  assert.deepEqual(markWrite("late"), { present: true, late: true, reasonId: null });
+  assert.deepEqual(markWrite("absent"), { present: false, late: false });
 });
 
 test("late counts as present", () => {

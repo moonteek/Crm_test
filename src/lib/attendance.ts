@@ -8,12 +8,13 @@ export type Mark = { present: boolean; late: boolean };
 /** A plain keldi / kelmadi (the AI tools): never late, so an earlier "kechikdi" doesn't linger. */
 export const plainMark = (present: boolean): Mark => ({ present, late: false });
 
-/** One tap on a grid cell: empty → keldi → kechikdi → kelmadi → empty. */
-export function nextMark(current: Mark | null): Mark | null {
-  if (!current) return { present: true, late: false };
-  if (current.present && !current.late) return { present: true, late: true };
-  if (current.present) return { present: false, late: false };
-  return null;
+export const MARK_KEYS = ["present", "late", "absent"] as const;
+export type MarkKey = (typeof MARK_KEYS)[number];
+
+/** What a chosen mark writes: keldi / kechikdi drop an absence reason; kelmadi keeps one already given. */
+export function markWrite(key: MarkKey): Mark & { reasonId?: null } {
+  if (key === "absent") return { present: false, late: false };
+  return { present: true, late: key === "late", reasonId: null };
 }
 
 /** Share of marked lessons attended (late included); null when nothing is marked. */
