@@ -148,7 +148,9 @@ darslar hisoblanadi; davomat belgilanmaydi, kurs rejasi va imtihon sanasi shunga
 **Dars amallari:** davomat jadvalida sanani bosing — "Hammasi keldi", "Kelmaganlik sabablari", "Darsni qoldirish"
 (o'sha guruh uchun bayram kabi: o'quvchidan olinmaydi, o'qituvchiga hisoblanmaydi) va "O'qituvchini almashtirish"
 (o'rinbosarga dars o'z ish haqi qoidasi bo'yicha hisoblanadi). Ikkalasini ham bekor qilish mumkin. Kelmaganlik
-sabablari ixtiyoriy, rangi jadvalda ko'rinadi; ro'yxati Sozlamalar → Sabablar'da. Hali bo'lmagan darsga belgi
+sabablari ixtiyoriy, rangi jadvalda ko'rinadi; ro'yxati Sozlamalar → Sabablar'da. O'quvchi katakchasini bosganda oyna
+ochiladi: Keldi / Kechikdi / Kelmadi / Tozalash, Kelmadi uchun sabab, ruxsati borlarga esa shu kungi dars uchun
+"Darsni qoldirish" va "O'qituvchini almashtirish". Hali bo'lmagan darsga belgi
 qo'yilmaydi. Yangilangandan keyin `db:push` va bir marta boshlang'ich sabablarni qo'shing (qayta ishga tushirish
 xavfsiz), so'ng "Menejer" rolida "Darslarni boshqarish" ruxsatini Rollar sahifasida belgilang:
 

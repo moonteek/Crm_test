@@ -26,7 +26,7 @@ import { lessonChangeProblem } from "@/lib/lesson-changes";
 import { canDeleteHoliday, expandRange, holidayProblem } from "@/lib/holidays";
 import { canDelete, canEnd, discountProblem, lastMonth } from "@/lib/discounts";
 import { editDiff } from "@/lib/payments";
-import { fillPresent, nextMark } from "@/lib/attendance";
+import { fillPresent, MARK_KEYS, markWrite, type MarkKey } from "@/lib/attendance";
 import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, fitsDay, groupClashes, needsClashCheck, teacherGrid, type DayType, type LessonLike } from "@/lib/availability";
 import { check, parseForm, v } from "@/lib/validation";
 import { phoneKey } from "@/lib/phone";
@@ -477,17 +477,20 @@ export async function deleteGroup(id: number) {
 }
 
 /** Cycles a student's attendance on a lesson: none → present → absent → none. */
-export async function toggleAttendance(groupId: number, studentId: number, isoDay: string) {
+/** The grid cell popover: keldi / kechikdi / kelmadi, or null to clear the mark ("Tozalash"). */
+export async function setAttendance(groupId: number, studentId: number, isoDay: string, mark: MarkKey | null) {
   const user = await requirePermission("attendance.mark");
   await assertGroupAccess(user, groupId);
   const date = check(v.isoDay(), isoDay);
+  const key = mark === null ? null : check(z.enum(MARK_KEYS), mark);
   await assertLessonOpen(groupId, date);
-  const key = { groupId_studentId_date: { groupId, studentId, date } };
-  const existing = await db.attendance.findUnique({ where: key });
-  // keldi → kechikdi → kelmadi → empty (a reason only belongs to an absence)
-  const next = nextMark(existing ? { present: existing.present, late: existing.late } : null);
-  if (!next) await db.attendance.delete({ where: key });
-  else await db.attendance.upsert({ where: key, create: { groupId, studentId, date, ...next }, update: { ...next, ...(next.present ? { reasonId: null } : {}) } });
+  if (!(await db.groupStudent.findFirst({ where: { groupId, studentId } }))) throw new Error("O'quvchi bu guruhda emas");
+  const where = { groupId_studentId_date: { groupId, studentId, date } };
+  if (key === null) await db.attendance.deleteMany({ where: { groupId, studentId, date } });
+  else {
+    const value = markWrite(key);
+    await db.attendance.upsert({ where, create: { groupId, studentId, date, ...value }, update: value });
+  }
   revalidatePath(`/groups/${groupId}`);
 }
 
@@ -500,19 +503,18 @@ async function lessonOf(groupId: number, date: Date) {
 }
 const todayLessonOf = (groupId: number) => lessonOf(groupId, centreDay());
 
-const TODAY_MARKS = { present: { present: true, late: false }, late: { present: true, late: true }, absent: { present: false, late: false } } as const;
 
 /** "Bugungi dars": one tap sets today's mark for a student (keldi / kechikdi / kelmadi). */
-export async function markToday(groupId: number, studentId: number, mark: keyof typeof TODAY_MARKS) {
+export async function markToday(groupId: number, studentId: number, mark: MarkKey) {
   const user = await requirePermission("attendance.mark");
   await assertGroupAccess(user, groupId);
   const { date } = await todayLessonOf(groupId);
-  const value = TODAY_MARKS[check(z.enum(["present", "late", "absent"]), mark)];
+  const value = markWrite(check(z.enum(MARK_KEYS), mark));
   if (!(await db.groupStudent.findFirst({ where: { groupId, studentId, leftAt: null } }))) throw new Error("O'quvchi bu guruhda emas");
   await db.attendance.upsert({
     where: { groupId_studentId_date: { groupId, studentId, date } },
     create: { groupId, studentId, date, ...value },
-    update: { ...value, ...(value.present ? { reasonId: null } : {}) },
+    update: value,
   });
   revalidatePath(`/groups/${groupId}`);
 }

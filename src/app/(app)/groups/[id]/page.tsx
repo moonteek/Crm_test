@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Flag } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { db } from "@/lib/db";
 import { centreDay } from "@/lib/membership-db";
 import { requirePage } from "@/lib/auth";
@@ -21,19 +21,15 @@ import { ExportButtons } from "@/components/ExportButtons";
 import { TodayLesson } from "@/components/TodayLesson";
 import { GroupMenu } from "@/components/GroupMenu";
 import { LessonDateMenu } from "@/components/LessonDateMenu";
-
-// absence reason colours (same tints as tags)
-const REASON_TONE: Record<string, string> = {
-  amber: "bg-accent-tint text-accent-ink", green: "bg-success-tint text-success", red: "bg-danger-tint text-danger",
-  orange: "bg-warning-tint text-warning", grey: "bg-ink/5 text-muted",
-};
+import { AttendanceCell } from "@/components/AttendanceCell";
+import { LessonGridProvider } from "@/components/lesson-grid";
 import { attendancePercent, type Mark } from "@/lib/attendance";
 import { busyMarkMessages } from "@/lib/availability";
 import { GradeCell } from "@/components/GradeCell";
 import { MemberMenu } from "@/components/members/MemberMenu";
 import { StatusBadge, StatusLegend } from "@/components/members/StatusBadge";
 import { toMemberData, toMemberGroup } from "@/components/members/types";
-import { addStudentToGroup, createExam, deleteExam, deleteGroup, toggleAttendance } from "../../actions";
+import { addStudentToGroup, createExam, deleteExam, deleteGroup } from "../../actions";
 
 export default async function GroupPage({
   params, searchParams,
@@ -228,11 +224,17 @@ export default async function GroupPage({
           </div>
         </div>
 
-        {tab === "attendance" && allow.attendance && <p className="px-5 pt-3 text-xs text-muted">Katakchani bosing: <span className="text-success">✓ keldi</span> → <span className="text-warning">K kechikdi</span> → <span className="text-danger">✗ kelmadi</span> → bo&apos;sh</p>}
+        {tab === "attendance" && allow.attendance && <p className="px-5 pt-3 text-xs text-muted">Katakchani bosing va belgini tanlang: <span className="text-success">✓ keldi</span> · <span className="text-warning">K kechikdi</span> · <span className="text-danger">✗ kelmadi</span>; sanani bosib — butun dars amallari</p>}
         <div className="px-5 pt-3"><StatusLegend /></div>
         {tab === "grades" && <p className="px-5 pt-3 text-xs text-muted">Har bir dars uchun 1–5 baho. {allow.grades ? "Katakchani bosib baho tanlang." : ""}</p>}
 
         {tab !== "exams" ? (
+          <LessonGridProvider value={{
+            groupId: id, today, canMark: allow.attendance, canManage: can(user, "lessons.manage"),
+            teachers: teachers.filter((t) => t.id !== group.teacherId && t.id !== group.assistantId).map((t) => ({ id: t.id, name: t.name })),
+            hasAssistant: group.assistantId !== null,
+            reasons: absenceReasons.map((r) => ({ id: r.id, name: r.name, color: r.color })),
+          }}>
           <div className="overflow-x-auto pt-2">
             <table className="table">
               <thead>
@@ -246,18 +248,13 @@ export default async function GroupPage({
                     return (
                       <th key={key} className={`px-1 text-center ${key === today ? "text-accent-ink" : ""}`}>
                         <LessonDateMenu
-                          groupId={id} day={key} label={String(d.getUTCDate())}
+                          day={key} label={String(d.getUTCDate())}
                           cancelled={cancelledOn.has(key) ? cancelledOn.get(key)! : null}
                           substitutes={subsOn(key)}
-                          canMark={allow.attendance} canManage={can(user, "lessons.manage")}
-                          teachers={teachers.filter((t) => t.id !== group.teacherId && t.id !== group.assistantId).map((t) => ({ id: t.id, name: t.name }))}
-                          hasAssistant={group.assistantId !== null}
                           absent={group.students.flatMap((gs) => {
                             const a = attendance.find((x) => x.studentId === gs.student.id && isoDate(x.date) === key);
                             return a && !a.present ? [{ studentId: gs.student.id, name: gs.student.name, reasonId: a.reasonId }] : [];
                           })}
-                          reasons={absenceReasons.map((r) => ({ id: r.id, name: r.name, color: r.color }))}
-                          past={key <= today}
                         />
                       </th>
                     );
@@ -299,34 +296,26 @@ export default async function GroupPage({
                       </td>
                       {days.map((d) => {
                         const key = isoDate(d);
-                        if (cancelledOn.has(key)) return <td key={key} className="px-1 text-center"><span className="label-mono text-faint" title="Dars bekor qilingan">—</span></td>;
-                        if (off.has(key)) return <td key={key} className="px-1 text-center"><span className="label-mono text-faint" title="Bayram — dars yo'q">B</span></td>;
+                        const cancelled = cancelledOn.has(key);
+                        if (off.has(key) && !cancelled) return <td key={key} className="px-1 text-center"><span className="label-mono text-faint" title="Bayram — dars yo'q">B</span></td>;
                         if (tab === "grades") {
                           return (
                             <td key={key} className="px-1 text-center">
-                              <GradeCell groupId={id} studentId={student.id} day={key} value={gradeMap.get(`${student.id}:${key}`)} editable={allow.grades && key <= today} />
+                              {cancelled
+                                ? <span className="label-mono text-faint" title="Dars bekor qilingan">—</span>
+                                : <GradeCell groupId={id} studentId={student.id} day={key} value={gradeMap.get(`${student.id}:${key}`)} editable={allow.grades && key <= today} />}
                             </td>
                           );
                         }
                         const v = mark.get(`${student.id}:${key}`);
                         return (
                           <td key={key} className="px-1 text-center">
-                            <form action={toggleAttendance.bind(null, id, student.id, key)}>
-                              <button
-                                disabled={!allow.attendance || key > today /* lessons yet to happen can't be marked */}
-                                title={v && !v.present ? (v.reason ? `Kelmadi: ${v.reason.name}` : "Kelmadi — sabab kiritilmagan") : undefined}
-                                className={`press h-7 w-7 rounded-full border text-sm font-bold ${
-                                  v?.late ? "border-warning/40 bg-warning-tint text-warning"
-                                  : v?.present ? "border-success/40 bg-success-tint text-success"
-                                  : v?.reason ? `border-line ${REASON_TONE[v.reason.color] ?? REASON_TONE.grey}`
-                                  : v ? "border-danger/40 bg-danger-tint text-danger"
-                                  : key > today ? "border-line/50 text-faint/50"
-                                  : "border-line bg-raised text-faint hover:border-ink"
-                                }`}
-                              >
-                                {v?.late ? "K" : v?.present ? "✓" : v?.reason ? "✗" : v ? <Flag className="mx-auto h-3.5 w-3.5" /> : "·"}
-                              </button>
-                            </form>
+                            <AttendanceCell
+                              studentId={student.id} studentName={student.name} day={key}
+                              label={`${String(d.getUTCDate()).padStart(2, "0")}.${String(d.getUTCMonth() + 1).padStart(2, "0")}`}
+                              mark={v ? { present: v.present, late: v.late, reason: v.reason ? { id: v.reason.id, name: v.reason.name, color: v.reason.color } : null } : null}
+                              cancelled={cancelled} substitutes={cancelled ? [] : subsOn(key)}
+                            />
                           </td>
                         );
                       })}
@@ -337,6 +326,7 @@ export default async function GroupPage({
             </table>
             {group.students.length === 0 && <Empty text="Guruhda o'quvchi yo'q" />}
           </div>
+          </LessonGridProvider>
         ) : (
           <div className="overflow-x-auto">
             <table className="table">
