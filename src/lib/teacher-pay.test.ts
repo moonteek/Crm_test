@@ -12,7 +12,7 @@ const A = 1, B = 2, ASSIST = 9;
 
 let nextStudent = 100;
 function member(
-  group: { id: number; name: string; days: string; price: number; teacherId: number | null; assistantId?: number | null; teachers?: PayMembership["group"]["teachers"] },
+  group: { id: number; name: string; days: string; price: number; teacherId: number | null; assistantId?: number | null; teachers?: PayMembership["group"]["teachers"]; substitutes?: PayMembership["group"]["substitutes"] },
   ...events: [string, Date, boolean?][]
 ): PayMembership {
   return {
@@ -88,4 +88,29 @@ test("breakdown rows are whole so'm and add up exactly to the total", () => {
   const r = teacherEarnings(B, { type: "PERCENT", amount: 33.3 }, ms, 2026, 10, NOW);
   assert.equal(r.rows.reduce((s, x) => s + x.rounded, 0), r.total);
   assert.ok(r.rows.every((x) => Number.isInteger(x.rounded)));
+});
+
+// ---------- substitutes (one lesson taught by someone else) ----------
+const SUB = 5;
+
+test("a substitute earns that lesson by their own rule; the regular teacher loses exactly it", () => {
+  // FE-14 (ODD, 13 lessons in November, 600 000): B away on 11 Nov, SUB teaches
+  const g = { ...FE, substitutes: [{ date: nov(11), role: "TEACHER", substituteId: SUB }] };
+  const m = member(g, ["ACTIVATE", nov(1)]);
+  const values = lessonValues(m, 2026, 10, NOW);
+  const lesson = values.find((v) => v.day.getTime() === nov(11).getTime())!.value;
+  const sub = teacherEarnings(SUB, { type: "PERCENT", amount: 30 }, [m], 2026, 10, NOW);
+  const regular = teacherEarnings(B, { type: "PERCENT", amount: 40 }, [m], 2026, 10, NOW);
+  assert.deepEqual([sub.rows[0].lessons, sub.total], [1, Math.round(lesson * 0.3)]);
+  assert.deepEqual([regular.rows[0].lessons, regular.total], [12, Math.round((600_000 - lesson) * 0.4)]);
+  const perStudent = teacherEarnings(SUB, { type: "PER_STUDENT", amount: 130_000 }, [m], 2026, 10, NOW);
+  assert.equal(perStudent.total, 10_000); // 130 000 × 1/13
+});
+
+test("a substitute for the assistant doesn't touch the teacher's lessons", () => {
+  const g = { ...FE, assistantId: ASSIST, substitutes: [{ date: nov(11), role: "ASSISTANT", substituteId: SUB }] };
+  const m = member(g, ["ACTIVATE", nov(1)]);
+  assert.equal(teacherEarnings(B, { type: "PERCENT", amount: 40 }, [m], 2026, 10, NOW).rows[0].lessons, 13);
+  assert.equal(teacherEarnings(ASSIST, { type: "PERCENT", amount: 10 }, [m], 2026, 10, NOW).rows[0].lessons, 12);
+  assert.equal(teacherEarnings(SUB, { type: "PERCENT", amount: 10 }, [m], 2026, 10, NOW).rows[0].lessons, 1);
 });

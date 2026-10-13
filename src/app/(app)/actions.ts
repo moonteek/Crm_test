@@ -15,13 +15,14 @@ import { logAction } from "@/lib/audit";
 import { centreDay, recordEvent, startMembership } from "@/lib/membership-db";
 import { nextMonthStart, schedulePrice } from "@/lib/prices-db";
 import { changeTeacher } from "@/lib/teachers-db";
-import { menuActions, systemLeaveDate, type EventType, type Status } from "@/lib/membership";
+import { menuActions, statusOn, systemLeaveDate, type EventType, type Status } from "@/lib/membership";
 import {
   ACTIVITY_TYPES, isoDate, CALL_RESULTS, lessonWeekdays, MONTHS, EXPENSE_CATEGORIES, GENDERS, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_SOURCES, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES, TAG_COLORS,
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
-import { assertNotHoliday, holidayDays } from "@/lib/holidays-db";
+import { assertLessonOpen, closedDaysOf, holidayDays } from "@/lib/holidays-db";
+import { lessonChangeProblem } from "@/lib/lesson-changes";
 import { canDeleteHoliday, expandRange, holidayProblem } from "@/lib/holidays";
 import { canDelete, canEnd, discountProblem, lastMonth } from "@/lib/discounts";
 import { editDiff } from "@/lib/payments";
@@ -480,24 +481,24 @@ export async function toggleAttendance(groupId: number, studentId: number, isoDa
   const user = await requirePermission("attendance.mark");
   await assertGroupAccess(user, groupId);
   const date = check(v.isoDay(), isoDay);
-  await assertNotHoliday(date);
+  await assertLessonOpen(groupId, date);
   const key = { groupId_studentId_date: { groupId, studentId, date } };
   const existing = await db.attendance.findUnique({ where: key });
-  // keldi → kechikdi → kelmadi → empty
+  // keldi → kechikdi → kelmadi → empty (a reason only belongs to an absence)
   const next = nextMark(existing ? { present: existing.present, late: existing.late } : null);
   if (!next) await db.attendance.delete({ where: key });
-  else await db.attendance.upsert({ where: key, create: { groupId, studentId, date, ...next }, update: next });
+  else await db.attendance.upsert({ where: key, create: { groupId, studentId, date, ...next }, update: { ...next, ...(next.present ? { reasonId: null } : {}) } });
   revalidatePath(`/groups/${groupId}`);
 }
 
 /** Today's lesson for the group (or a refusal): the day must be one of its lesson days and not a holiday. */
-async function todayLessonOf(groupId: number) {
-  const date = centreDay();
+async function lessonOf(groupId: number, date: Date) {
   const group = await db.group.findUniqueOrThrow({ where: { id: groupId } });
-  if (!lessonWeekdays(group.days).includes(date.getUTCDay())) throw new Error("Bugun bu guruhda dars yo'q");
-  await assertNotHoliday(date);
+  if (!lessonWeekdays(group.days).includes(date.getUTCDay())) throw new Error("Bu kunda guruhda dars yo'q");
+  await assertLessonOpen(groupId, date);
   return { group, date };
 }
+const todayLessonOf = (groupId: number) => lessonOf(groupId, centreDay());
 
 const TODAY_MARKS = { present: { present: true, late: false }, late: { present: true, late: true }, absent: { present: false, late: false } } as const;
 
@@ -511,20 +512,23 @@ export async function markToday(groupId: number, studentId: number, mark: keyof 
   await db.attendance.upsert({
     where: { groupId_studentId_date: { groupId, studentId, date } },
     create: { groupId, studentId, date, ...value },
-    update: value,
+    update: { ...value, ...(value.present ? { reasonId: null } : {}) },
   });
   revalidatePath(`/groups/${groupId}`);
 }
 
 /** "Hammasi keldi": everyone not marked yet today (and not frozen) becomes present; given marks are kept. */
-export async function markAllPresent(groupId: number) {
+export async function markAllPresent(groupId: number, isoDay?: string) {
   const user = await requirePermission("attendance.mark");
   await assertGroupAccess(user, groupId);
-  const { group, date } = await todayLessonOf(groupId);
-  const [members, marked] = await Promise.all([
-    db.groupStudent.findMany({ where: { groupId, leftAt: null, status: { in: ["ACTIVE", "TRIAL"] } }, select: { studentId: true } }),
+  const { group, date } = await lessonOf(groupId, isoDay ? check(v.isoDay(), isoDay) : centreDay());
+  const [all, marked] = await Promise.all([
+    db.groupStudent.findMany({ where: { groupId }, select: { studentId: true, status: true, leftAt: true, events: { select: { type: true, date: true }, orderBy: [{ date: "asc" }, { id: "asc" }] } } }),
     db.attendance.findMany({ where: { groupId, date } }),
   ]);
+  // only students who were in the group (active or on trial) on that day — the date may be in the past
+  // (a membership without history yet falls back to its current status)
+  const members = all.filter((m) => ["ACTIVE", "TRIAL"].includes((m.events.length ? statusOn(m.events as { type: EventType; date: Date }[], date) : m.leftAt ? null : m.status) ?? ""));
   const todo = fillPresent(members.map((m) => m.studentId), new Map(marked.map((a) => [a.studentId, { present: a.present, late: a.late }])));
   if (todo.length) await db.attendance.createMany({ data: todo.map((studentId) => ({ groupId, studentId, date, present: true })) });
   await logAction(user, "group.attendance", `Davomat: ${group.name} — hammasi keldi (${todo.length} ta)`);
@@ -827,7 +831,7 @@ export async function setGrade(groupId: number, studentId: number, isoDay: strin
   const user = await requirePermission("grades.manage");
   await assertGroupAccess(user, groupId);
   const date = check(v.isoDay(), isoDay);
-  await assertNotHoliday(date);
+  await assertLessonOpen(groupId, date);
   const value = check(gradeScore, score);
   const key = { groupId_studentId_date: { groupId, studentId, date } };
   if (value === null) {
@@ -875,7 +879,7 @@ export async function saveLevelExamScores(_: MemberActionState, f: FormData): Pr
       where: { id: groupId },
       include: { course: { include: { subjects: true } }, students: { where: { leftAt: null }, select: { studentId: true } } },
     });
-    const auto = levelExams({ ...group, holidays: await holidayDays() }, group.course.subjects).find((e) => e.level === level);
+    const auto = levelExams({ ...group, holidays: (await closedDaysOf())(group.id) }, group.course.subjects).find((e) => e.level === level);
     if (!auto) throw new Error("Bu daraja imtihoni topilmadi");
     if (auto.date > centreDay()) throw new Error("Imtihon kuni hali kelmagan");
     const maxScore = check(v.int("Maksimal ball", { min: 1, max: 10_000, fallback: 100 }), f.get("maxScore"));
@@ -1089,6 +1093,133 @@ export async function deleteHoliday(id: number) {
   await db.holiday.delete({ where: { id } });
   await logAction(user, "holiday.manage", `Bayram o'chirildi: ${h.name} — ${h.date.toISOString().slice(0, 10)}`);
   revalidatePath("/settings/holidays");
+}
+
+// ---------- Lesson tools: absence reasons, cancelled lessons, substitutes ----------
+/** Why an absent student missed the lesson (or clear it). Only for an absence that is already marked. */
+export async function setAbsenceReason(groupId: number, studentId: number, isoDay: string, reasonId: number | null) {
+  const user = await requirePermission("attendance.mark");
+  await assertGroupAccess(user, groupId);
+  const date = check(v.isoDay(), isoDay);
+  const mark = await db.attendance.findUnique({ where: { groupId_studentId_date: { groupId, studentId, date } } });
+  if (!mark || mark.present) throw new Error("Avval \"kelmadi\" deb belgilang");
+  if (reasonId !== null && !(await db.absenceReason.findFirst({ where: { id: reasonId, active: true } }))) throw new Error("Sabab topilmadi");
+  await db.attendance.update({ where: { id: mark.id }, data: { reasonId } });
+  revalidatePath(`/groups/${groupId}`);
+}
+
+const lessonChangeSchema = z.object({
+  groupId: v.id("Guruh"),
+  date: v.isoDay(),
+  reason: v.optText(200),
+  role: v.oneOf({ TEACHER: "O'qituvchi", ASSISTANT: "Yordamchi" }, "TEACHER"),
+  substituteId: v.optId(),
+});
+const isoOf = (d: Date) => d.toISOString().slice(0, 10).split("-").reverse().join(".");
+
+async function lessonChangeContext(user: Awaited<ReturnType<typeof requirePermission>>, groupId: number) {
+  await assertGroupAccess(user, groupId);
+  const [group, existing, holidays] = await Promise.all([
+    db.group.findUniqueOrThrow({ where: { id: groupId }, include: { teacher: true, assistant: true } }),
+    db.lessonChange.findMany({ where: { groupId } }),
+    holidayDays(),
+  ]);
+  return { group, existing, holidays };
+}
+
+/** "Darsni qoldirish": the lesson didn't happen — not charged, not paid (from November 2026), marks removed. */
+export async function cancelLesson(_: MemberActionState, f: FormData): Promise<MemberActionState> {
+  try {
+    const user = await requirePermission("lessons.manage");
+    const d = parseForm(lessonChangeSchema, f);
+    const { group, existing, holidays } = await lessonChangeContext(user, d.groupId);
+    const problem = lessonChangeProblem({ kind: "CANCEL", date: d.date, days: group.days, holidays, existing }, new Date());
+    if (problem) return { error: problem };
+    await db.$transaction([
+      db.lessonChange.create({ data: { groupId: group.id, date: d.date, kind: "CANCEL", reason: d.reason, userId: user.id } }),
+      db.attendance.deleteMany({ where: { groupId: group.id, date: d.date } }),
+      db.grade.deleteMany({ where: { groupId: group.id, date: d.date } }),
+    ]);
+    await logAction(user, "lesson.change", `Dars bekor qilindi: ${group.name}, ${isoOf(d.date)}${d.reason ? ` (${d.reason})` : ""}`);
+    revalidatePath(`/groups/${group.id}`);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** Undoes a cancellation (this month onward). */
+export async function restoreLesson(groupId: number, isoDay: string) {
+  const user = await requirePermission("lessons.manage");
+  const date = check(v.isoDay(), isoDay);
+  const { group } = await lessonChangeContext(user, groupId);
+  const t = centreDay();
+  if (date.getTime() < Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), 1)) throw new Error("Faqat shu oydan boshlab");
+  await db.lessonChange.deleteMany({ where: { groupId, date, kind: "CANCEL" } });
+  await logAction(user, "lesson.change", `Dars qayta tiklandi: ${group.name}, ${isoOf(date)}`);
+  revalidatePath(`/groups/${groupId}`);
+}
+
+/** "O'qituvchini almashtirish": someone else teaches this one lesson and is paid for it by their own rule. */
+export async function substituteLesson(_: MemberActionState, f: FormData): Promise<MemberActionState> {
+  try {
+    const user = await requirePermission("lessons.manage");
+    const d = parseForm(lessonChangeSchema, f);
+    const { group, existing, holidays } = await lessonChangeContext(user, d.groupId);
+    const absentId = d.role === "ASSISTANT" ? group.assistantId : group.teacherId;
+    if (d.role === "ASSISTANT" && !absentId) return { error: "Guruhda yordamchi o'qituvchi yo'q" };
+    const problem = lessonChangeProblem({ kind: "SUBSTITUTE", date: d.date, days: group.days, holidays, existing, substituteId: d.substituteId, absentId }, new Date());
+    if (problem) return { error: problem };
+    if (existing.some((e) => e.kind === "SUBSTITUTE" && e.role === d.role && e.date.getTime() === d.date.getTime())) return { error: "Bu dars uchun o'rinbosar allaqachon bor" };
+    const sub = await db.user.findFirst({ where: { id: d.substituteId!, isTeacher: true, active: true } });
+    if (!sub) return { error: "O'rinbosar topilmadi" };
+    await db.lessonChange.create({ data: { groupId: group.id, date: d.date, kind: "SUBSTITUTE", role: d.role, substituteId: sub.id, reason: d.reason, userId: user.id } });
+    const absent = d.role === "ASSISTANT" ? group.assistant?.name : group.teacher?.name;
+    await logAction(user, "lesson.change", `O'rinbosar: ${group.name}, ${isoOf(d.date)} — ${absent ?? "—"} o'rniga ${sub.name}`);
+    revalidatePath(`/groups/${group.id}`);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+export async function removeSubstitute(groupId: number, isoDay: string, role: string) {
+  const user = await requirePermission("lessons.manage");
+  const date = check(v.isoDay(), isoDay);
+  const { group } = await lessonChangeContext(user, groupId);
+  const t = centreDay();
+  if (date.getTime() < Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), 1)) throw new Error("Faqat shu oydan boshlab");
+  await db.lessonChange.deleteMany({ where: { groupId, date, kind: "SUBSTITUTE", role } });
+  await logAction(user, "lesson.change", `O'rinbosar bekor qilindi: ${group.name}, ${isoOf(date)}`);
+  revalidatePath(`/groups/${groupId}`);
+}
+
+// Absence reasons list (Settings → Sabablar)
+const absenceReasonSchema = z.object({ name: v.text("Sabab", 60), color: v.oneOf(TAG_COLORS, "grey") });
+
+export async function createAbsenceReason(f: FormData) {
+  const user = await requirePermission("staff.manage");
+  const d = parseForm(absenceReasonSchema, f);
+  if (await db.absenceReason.findUnique({ where: { name: d.name } })) throw new Error("Bunday sabab bor");
+  await db.absenceReason.create({ data: d });
+  await logAction(user, "reason.create", `Kelmaganlik sababi: ${d.name}`);
+  revalidatePath("/settings/reasons");
+}
+
+export async function updateAbsenceReason(id: number, f: FormData) {
+  const user = await requirePermission("staff.manage");
+  const d = parseForm(absenceReasonSchema, f);
+  await db.absenceReason.update({ where: { id }, data: d });
+  await logAction(user, "reason.update", `Kelmaganlik sababi o'zgartirildi: ${d.name}`);
+  revalidatePath("/settings/reasons");
+}
+
+export async function toggleAbsenceReason(id: number) {
+  const user = await requirePermission("staff.manage");
+  const r = await db.absenceReason.findUniqueOrThrow({ where: { id } });
+  await db.absenceReason.update({ where: { id }, data: { active: !r.active } });
+  await logAction(user, "reason.toggle", `Kelmaganlik sababi ${r.active ? "o'chirildi" : "yoqildi"}: ${r.name}`);
+  revalidatePath("/settings/reasons");
 }
 
 // ---------- Teacher availability ----------

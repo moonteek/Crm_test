@@ -89,7 +89,8 @@ function enrolledDuringMonth(events: Ev[], y: number, m: number) {
 }
 
 /** Gives loaded memberships the centre's holidays (from holidayDays()), which every charge needs. */
-export const withHolidays = <T extends object>(memberships: T[], holidays: string[]) => memberships.map((m) => ({ ...m, holidays }));
+export const withHolidays = <T extends { groupId: number }>(memberships: T[], holidays: string[] | ((groupId: number) => string[])) =>
+  memberships.map((m) => ({ ...m, holidays: typeof holidays === "function" ? holidays(m.groupId) : holidays }));
 
 /** The discount (so'm off the monthly price) for one month; discounts of a membership never overlap. */
 export function discountIn(discounts: { from: Date; to: Date; amount: number }[] | undefined, y: number, mo: number) {

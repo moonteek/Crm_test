@@ -38,6 +38,11 @@ export function statusAfter(events: { type: EventType }[]): Status | null {
   return last ? RESULT[last.type] : null;
 }
 
+/** The status a member had on `day` (events on that day count); null before they joined. Events in order. */
+export function statusOn(events: { type: EventType; date: Date }[], day: Date): Status | null {
+  return statusAfter(events.filter((e) => e.date.getTime() <= day.getTime()));
+}
+
 export const allowedActions = (status: Status | null) => ALLOWED[status ?? "NONE"];
 
 /**

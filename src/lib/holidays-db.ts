@@ -2,6 +2,8 @@ import "server-only";
 import { cache } from "react";
 import { db } from "./db";
 import { holidayRefusal } from "./holidays";
+import { closedDays, markProblem } from "./lesson-changes";
+import { centreDay } from "./membership-db";
 
 /** The centre's holidays as ISO days ("2026-11-10"), loaded once per request; billing and the course plan need them. */
 export const holidayDays = cache(async (): Promise<string[]> =>
@@ -12,4 +14,34 @@ export const holidayDays = cache(async (): Promise<string[]> =>
 export async function assertNotHoliday(date: Date) {
   const refusal = holidayRefusal(date, await holidayDays());
   if (refusal) throw new Error(refusal);
+}
+
+/**
+ * Each group's closed days (ISO): the centre's holidays plus that group's cancelled lessons ("Darsni qoldirish").
+ * Loaded once per request; billing, teacher pay and the course plan use it the way they use holidays.
+ */
+export const closedDaysOf = cache(async (): Promise<(groupId: number) => string[]> => {
+  const [holidays, cancels] = await Promise.all([
+    holidayDays(),
+    db.lessonChange.findMany({ where: { kind: "CANCEL" }, select: { groupId: true, date: true } }),
+  ]);
+  const byGroup = new Map<number, Date[]>();
+  for (const c of cancels) byGroup.set(c.groupId, [...(byGroup.get(c.groupId) ?? []), c.date]);
+  const cached = new Map<number, string[]>();
+  return (groupId) => {
+    if (!cached.has(groupId)) cached.set(groupId, closedDays(holidays, byGroup.get(groupId) ?? []));
+    return cached.get(groupId)!;
+  };
+});
+
+/**
+ * Throws when that day's lesson can't be marked (attendance, grades — in the app and over MCP): it hasn't happened
+ * yet, it's a holiday, or the lesson was cancelled ("Darsni qoldirish").
+ */
+export async function assertLessonOpen(groupId: number, date: Date) {
+  const future = markProblem(date, centreDay());
+  if (future) throw new Error(future);
+  const day = date.toISOString().slice(0, 10);
+  if ((await holidayDays()).includes(day)) throw new Error("Bayram kuni — dars yo'q");
+  if ((await closedDaysOf())(groupId).includes(day)) throw new Error("Dars bekor qilingan");
 }

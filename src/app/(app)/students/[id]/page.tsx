@@ -6,7 +6,7 @@ import { centreDay } from "@/lib/membership-db";
 import { requirePage } from "@/lib/auth";
 import { can, canSeeBalances, groupScope, studentScope } from "@/lib/access";
 import { balance, priceNow, withHolidays } from "@/lib/billing";
-import { holidayDays } from "@/lib/holidays-db";
+import { closedDaysOf } from "@/lib/holidays-db";
 import { statement } from "@/lib/statement";
 import { upcomingPrice } from "@/lib/prices";
 import { passed } from "@/lib/curriculum";
@@ -71,8 +71,8 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
   const reasons = await db.reason.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } });
   if (!student) notFound();
 
-  const holidays = await holidayDays();
-  const groups = withHolidays(student.groups, holidays);
+  const closed = await closedDaysOf();
+  const groups = withHolidays(student.groups, closed);
   const b = balance(groups, student.payments);
   const present = student.attendance.filter((a) => a.present).length;
   const avgGrade = student.grades.length ? student.grades.reduce((s, g) => s + g.score, 0) / student.grades.length : null;
@@ -243,9 +243,9 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
                         <p className="truncate text-sm text-muted">{gs.group.course.name} · {money(priceNow(gs.group))} / oy{upcomingPrice(gs.group.prices, new Date()) && <span className="label-mono ml-2">{date(upcomingPrice(gs.group.prices, new Date())!.from)} dan: {money(upcomingPrice(gs.group.prices, new Date())!.price)}</span>}</p>
                       </div>
                       <MemberMenu
-                        member={toMemberData(gs, { id: student.id, name: student.name }, { money: allow.balance, holidays })}
+                        member={toMemberData(gs, { id: student.id, name: student.name }, { money: allow.balance, holidays: closed(gs.groupId) })}
                         reasons={reasons}
-                        groups={allGroups.map((g) => toMemberGroup(g))}
+                        groups={allGroups.map((g) => toMemberGroup(g, closed(g.id)))}
                         balance={allow.balance ? b : null}
                         canManage={allow.manage}
                         canPay={allow.pay}

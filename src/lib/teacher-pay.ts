@@ -1,10 +1,15 @@
 import { lessonValues, type BillableMembership } from "./billing";
 import { lessonDates } from "./format";
 import { teacherOn, type TeacherRow } from "./teachers-history";
+import { whoTaught } from "./lesson-changes";
 
 export type PayMembership = BillableMembership & {
   student: { id: number; name: string };
-  group: BillableMembership["group"] & { id: number; teacherId: number | null; assistantId: number | null; teachers?: TeacherRow[] };
+  group: BillableMembership["group"] & {
+    id: number; teacherId: number | null; assistantId: number | null; teachers?: TeacherRow[];
+    /** single lessons taught by someone else (O'qituvchini almashtirish) */
+    substitutes?: { date: Date; role: string | null; substituteId: number | null }[];
+  };
 };
 
 export type EarningRow = {
@@ -41,8 +46,11 @@ export function teacherEarnings(
   for (const m of memberships) {
     const history = m.group.teachers ?? [];
     const current = { teacherId: m.group.teacherId, assistantId: m.group.assistantId };
+    const subs = m.group.substitutes ?? [];
+    // a lesson counts for whoever taught it that day: a substitute for that role, else the regular teacher / assistant
     const taught = lessonValues(m, year, month, now).filter(
-      (l) => teacherOn(history, current, l.day, "TEACHER") === teacherId || teacherOn(history, current, l.day, "ASSISTANT") === teacherId,
+      (l) => whoTaught(l.day, "TEACHER", teacherOn(history, current, l.day, "TEACHER"), subs) === teacherId
+        || whoTaught(l.day, "ASSISTANT", teacherOn(history, current, l.day, "ASSISTANT"), subs) === teacherId,
     );
     if (!taught.length) continue;
     const lessonsInMonth = lessonDates(m.group.days, year, month).length;

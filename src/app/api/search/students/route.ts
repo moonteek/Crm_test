@@ -3,7 +3,7 @@ import { can, canSeeBalances, studentScope } from "@/lib/access";
 import { db } from "@/lib/db";
 import { balance, withHolidays } from "@/lib/billing";
 import { membershipInclude } from "@/lib/billing-include";
-import { holidayDays } from "@/lib/holidays-db";
+import { closedDaysOf } from "@/lib/holidays-db";
 import { searchWhere } from "@/lib/search";
 
 /** Top-bar student search: up to 8 matches within the user's students; balances only for staff who see them. */
@@ -19,7 +19,7 @@ export async function GET(req: Request) {
     orderBy: { name: "asc" },
     take: 8,
   });
-  const holidays = money ? await holidayDays() : [];
+  const holidays = money ? await closedDaysOf() : [];
   return Response.json(students.map((s) => ({
     id: s.id,
     name: s.name,

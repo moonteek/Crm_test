@@ -145,6 +145,17 @@ oylik narx o'tilgan darslarga qarab kamayadi (narx × o'tilgan ÷ jadvaldagi dar
 darslar hisoblanadi; davomat belgilanmaydi, kurs rejasi va imtihon sanasi shunga moslashadi. "Menejer" rolida
 "Bayram kunlari" ruxsatini Rollar sahifasida bir marta belgilang.
 
+**Dars amallari:** davomat jadvalida sanani bosing — "Hammasi keldi", "Kelmaganlik sabablari", "Darsni qoldirish"
+(o'sha guruh uchun bayram kabi: o'quvchidan olinmaydi, o'qituvchiga hisoblanmaydi) va "O'qituvchini almashtirish"
+(o'rinbosarga dars o'z ish haqi qoidasi bo'yicha hisoblanadi). Ikkalasini ham bekor qilish mumkin. Kelmaganlik
+sabablari ixtiyoriy, rangi jadvalda ko'rinadi; ro'yxati Sozlamalar → Sabablar'da. Hali bo'lmagan darsga belgi
+qo'yilmaydi. Yangilangandan keyin `db:push` va bir marta boshlang'ich sabablarni qo'shing (qayta ishga tushirish
+xavfsiz), so'ng "Menejer" rolida "Darslarni boshqarish" ruxsatini Rollar sahifasida belgilang:
+
+```bash
+npm run db:absence-reasons
+```
+
 **Chegirmalar:** o'quvchi sahifasidagi "Chegirma" bo'limida beriladi — har oy to'lovdan ayiriladigan summa, tanlangan
 oylar uchun (shu oydan, 2026-yil noyabrdan boshlab). Qisman oyda dars soniga qarab hisoblanadi; o'qituvchi ulushi
 o'zgarmaydi. "Menejer" rolida "Chegirma berish" ruxsatini Rollar sahifasida bir marta belgilang.

@@ -2,7 +2,7 @@ import "server-only";
 import { db } from "../db";
 import { canSeeBalances, studentScope, type CurrentUser } from "../access";
 import { balance, withHolidays } from "../billing";
-import { holidayDays } from "../holidays-db";
+import { closedDaysOf } from "../holidays-db";
 import { MEMBER_STATUS, type Status } from "../membership";
 import { studentWhere, type StudentFilters } from "../student-filters";
 import type { Table } from "../export";
@@ -26,7 +26,7 @@ export async function loadStudents(user: CurrentUser, f: StudentFilters) {
     orderBy: { name: "asc" },
   });
 
-  const holidays = await holidayDays();
+  const holidays = await closedDaysOf();
   const all = found
     .map((s) => {
       const current = s.groups.filter((g) => !g.leftAt);

@@ -9,7 +9,7 @@ import { ExportButtons } from "@/components/ExportButtons";
 import { CurriculumBadge } from "@/components/CurriculumBar";
 import { curriculumOn, type Progress } from "@/lib/curriculum";
 import { centreDay } from "@/lib/membership-db";
-import { holidayDays } from "@/lib/holidays-db";
+import { closedDaysOf, holidayDays } from "@/lib/holidays-db";
 
 const NO_ROOM = 0;
 
@@ -45,10 +45,11 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   // the shown weekday's date in this week (Monday first; on Sunday, the coming week): where each group is in its course that day, and exam days
   const shown = new Date(centreDay().getTime() + (((day + 6) % 7) - ((today + 6) % 7) + (today === 0 ? 7 : 0)) * 86_400_000);
   const holidays = await holidayDays();
+  const closedFor = await closedDaysOf();
   // the centre is closed that day: no lessons to show
   const closed = holidays.includes(shown.toISOString().slice(0, 10));
   const lessons = (closed ? [] : perDay.get(day) ?? []).map(withTimes).map((l) => {
-    const cur = curriculumOn({ ...l, holidays }, l.course.subjects, shown);
+    const cur = curriculumOn({ ...l, holidays: closedFor(l.id) }, l.course.subjects, shown);
     return { ...l, progress: cur.progress, exam: cur.nextExam !== null && cur.nextExam.date.getTime() === shown.getTime() };
   });
   const clashes = findClashes(

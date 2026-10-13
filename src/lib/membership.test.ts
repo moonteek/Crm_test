@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { allowedActions, applyEvent, menuActions, statusAfter, systemLeaveDate, type EventType } from "./membership";
+import { allowedActions, applyEvent, menuActions, statusAfter, statusOn, systemLeaveDate, type EventType } from "./membership";
 
 const day = (n: number) => new Date(Date.UTC(2026, 10, n));
 const history = (...types: EventType[]) => types.map((type, i) => ({ type, date: day(i + 1) }));
@@ -71,4 +71,19 @@ test("the menu offers activation only to trial students; left members re-join vi
 test("finishing a group never dates the leave before a member's last step", () => {
   assert.deepEqual(systemLeaveDate([{ date: day(20) }], day(10)), day(20));
   assert.deepEqual(systemLeaveDate([{ date: day(2) }], day(10)), day(10));
+});
+
+test("statusOn: the status a member had on a given day", () => {
+  const u = (s: string) => new Date(`${s}T00:00:00Z`);
+  const events = [
+    { type: "TRIAL" as const, date: u("2026-11-02") },
+    { type: "ACTIVATE" as const, date: u("2026-11-04") },
+    { type: "FREEZE" as const, date: u("2026-11-09") },
+    { type: "UNFREEZE" as const, date: u("2026-11-16") },
+  ];
+  assert.equal(statusOn(events, u("2026-11-01")), null); // not joined yet
+  assert.equal(statusOn(events, u("2026-11-02")), "TRIAL");
+  assert.equal(statusOn(events, u("2026-11-06")), "ACTIVE");
+  assert.equal(statusOn(events, u("2026-11-11")), "FROZEN");
+  assert.equal(statusOn(events, u("2026-11-16")), "ACTIVE");
 });
