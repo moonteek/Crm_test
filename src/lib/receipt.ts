@@ -36,7 +36,7 @@ const settingsSchema = z.object({
   showLogo: fallback(z.boolean(), true),
   logo: fallback(z.string().nullable(), null),
   lines: fallback(
-    z.object(Object.fromEntries(RECEIPT_LINES.map((l) => [l, fallback(z.boolean(), true)])) as Record<ReceiptLine, z.ZodType<boolean>>),
+    z.object(Object.fromEntries(RECEIPT_LINES.map((l) => [l, fallback(z.boolean(), true)])) as { [K in ReceiptLine]: z.ZodCatch<z.ZodBoolean> }),
     RECEIPT_DEFAULTS.lines,
   ),
 });
