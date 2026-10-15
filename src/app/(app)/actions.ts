@@ -30,6 +30,8 @@ import { fillPresent, MARK_KEYS, markWrite, type MarkKey } from "@/lib/attendanc
 import { COURSE_COLORS } from "@/lib/timetable";
 import { logoProblem, RECEIPT_LINES, type ReceiptLine } from "@/lib/receipt";
 import { getReceiptSettings, saveReceiptSettings } from "@/lib/receipt-db";
+import { teacherFormSchema } from "@/lib/teacher-profile";
+import { imageProblem } from "@/lib/image";
 import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, fitsDay, groupClashes, needsClashCheck, teacherGrid, type DayType, type LessonLike } from "@/lib/availability";
 import { check, parseForm, v } from "@/lib/validation";
 import { phoneKey } from "@/lib/phone";
@@ -1564,6 +1566,55 @@ export async function saveReceipt(_: MemberActionState, f: FormData): Promise<Me
     });
     await logAction(user, "settings.receipt", "Chek sozlamalari o'zgartirildi");
     revalidatePath("/settings/receipt");
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ---------- Teacher form (O'qituvchilar → add / ✏️ edit) ----------
+/**
+ * Adds a teacher (no `id`) or edits one. Photo field: "" keeps the current one, "remove" clears it, else a data URL.
+ * The salary rule is saved only by staff who may manage salaries (same rule and log as the Ish haqi page).
+ */
+export async function saveTeacher(_: MemberActionState, f: FormData): Promise<MemberActionState> {
+  try {
+    const me = await requirePermission("staff.manage");
+    const id = f.get("id") ? check(v.id("O'qituvchi"), f.get("id")) : null;
+    const { password, salaryType, salaryAmount, ...d } = parseForm(teacherFormSchema(id ? "edit" : "create"), f);
+    await assertPhoneFree(d.phone, id ?? undefined);
+    const upload = String(f.get("photo") ?? "");
+    let photo: string | null | undefined; // undefined = unchanged
+    if (upload === "remove") photo = null;
+    else if (upload) {
+      const problem = imageProblem(upload, "Rasm");
+      if (problem) return { error: problem };
+      photo = upload;
+    }
+    const salary = can(me, "salaries.manage") ? { salaryType, salaryAmount: salaryType === "NONE" ? 0 : salaryAmount } : {};
+    const data = { ...d, isTeacher: true, ...salary, ...(photo !== undefined ? { photo } : {}) };
+
+    if (!id) {
+      const created = await db.user.create({ data: { ...data, password: await bcrypt.hash(password!, 10) }, include: { role: true } });
+      await logAction(me, "staff.create", `Yangi o'qituvchi: ${created.name} (${created.role.name})`);
+    } else {
+      const before = await db.user.findUniqueOrThrow({ where: { id }, include: { role: true } });
+      if (id === me.id && before.roleId !== d.roleId) return { error: "O'z rolingizni o'zgartira olmaysiz" };
+      if (id !== me.id) await assertNotLastAdmin(id, d.roleId);
+      const updated = await db.user.update({
+        where: { id }, data: { ...data, ...(password ? { password: await bcrypt.hash(password, 10) } : {}) }, include: { role: true },
+      });
+      if (before.roleId !== updated.roleId) await logAction(me, "staff.role", `${updated.name}: rol ${before.role.name} → ${updated.role.name}`);
+      if (password) await logAction(me, "staff.password", `${updated.name} paroli o'zgartirildi`);
+      if ("salaryType" in salary && (before.salaryType !== updated.salaryType || before.salaryAmount !== updated.salaryAmount)) {
+        const t = updated.salaryType;
+        await logAction(me, "salary.rule", `${updated.name} ish haqi qoidasi: ${SALARY_TYPES[t].label}${t === "NONE" ? "" : ` — ${updated.salaryAmount} ${SALARY_TYPES[t].unit}`}`);
+      }
+      await logAction(me, "staff.update", `O'qituvchi ma'lumotlari o'zgartirildi: ${updated.name}`);
+    }
+    revalidatePath("/teachers");
+    revalidatePath("/settings");
+    revalidatePath("/salaries");
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };

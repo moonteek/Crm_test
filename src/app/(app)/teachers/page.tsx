@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { CalendarClock, Phone, Plus } from "lucide-react";
+import { CalendarClock, Pencil, Phone, Plus } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
 import { can } from "@/lib/access";
 import { Modal } from "@/components/Modal";
-import { Empty, Field, PageHeader, SubmitRow } from "@/components/ui";
-import { createUser } from "../actions";
+import { Empty, PageHeader } from "@/components/ui";
+import { TeacherForm } from "@/components/TeacherForm";
+import { ageText, STAFF_GENDERS } from "@/lib/teacher-profile";
 import { ExportButtons } from "@/components/ExportButtons";
 import { centreToday } from "@/lib/schedule";
 import { DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, HOURS, teacherGrid, todayDayType, type Cell, type DayType } from "@/lib/availability";
@@ -36,26 +37,18 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
   const lessons = activeGroups.map((g) => ({ ...g, minutes: g.course.lessonMin }));
   const weeks = teachers.map((t) => ({ t, row: teacherGrid(t.id, lessons, slots.filter((s) => s.userId === t.id))[day] }));
   const at = (states: Cell["state"][]) => weeks.filter((w) => states.includes(w.row.get(hour)!.state));
-  const roles = can(user, "staff.manage") ? await db.role.findMany({ orderBy: { name: "asc" } }) : [];
+  const manage = can(user, "staff.manage");
+  const canSalary = can(user, "salaries.manage");
+  const roles = manage ? (await db.role.findMany({ orderBy: { name: "asc" } })).map((r) => ({ id: r.id, name: r.name })) : [];
+  const today = new Date();
 
   return (
     <>
       <PageHeader title="O'qituvchilar" subtitle={`${teachers.length} ta o'qituvchi`}>
         <ExportButtons href="/teachers/export" />
-        {can(user, "staff.manage") && (
-          <Modal title="Yangi o'qituvchi" trigger={<><Plus className="h-4 w-4" /> O&apos;qituvchi qo&apos;shish</>}>
-            <form action={createUser} className="space-y-3">
-              <input type="hidden" name="isTeacher" value="on" />
-              <Field label="Rol">
-                <select name="roleId" className="input" defaultValue={teacherRole?.id}>
-                  {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                </select>
-              </Field>
-              <Field label="Ism familiya"><input name="name" className="input" required /></Field>
-              <Field label="Telefon (login)"><input name="phone" className="input" required /></Field>
-              <Field label="Parol"><input name="password" type="password" className="input" required minLength={6} /></Field>
-              <SubmitRow />
-            </form>
+        {manage && (
+          <Modal title="Yangi o'qituvchi qo'shish" trigger={<><Plus className="h-4 w-4" /> O&apos;qituvchi qo&apos;shish</>}>
+            <TeacherForm roles={roles} defaultRoleId={teacherRole?.id} canSalary={canSalary} />
           </Modal>
         )}
       </PageHeader>
@@ -63,12 +56,28 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
         {teachers.map((t) => (
           <div key={t.id} className="card p-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent-tint text-lg font-semibold text-accent-ink">{t.name.charAt(0)}</div>
-              <div className="min-w-0">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-accent-tint text-lg font-semibold text-accent-ink">
+                {/* eslint-disable-next-line @next/next/no-img-element -- a data URL from the database */}
+                {t.photo ? <img src={t.photo} alt="" className="h-full w-full object-cover" /> : t.name.charAt(0)}
+              </div>
+              <div className="min-w-0 flex-1">
                 <p className="truncate font-semibold">{t.name}</p>
-                <p className="text-xs text-muted">{t.role.name}</p>
+                <p className="text-xs text-muted">
+                  {[t.role.name, t.gender ? STAFF_GENDERS[t.gender] : null, t.birthDate ? ageText(t.birthDate, today) : null].filter(Boolean).join(" · ")}
+                </p>
                 <a href={`tel:${t.phone}`} className="flex items-center gap-1 text-sm text-muted hover:underline"><Phone className="h-3.5 w-3.5" />{t.phone}</a>
               </div>
+              {manage && (
+                <Modal title={`Tahrirlash — ${t.name}`} triggerClassName="btn-ghost self-start px-2" trigger={<Pencil className="h-4 w-4" aria-label={`${t.name} — tahrirlash`} />}>
+                  <TeacherForm
+                    roles={roles} canSalary={canSalary}
+                    teacher={{
+                      id: t.id, name: t.name, phone: t.phone, roleId: t.roleId, gender: t.gender, birthDate: t.birthDate ? t.birthDate.toISOString().slice(0, 10) : null,
+                      photo: t.photo, telegramChatId: t.telegramChatId, note: t.note, salaryType: t.salaryType, salaryAmount: t.salaryAmount,
+                    }}
+                  />
+                </Modal>
+              )}
             </div>
             <div className="mt-4 flex gap-4 text-sm">
               <p><span className="font-bold">{t.groups.length}</span> <span className="text-muted">guruh</span></p>
