@@ -750,7 +750,18 @@ const paymentSchema = z.object({
   month: z.preprocess((x) => (typeof x === "string" && /^\d{4}-\d{2}$/.test(x) ? new Date(`${x}-01T00:00:00Z`) : null), z.date().nullable()),
 });
 
-export async function createPayment(f: FormData) {
+/** The payment dialog's result: the new payment (for "Chek chiqarish"), or why it wasn't saved. */
+export type PaymentState = { error?: string; paymentId?: number; amount?: number } | null;
+
+export async function createPayment(_: PaymentState, f: FormData): Promise<PaymentState> {
+  try {
+    return await takePayment(f);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+async function takePayment(f: FormData): Promise<PaymentState> {
   const user = await requirePermission("payments.create");
   const d = parseForm(paymentSchema, f);
   await assertStudentAccess(user, d.studentId);
@@ -768,6 +779,7 @@ export async function createPayment(f: FormData) {
   await logAction(user, "payment.create", `To'lov: ${payment.student.name} — ${money(payment.amount)}`, { studentId: payment.studentId });
   revalidatePath(`/students/${d.studentId}`);
   revalidatePath("/payments");
+  return { paymentId: payment.id, amount: payment.amount };
 }
 
 const snapshot = (p: { amount: number; method: string; date: Date; month: Date | null; note: string | null }) => ({

@@ -86,3 +86,16 @@ test("the settings preview has a sample payment", () => {
   assert.ok(SAMPLE_RECEIPT.amount > 0);
   assert.ok(receiptText(RECEIPT_DEFAULTS, SAMPLE_RECEIPT).rows.length > 0);
 });
+
+test("PDF: one page as wide as the paper (80 mm / 58 mm), a real PDF file", async () => {
+  const { PDFDocument } = await import("pdf-lib");
+  const { receiptPdf } = await import("./receipt-pdf");
+  const mm = 72 / 25.4;
+  for (const paper of [80, 58] as const) {
+    const bytes = await receiptPdf({ ...RECEIPT_DEFAULTS, paper }, SAMPLE_RECEIPT, null);
+    assert.equal(new TextDecoder().decode(bytes.slice(0, 4)), "%PDF");
+    const doc = await PDFDocument.load(bytes);
+    assert.equal(doc.getPageCount(), 1);
+    assert.ok(Math.abs(doc.getPage(0).getWidth() - paper * mm) < 0.5, `${paper} mm`);
+  }
+});

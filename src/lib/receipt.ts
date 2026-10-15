@@ -130,3 +130,6 @@ export function logoProblem(dataUrl: string): string | null {
   const bytes = Math.floor((b64.length * 3) / 4) - (b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0);
   return bytes > LOGO_MAX ? "Logotip 300 KB dan katta" : null;
 }
+
+/** The built-in logo (the Algoritm mark in black) used until one is uploaded. */
+export const DEFAULT_LOGO = "/receipt-logo.png";

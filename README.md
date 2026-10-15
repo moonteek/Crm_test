@@ -166,6 +166,11 @@ o'zgarmaydi. "Menejer" rolida "Chegirma berish" ruxsatini Rollar sahifasida bir 
 tugmasi sahifada ko'rinib turgan ma'lumotni (filtrlar bilan, barcha sahifalari) .xlsx qilib yuklaydi; "Google Sheets"
 tugmasi shu jadvalni nusxalaydi — Google Sheets'da Ctrl+V bosing.
 
+**Chek:** to'lov saqlangach "Chek chiqarish" (chek printeriga, 80 yoki 58 mm) yoki "PDF yuklab olish". Har bir
+to'lov yonidagi 🧾 belgisi chekni istalgan vaqtda qayta ochadi; To'lovlar sahifasida "Chek №" bo'yicha topish mumkin.
+Ko'rinishi Sozlamalar → Chek'da (markaz nomi, telefon, manzil, logotip, qaysi qatorlar). Yangilangandan keyin
+`npm install` va `npm run db:push`. Chop etishda printer sozlamasida qog'oz o'lchamini rulon (80/58 mm) qilib tanlang.
+
 **Dars jadvali:** kompyuterda "Gorizontal" ko'rinish — xonalar pastga, 08:00–22:00 soatlar yon tomonga; har bir dars
 o'z vaqtida kartochka (guruh, kurs, o'qituvchi, vaqt, o'quvchilar / o'rinlar, o'tilgan darslar, daraja). "Vertikal"
 — avvalgi jadval; telefonda ro'yxat. Kartochka rangi kursdan: Kurslar → tahrirlash → "Rang" (tanlanmasa avtomatik).

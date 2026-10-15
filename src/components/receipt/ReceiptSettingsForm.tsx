@@ -2,11 +2,10 @@
 
 import { startTransition, useActionState, useState } from "react";
 import { saveReceipt, type MemberActionState } from "@/app/(app)/actions";
-import { logoProblem, RECEIPT_LINE_LABEL, RECEIPT_LINES, SAMPLE_RECEIPT, type ReceiptSettings } from "@/lib/receipt";
+import { DEFAULT_LOGO, logoProblem, RECEIPT_LINE_LABEL, RECEIPT_LINES, SAMPLE_RECEIPT, type ReceiptSettings } from "@/lib/receipt";
 import { Field } from "../ui";
 import { ReceiptView } from "./ReceiptView";
 
-export const DEFAULT_LOGO = "/receipt-logo.png";
 
 /** Chek sozlamalari: the form on the left, the receipt it makes (with a sample payment) on the right, live. */
 export function ReceiptSettingsForm({ saved }: { saved: ReceiptSettings }) {
