@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { money } from "./format";
-import { logoProblem, parseReceiptSettings, RECEIPT_DEFAULTS, receiptText, SAMPLE_RECEIPT, type ReceiptData } from "./receipt";
+import { logoProblem, parseReceiptSettings, RECEIPT_DEFAULTS, receiptLayout, receiptText, SAMPLE_RECEIPT, type ReceiptData } from "./receipt";
 
 const data: ReceiptData = {
   id: 1234, date: new Date("2026-10-12T00:00:00Z"), recordedAt: new Date("2026-10-12T03:54:00Z"),
@@ -40,7 +40,8 @@ test("receipt: every line in order, values in words, total and footer", () => {
   assert.equal(value(r.rows, "To'lov turi"), "Karta");
   assert.deepEqual(r.total, ["Jami:", money(200_000)]);
   assert.equal(r.footer, "Rahmat!");
-  assert.deepEqual(r.header, ["Algoritm"]);
+  assert.deepEqual(r.title, ["Algoritm"]);
+  assert.deepEqual(r.header, []);
 });
 
 test("receipt: hidden lines are left out; the total can't be hidden; contacts in the header", () => {
@@ -49,7 +50,8 @@ test("receipt: hidden lines are left out; the total can't be hidden; contacts in
   assert.ok(!labels(r.rows).includes("O'qituvchi"));
   assert.ok(!labels(r.rows).includes("Chek №"));
   assert.deepEqual(r.total, ["Jami:", money(200_000)]);
-  assert.deepEqual(r.header, ["Algoritm", "+998 90 123 45 67", "Toshkent"]);
+  assert.deepEqual(r.title, ["Algoritm"]);
+  assert.deepEqual(r.header, ["+998 90 123 45 67", "Toshkent"]);
 });
 
 test("receipt: no month → no month line; no group, teacher or taker → a dash", () => {
@@ -69,7 +71,7 @@ test("receipt: characters per line by paper; long values wrap and never overflow
   assert.ok(r.rows.every(([l, v]) => l.length + 1 + v.length <= 32), JSON.stringify(r.rows));
   const start = r.rows.findIndex(([l]) => l === "O'quvchi");
   let joined = r.rows[start][1];
-  for (let i = start + 1; i < r.rows.length && r.rows[i][0] === ""; i++) joined += r.rows[i][1];
+  for (let i = start + 1; i < r.rows.length && r.rows[i][0] === ""; i++) joined += " " + r.rows[i][1];
   assert.equal(joined, name);
 });
 
@@ -98,4 +100,45 @@ test("PDF: one page as wide as the paper (80 mm / 58 mm), a real PDF file", asyn
     assert.equal(doc.getPageCount(), 1);
     assert.ok(Math.abs(doc.getPage(0).getWidth() - paper * mm) < 0.5, `${paper} mm`);
   }
+});
+
+test("header: a long centre name and address wrap to the paper (name is printed larger)", () => {
+  const name = "Algoritm o'quv markazi Chilonzor filiali";
+  const address = "Toshkent sh., Chilonzor tumani, 1-mavze, 15-uy";
+  for (const paper of [80, 58] as const) {
+    const r = receiptText({ ...RECEIPT_DEFAULTS, paper, name, address }, data);
+    const titleWidth = Math.floor(r.width / 1.3);
+    assert.ok(r.title.every((l) => l.length <= titleWidth), `${paper}: ${JSON.stringify(r.title)}`);
+    assert.ok(r.header.every((l) => l.length <= r.width), `${paper}: ${JSON.stringify(r.header)}`);
+    assert.equal(r.title.join(" "), name);
+    assert.equal(r.header.join(" "), address);
+  }
+});
+
+test("wrapped values carry no trailing space", () => {
+  const r = receiptText({ ...RECEIPT_DEFAULTS, paper: 58 }, { ...data, student: "Abdulazizbek Muhammadqodirov Ikromjon o'g'li" });
+  assert.ok(r.rows.every(([, v]) => v === v.trimEnd()), JSON.stringify(r.rows));
+});
+
+test("layout: the font fits a full line in the paper, and the page is exactly as tall as the lines", () => {
+  for (const paper of [80, 58] as const) {
+    const s = { ...RECEIPT_DEFAULTS, paper };
+    const r = receiptText(s, data);
+    const l = receiptLayout(s, r);
+    assert.ok(l.fontMm * 0.6 * r.width <= paper - 2 * l.padMm + 0.01, `${paper}: font ${l.fontMm}`);
+    const more = receiptLayout(s, { ...r, rows: [...r.rows, ["X", "Y"]] });
+    assert.ok(Math.abs(more.heightMm - l.heightMm - l.lineMm) < 0.01);
+    const twoLineTitle = receiptLayout(s, { ...r, title: [...r.title, "B"] });
+    assert.ok(Math.abs(twoLineTitle.heightMm - l.heightMm - 1.3 * l.lineMm) < 0.01);
+    const noLogo = receiptLayout({ ...s, showLogo: false }, r);
+    assert.ok(Math.abs(l.heightMm - noLogo.heightMm - 20) < 0.01);
+  }
+});
+
+test("PDF: Cyrillic and Uzbek letters keep their glyphs (Unicode font embedded, not '?')", async () => {
+  const { receiptPdf } = await import("./receipt-pdf");
+  const bytes = await receiptPdf(RECEIPT_DEFAULTS, { ...data, student: "Иванов Иван", group: "Qoʻshimcha №2" }, null);
+  const text = new TextDecoder("latin1").decode(bytes);
+  assert.ok(text.includes("DejaVuSansMono"), "DejaVu Sans Mono embedded");
+  assert.ok(!text.includes("/BaseFont /Courier"), "no Latin-1-only Courier");
 });

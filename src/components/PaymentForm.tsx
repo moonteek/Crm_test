@@ -1,8 +1,8 @@
 "use client";
 
-import { startTransition, useActionState, useState } from "react";
-import { CheckCircle2, Download, Printer } from "lucide-react";
-import { createPayment, type PaymentState } from "@/app/(app)/actions";
+import { useRef, useState, useTransition } from "react";
+import { createPayment } from "@/app/(app)/actions";
+import { announcePayment } from "./receipt/ReceiptOffer";
 import { isoDate, money, PAYMENT_METHODS } from "@/lib/format";
 import { defaultAmount, monthOptions } from "@/lib/payments";
 import { Field } from "./ui";
@@ -19,32 +19,27 @@ export function PaymentForm({ studentId, groups, balance }: { studentId: number;
   const [amount, setAmount] = useState(String(defaultAmount(balance ?? 0, price)));
   const [touched, setTouched] = useState(false);
   const months = monthOptions(new Date());
-  const [state, run, pending] = useActionState<PaymentState, FormData>(createPayment, null);
-
-  // saved: offer the receipt. "Yopish" submits an empty form on purpose — the dialog around closes on a submit.
-  if (state?.paymentId) {
-    return (
-      <div className="space-y-4 text-center">
-        <CheckCircle2 className="mx-auto h-10 w-10 text-success" />
-        <p className="text-lg font-semibold">To&apos;lov saqlandi — {money(state.amount ?? 0)}</p>
-        <div className="flex flex-wrap justify-center gap-2">
-          <a href={`/payments/${state.paymentId}/receipt?print=1`} target="_blank" rel="noopener" className="btn-primary"><Printer className="h-4 w-4" /> Chek chiqarish</a>
-          <a href={`/payments/${state.paymentId}/receipt/pdf`} download className="btn-ghost border border-line"><Download className="h-4 w-4" /> PDF yuklab olish</a>
-        </div>
-        <form onSubmit={(e) => e.preventDefault()}><button type="submit" className="btn-ghost">Yopish</button></form>
-      </div>
-    );
-  }
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const closer = useRef<HTMLFormElement>(null);
 
   return (
+    <>
     <form
       className="space-y-3"
       onSubmit={(e) => {
-        // keep the dialog open for the receipt: the submit must not reach the dialog, which closes on one
+        // the dialog around closes on a submit: hold it until the payment is saved (or refused)
         e.preventDefault();
         e.stopPropagation();
         const data = new FormData(e.currentTarget);
-        startTransition(() => run(data));
+        start(async () => {
+          setError(null);
+          const res = await createPayment(null, data);
+          if (!res?.paymentId) return setError(res?.error ?? "To'lov saqlanmadi");
+          // the receipt offer lives in the app layout: on the debtors page this row may vanish as the page refreshes
+          announcePayment({ paymentId: res.paymentId, amount: res.amount ?? 0 });
+          closer.current?.requestSubmit(); // an empty submit that reaches the dialog and closes it
+        });
       }}
     >
       <input type="hidden" name="studentId" value={studentId} />
@@ -87,10 +82,12 @@ export function PaymentForm({ studentId, groups, balance }: { studentId: number;
         </Field>
       </div>
       <Field label="Izoh"><input name="note" className="input" /></Field>
-      {state?.error && <p className="rounded-xl bg-danger-tint px-3 py-2 text-sm text-danger">{state.error}</p>}
+      {error && <p className="rounded-xl bg-danger-tint px-3 py-2 text-sm text-danger">{error}</p>}
       <div className="flex justify-end pt-2">
         <button type="submit" className="btn-primary" disabled={pending}>{pending ? "Saqlanmoqda..." : "To'lovni qabul qilish"}</button>
       </div>
     </form>
+    <form ref={closer} onSubmit={(e) => e.preventDefault()} hidden />
+    </>
   );
 }

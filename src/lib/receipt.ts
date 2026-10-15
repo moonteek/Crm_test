@@ -73,15 +73,15 @@ export const receiptWidth = (paper: 80 | 58) => (paper === 58 ? 32 : 48);
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** Splits `text` so its first piece fits `first` characters and the rest fit `rest`, at spaces where possible. */
+/** Splits `text` so its first piece fits `first` characters and the rest fit `rest`, at spaces where possible (no trailing spaces). */
 function wrap(text: string, first: number, rest: number): string[] {
   const out: string[] = [];
   let left = text;
   let room = first;
   while (left.length > room) {
     const space = left.lastIndexOf(" ", room - 1);
-    const cut = space > 0 ? space + 1 : room; // keep the space with the earlier piece
-    out.push(left.slice(0, cut));
+    const cut = space > 0 ? space + 1 : room;
+    out.push(left.slice(0, cut).trimEnd());
     left = left.slice(cut);
     room = rest;
   }
@@ -89,7 +89,13 @@ function wrap(text: string, first: number, rest: number): string[] {
   return out;
 }
 
-/** The receipt as plain text: header lines, [label, value] rows (a long value continues on rows with label ""), total. */
+/** The centre name prints 1.3× larger, so fewer characters fit on its lines. */
+export const TITLE_SCALE = 1.3;
+
+/**
+ * The receipt as plain text: the centre name (`title`) and contact lines (`header`), both wrapped to the paper;
+ * [label, value] rows (a long value continues on rows with label ""); the total.
+ */
 export function receiptText(s: ReceiptSettings, d: ReceiptData) {
   const width = receiptWidth(s.paper);
   const t = centreToday(d.recordedAt);
@@ -112,12 +118,29 @@ export function receiptText(s: ReceiptSettings, d: ReceiptData) {
     rows.push([label, head], ...more.map((v): [string, string] => ["", v]));
   }
   return {
-    header: [s.name, s.phone, s.address].filter(Boolean),
+    title: wrap(s.name, Math.floor(width / TITLE_SCALE), Math.floor(width / TITLE_SCALE)),
+    header: [s.phone, s.address].filter(Boolean).flatMap((h) => wrap(h, width, width)),
     rows,
     total: ["Jami:", money(d.amount)] as [string, string],
     footer: "Rahmat!",
     width,
   };
+}
+
+/**
+ * Sizes on the roll (mm), shared by the print page and the PDF so both match the text: the font that fits one full
+ * line of characters (monospace, 0.6 em wide) and the page height for exactly these lines (no blank paper fed).
+ */
+export function receiptLayout(s: ReceiptSettings, r: Pick<ReturnType<typeof receiptText>, "title" | "header" | "rows" | "width">) {
+  const padMm = 3; // left and right
+  const padY = 4; // top and bottom
+  const fontMm = ((s.paper - 2 * padMm) / (r.width * 0.6)) * 0.97; // a little room for font metrics
+  const lineMm = fontMm * 1.45;
+  const logoMm = s.showLogo ? 18 + 2 : 0; // image up to 18 mm high, then 2 mm
+  const heightMm =
+    2 * padY + logoMm + r.title.length * TITLE_SCALE * lineMm + r.header.length * lineMm
+    + 2 * lineMm /* the two dashed rules */ + r.rows.length * lineMm + 1.2 * lineMm /* total */ + 3 + lineMm /* footer */ + 2;
+  return { padMm, padY, fontMm, lineMm, heightMm };
 }
 
 const LOGO_MAX = 300 * 1024;
