@@ -562,3 +562,10 @@ model LessonChange {
   @@unique([groupId, date, kind, role])
   @@index([date])
 }
+
+// Centre-wide settings as JSON by key (e.g. "receipt": Chek sozlamalari, see src/lib/receipt.ts).
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

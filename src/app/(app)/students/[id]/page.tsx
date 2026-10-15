@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Pencil, Phone, Pin, Plus, Tags, Trash2, Wallet } from "lucide-react";
+import { Pencil, Phone, Pin, Plus, Tags, Trash2, Wallet, ReceiptText } from "lucide-react";
 import { db } from "@/lib/db";
 import { centreDay } from "@/lib/membership-db";
 import { requirePage } from "@/lib/auth";
@@ -290,7 +290,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
             </div>
             <div className="md:overflow-x-auto">
               <table className="table table-stack">
-                <thead><tr><th>Sana</th><th>Amal</th><th>Guruh</th><th className="text-right">Summa</th>{allow.balance && <th className="text-right">Balans</th>}{allow.deletePayment && <th></th>}</tr></thead>
+                <thead><tr><th>Sana</th><th>Amal</th><th>Guruh</th><th className="text-right">Summa</th>{allow.balance && <th className="text-right">Balans</th>}<th></th></tr></thead>
                 <tbody>
                   {rows.map((r, i) => (
                     <tr key={i}>
@@ -304,15 +304,18 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
                         {r.amount === 0 ? "—" : `${r.amount > 0 ? "+" : "−"}${money(Math.abs(r.amount))}`}
                       </td>
                       {allow.balance && <td data-label="Balans" className="text-right font-mono text-xs">{money(r.balance)}</td>}
-                      {allow.deletePayment && (
-                        <td>
-                          {r.paymentId && (
-                            <form action={deletePayment.bind(null, r.paymentId)}>
-                              <button className="text-faint hover:text-danger" aria-label="To'lovni o'chirish"><Trash2 className="h-4 w-4" /></button>
-                            </form>
-                          )}
-                        </td>
-                      )}
+                      <td>
+                        {r.paymentId && (
+                          <div className="flex items-center gap-2">
+                            <Link href={`/payments/${r.paymentId}/receipt`} target="_blank" className="text-faint hover:text-ink" title={`Chek № ${r.paymentId}`} aria-label={`Chek № ${r.paymentId}`}><ReceiptText className="h-4 w-4" /></Link>
+                            {allow.deletePayment && (
+                              <form action={deletePayment.bind(null, r.paymentId)}>
+                                <button className="text-faint hover:text-danger" aria-label="To'lovni o'chirish"><Trash2 className="h-4 w-4" /></button>
+                              </form>
+                            )}
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

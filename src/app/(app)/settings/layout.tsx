@@ -6,7 +6,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
   const user = await requireUser();
   const tabs = [
     ...(can(user, "staff.manage")
-      ? [{ href: "/settings", label: "Xodimlar" }, { href: "/settings/roles", label: "Rollar va ruxsatlar" }, { href: "/settings/reasons", label: "Sabablar" }]
+      ? [{ href: "/settings", label: "Xodimlar" }, { href: "/settings/roles", label: "Rollar va ruxsatlar" }, { href: "/settings/reasons", label: "Sabablar" }, { href: "/settings/receipt", label: "Chek" }]
       : []),
     ...(can(user, "students.tags") ? [{ href: "/settings/tags", label: "Teglar" }] : []),
     ...(can(user, "holidays.manage") ? [{ href: "/settings/holidays", label: "Bayram kunlari" }] : []),

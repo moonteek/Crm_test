@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, useTransition } from "react";
 import { createPayment } from "@/app/(app)/actions";
+import { announcePayment } from "./receipt/ReceiptOffer";
 import { isoDate, money, PAYMENT_METHODS } from "@/lib/format";
 import { defaultAmount, monthOptions } from "@/lib/payments";
-import { Field, SubmitRow } from "./ui";
+import { Field } from "./ui";
 
 export type PaymentGroup = { id: number; name: string; price: number };
 
@@ -18,9 +19,29 @@ export function PaymentForm({ studentId, groups, balance }: { studentId: number;
   const [amount, setAmount] = useState(String(defaultAmount(balance ?? 0, price)));
   const [touched, setTouched] = useState(false);
   const months = monthOptions(new Date());
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const closer = useRef<HTMLFormElement>(null);
 
   return (
-    <form action={createPayment} className="space-y-3">
+    <>
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        // the dialog around closes on a submit: hold it until the payment is saved (or refused)
+        e.preventDefault();
+        e.stopPropagation();
+        const data = new FormData(e.currentTarget);
+        start(async () => {
+          setError(null);
+          const res = await createPayment(null, data);
+          if (!res?.paymentId) return setError(res?.error ?? "To'lov saqlanmadi");
+          // the receipt offer lives in the app layout: on the debtors page this row may vanish as the page refreshes
+          announcePayment({ paymentId: res.paymentId, amount: res.amount ?? 0 });
+          closer.current?.requestSubmit(); // an empty submit that reaches the dialog and closes it
+        });
+      }}
+    >
       <input type="hidden" name="studentId" value={studentId} />
       <Field label="Guruh">
         <select
@@ -61,7 +82,12 @@ export function PaymentForm({ studentId, groups, balance }: { studentId: number;
         </Field>
       </div>
       <Field label="Izoh"><input name="note" className="input" /></Field>
-      <SubmitRow text="To'lovni qabul qilish" />
+      {error && <p className="rounded-xl bg-danger-tint px-3 py-2 text-sm text-danger">{error}</p>}
+      <div className="flex justify-end pt-2">
+        <button type="submit" className="btn-primary" disabled={pending}>{pending ? "Saqlanmoqda..." : "To'lovni qabul qilish"}</button>
+      </div>
     </form>
+    <form ref={closer} onSubmit={(e) => e.preventDefault()} hidden />
+    </>
   );
 }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Search, Trash2 } from "lucide-react";
+import { Search, Trash2, ReceiptText } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
 import { can, groupScope } from "@/lib/access";
@@ -7,6 +7,8 @@ import { date, money, MONTHS, PAYMENT_METHODS } from "@/lib/format";
 import { Empty, PageHeader } from "@/components/ui";
 import { ExportButtons } from "@/components/ExportButtons";
 import { PaymentEditDialog } from "@/components/PaymentEditDialog";
+import { redirect } from "next/navigation";
+import { receiptDataFor } from "@/lib/receipt-db";
 import { loadPayments } from "@/lib/lists/payments";
 import { deletePayment } from "../actions";
 
@@ -17,6 +19,12 @@ const stamp = (d: Date) => `${date(d)} ${d.toLocaleTimeString("en-GB", { timeZon
 export default async function PaymentsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await requirePage("payments.view");
   const params = await searchParams;
+  // "Chek №": open that payment's receipt, if it exists and this user may see it
+  const lookup = params.chek?.trim();
+  if (lookup) {
+    const found = /^\d+$/.test(lookup) ? await receiptDataFor(user, Number(lookup)) : null;
+    if (found) redirect(`/payments/${found.id}/receipt`);
+  }
   const [{ filters: f, payments, total }, groups, teachers, staff] = await Promise.all([
     loadPayments(user, params),
     db.group.findMany({ where: groupScope(user), select: { id: true, name: true }, orderBy: { name: "asc" } }),
@@ -38,6 +46,15 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       <PageHeader title="To'lovlar" subtitle={`Jami: ${money(total)} / ${payments.length} ta`}>
         <ExportButtons href="/payments/export" />
       </PageHeader>
+
+      <form className="mb-3 flex max-w-sm items-center gap-2" aria-label="Chekni topish">
+        <div className="relative flex-1">
+          <ReceiptText className="absolute top-3 left-3.5 h-4 w-4 text-faint" />
+          <input name="chek" inputMode="numeric" defaultValue={lookup} placeholder="Chek № (masalan 1234)" className="input pl-10" aria-label="Chek raqami" />
+        </div>
+        <button className="btn-secondary">Ochish</button>
+      </form>
+      {lookup && <p className="mb-3 rounded-xl bg-danger-tint px-3 py-2 text-sm text-danger">Chek topilmadi: № {lookup}</p>}
 
       <form className="card mb-4 grid grid-cols-2 gap-2 p-4 md:grid-cols-4 xl:grid-cols-8" aria-label="Filtrlar">
         <label className="text-xs text-muted">Dan<input type="date" name="from" defaultValue={iso(f.from)} className="input mt-1" /></label>
@@ -80,7 +97,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
 
       <div className="card md:overflow-x-auto">
         <table className="table table-stack">
-          <thead><tr><th>Sana</th><th>O&apos;quvchi</th><th>Guruh</th><th>Summa</th><th>Turi</th><th>Qaysi oy</th><th>Hodim</th><th>Izoh</th>{(allow.edit || allow.remove) && <th></th>}</tr></thead>
+          <thead><tr><th>Sana</th><th>O&apos;quvchi</th><th>Guruh</th><th>Summa</th><th>Turi</th><th>Qaysi oy</th><th>Hodim</th><th>Izoh</th><th></th></tr></thead>
           <tbody>
             {payments.map((p) => (
               <tr key={p.id}>
@@ -97,20 +114,19 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                   ))}
                 </td>
                 <td data-label="Izoh" className="text-muted">{p.note ?? ""}</td>
-                {(allow.edit || allow.remove) && (
-                  <td>
-                    <div className="flex items-center gap-2">
-                      {allow.edit && (
-                        <PaymentEditDialog payment={{ id: p.id, amount: p.amount, method: p.method, date: iso(p.date), month: p.month ? iso(p.month).slice(0, 7) : null, note: p.note, student: p.student.name }} />
-                      )}
-                      {allow.remove && (
-                        <form action={deletePayment.bind(null, p.id)}>
-                          <button className="text-faint hover:text-danger" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
-                        </form>
-                      )}
-                    </div>
-                  </td>
-                )}
+                <td>
+                  <div className="flex items-center gap-2">
+                    <Link href={`/payments/${p.id}/receipt`} target="_blank" className="text-faint hover:text-ink" title={`Chek № ${p.id}`} aria-label={`Chek № ${p.id}`}><ReceiptText className="h-4 w-4" /></Link>
+                    {allow.edit && (
+                      <PaymentEditDialog payment={{ id: p.id, amount: p.amount, method: p.method, date: iso(p.date), month: p.month ? iso(p.month).slice(0, 7) : null, note: p.note, student: p.student.name }} />
+                    )}
+                    {allow.remove && (
+                      <form action={deletePayment.bind(null, p.id)}>
+                        <button className="text-faint hover:text-danger" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
+                      </form>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
