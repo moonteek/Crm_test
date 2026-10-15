@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MONTHS, money, PAYMENT_METHODS } from "./format";
 import { centreToday } from "./schedule";
+import { imageProblem } from "./image";
 
 // Payment receipts ("Chek"): what the settings hold and how one payment becomes the receipt's lines. The settings
 // preview, the print page and the PDF all draw from receiptText(), so they always match.
@@ -143,16 +144,8 @@ export function receiptLayout(s: ReceiptSettings, r: Pick<ReturnType<typeof rece
   return { padMm, padY, fontMm, lineMm, heightMm };
 }
 
-const LOGO_MAX = 300 * 1024;
-
 /** Why an uploaded logo can't be used (null when it's fine): PNG or JPG data URL, up to 300 KB. */
-export function logoProblem(dataUrl: string): string | null {
-  const m = /^data:image\/(png|jpeg|jpg);base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
-  if (!m) return "Faqat PNG yoki JPG";
-  const b64 = m[2];
-  const bytes = Math.floor((b64.length * 3) / 4) - (b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0);
-  return bytes > LOGO_MAX ? "Logotip 300 KB dan katta" : null;
-}
+export const logoProblem = (dataUrl: string) => imageProblem(dataUrl, "Logotip");
 
 /** The built-in logo (the Algoritm mark in black) used until one is uploaded. */
 export const DEFAULT_LOGO = "/receipt-logo.png";

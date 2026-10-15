@@ -32,6 +32,13 @@ model User {
   // salary rule: NONE | FIXED (so'm per month) | PERCENT (% of payments collected from own groups) | PER_STUDENT (so'm per active student)
   salaryType   String   @default("NONE")
   salaryAmount Int      @default(0)
+  // teacher profile (O'qituvchilar form): M | F, optional birthday, photo as a PNG/JPG data URL,
+  // Telegram chat for later messages, free note
+  gender         String?
+  birthDate      DateTime?
+  photo          String?
+  telegramChatId String?
+  note           String?
   createdAt DateTime   @default(now())
   groups    Group[]    @relation("GroupTeacher")
   assistedGroups Group[] @relation("GroupAssistant")
