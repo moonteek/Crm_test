@@ -28,6 +28,8 @@ import { canDelete, canEnd, discountProblem, lastMonth } from "@/lib/discounts";
 import { editDiff } from "@/lib/payments";
 import { fillPresent, MARK_KEYS, markWrite, type MarkKey } from "@/lib/attendance";
 import { COURSE_COLORS } from "@/lib/timetable";
+import { logoProblem, RECEIPT_LINES, type ReceiptLine } from "@/lib/receipt";
+import { getReceiptSettings, saveReceiptSettings } from "@/lib/receipt-db";
 import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, fitsDay, groupClashes, needsClashCheck, teacherGrid, type DayType, type LessonLike } from "@/lib/availability";
 import { check, parseForm, v } from "@/lib/validation";
 import { phoneKey } from "@/lib/phone";
@@ -1515,6 +1517,41 @@ export async function saveSubject(_: MemberActionState, f: FormData): Promise<Me
       await syncDuration(s.courseId);
     }
     revalidatePath("/courses");
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+// ---------- Receipts (Sozlamalar → Chek) ----------
+const receiptFormSchema = z.object({
+  name: v.text("Markaz nomi", 60),
+  phone: v.optText(40),
+  address: v.optText(120),
+  paper: z.enum(["80", "58"], { error: "Qog'oz kengligi noto'g'ri" }),
+});
+
+/** Saves Chek sozlamalari. Logo field: "" keeps the current one, "remove" goes back to the built-in, else a data URL. */
+export async function saveReceipt(_: MemberActionState, f: FormData): Promise<MemberActionState> {
+  try {
+    const user = await requirePermission("staff.manage");
+    const d = parseForm(receiptFormSchema, f);
+    const current = await getReceiptSettings();
+    const upload = String(f.get("logo") ?? "");
+    let logo = current.logo;
+    if (upload === "remove") logo = null;
+    else if (upload) {
+      const problem = logoProblem(upload);
+      if (problem) return { error: problem };
+      logo = upload;
+    }
+    await saveReceiptSettings({
+      name: d.name, phone: d.phone ?? "", address: d.address ?? "", paper: d.paper === "58" ? 58 : 80,
+      showLogo: f.get("showLogo") === "on", logo,
+      lines: Object.fromEntries(RECEIPT_LINES.map((l) => [l, f.get(`line_${l}`) === "on"])) as Record<ReceiptLine, boolean>,
+    });
+    await logAction(user, "settings.receipt", "Chek sozlamalari o'zgartirildi");
+    revalidatePath("/settings/receipt");
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
