@@ -49,3 +49,11 @@ test("photo: PNG or JPG up to 300 KB, named in the message", () => {
   const big = "data:image/jpeg;base64," + "A".repeat(Math.ceil((301 * 1024 * 4) / 3));
   assert.equal(imageProblem(big, "Rasm"), "Rasm 300 KB dan katta");
 });
+
+test("photo: the file must really be a PNG or JPG, not just named so", () => {
+  const b64 = (bytes: number[]) => Buffer.from(bytes).toString("base64");
+  assert.equal(imageProblem(`data:image/png;base64,${b64([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])}`, "Rasm"), null);
+  assert.equal(imageProblem(`data:image/jpeg;base64,${b64([0xff, 0xd8, 0xff, 0xe0, 0, 0x10])}`, "Rasm"), null);
+  assert.equal(imageProblem(`data:image/png;base64,${Buffer.from("%PDF-1.7 hello").toString("base64")}`, "Rasm"), "Faqat PNG yoki JPG");
+  assert.equal(imageProblem(`data:image/jpeg;base64,${Buffer.from("just some text").toString("base64")}`, "Rasm"), "Faqat PNG yoki JPG");
+});

@@ -5,6 +5,7 @@ import { Modal } from "@/components/Modal";
 import { Empty, Field, SubmitRow } from "@/components/ui";
 import { TAG_COLORS } from "@/lib/format";
 import { TagChip } from "@/components/students/TagChip";
+import { ActionForm } from "@/components/ActionForm";
 import { createAbsenceReason, createReason, renameReason, toggleAbsenceReason, toggleReason, updateAbsenceReason } from "../../actions";
 
 const COLOR_LABEL: Record<string, string> = { amber: "Sariq", green: "Yashil", red: "Qizil", orange: "To'q sariq", grey: "Kulrang" };
@@ -86,11 +87,10 @@ export default async function ReasonsPage() {
                 <p className="label-mono mt-1">{r.active ? `${r._count.marks} marta tanlangan` : "Yashirilgan"}</p>
               </div>
               <Modal title="Sababni tahrirlash" triggerClassName="btn-ghost px-2" trigger={<Pencil className="h-4 w-4" aria-label="Tahrirlash" />}>
-                <form action={updateAbsenceReason.bind(null, r.id)} className="space-y-3">
+                <ActionForm action={updateAbsenceReason.bind(null, r.id)}>
                   <Field label="Sabab"><input name="name" className="input" defaultValue={r.name} required maxLength={60} /></Field>
                   <Field label="Rang"><ColorSelect value={r.color} /></Field>
-                  <SubmitRow />
-                </form>
+                </ActionForm>
               </Modal>
               <form action={toggleAbsenceReason.bind(null, r.id)}>
                 <button className="btn-ghost px-2" title={r.active ? "Yashirish" : "Qayta yoqish"} aria-label={r.active ? "Yashirish" : "Qayta yoqish"}>

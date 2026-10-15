@@ -47,7 +47,15 @@ export default async function Dashboard() {
   ]);
 
   const holidays = await holidayDays();
-  const todayClosed = holidays.includes(`${today.year}-${String(today.month).padStart(2, "0")}-${String(today.day).padStart(2, "0")}`);
+  const todayIso = `${today.year}-${String(today.month).padStart(2, "0")}-${String(today.day).padStart(2, "0")}`;
+  const todayClosed = holidays.includes(todayIso);
+  // today's lesson changes: a cancelled lesson stays in the list, greyed; a substitute is named
+  const changes = await db.lessonChange.findMany({
+    where: { date: new Date(`${todayIso}T00:00:00Z`), groupId: { in: todayGroups.map((g) => g.id) } },
+    include: { substitute: { select: { name: true } } },
+  });
+  const cancelled = new Map(changes.filter((c) => c.kind === "CANCEL").map((c) => [c.groupId, c.reason ?? ""]));
+  const substituteOf = (groupId: number) => changes.filter((c) => c.kind === "SUBSTITUTE" && c.groupId === groupId).map((c) => c.substitute?.name ?? "—").join(", ");
   // the same count as the Qarzdorlar page (everyone who owes, current and former students)
   const debtors = show.debtors ? (await loadDebtors(user)).debtors.length : 0;
   const income = (monthPayments._sum.amount ?? 0) + (monthShop._sum.total ?? 0);
@@ -101,15 +109,22 @@ export default async function Dashboard() {
                 <Link
                   key={g.id}
                   href={`/groups/${g.id}`}
-                  className="press flex items-center gap-4 rounded-xl border border-line bg-raised px-3.5 py-3 hover:border-line-strong"
+                  className={`press flex items-center gap-4 rounded-xl border border-line bg-raised px-3.5 py-3 hover:border-line-strong ${cancelled.has(g.id) ? "text-faint" : ""}`}
                 >
                   <div className="w-[68px] shrink-0">
                     <p className="font-dot text-xl leading-none font-black">{g.time}</p>
                     <p className="label-mono mt-1">{fromMinutes(toMinutes(g.time) + g.course.lessonMin)}</p>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{g.name}</p>
-                    <p className="truncate text-xs text-muted">{g.course.name} · {g.teacher?.name ?? "O'qituvchi yo'q"} · {g.room?.name ?? "—"}</p>
+                    <p className={`truncate font-medium ${cancelled.has(g.id) ? "line-through" : ""}`}>{g.name}</p>
+                    {cancelled.has(g.id) ? (
+                      <p className="truncate text-xs font-medium text-danger">Bekor qilingan{cancelled.get(g.id) ? `: ${cancelled.get(g.id)}` : ""}</p>
+                    ) : (
+                      <p className="truncate text-xs text-muted">
+                        {g.course.name} · {g.teacher?.name ?? "O'qituvchi yo'q"} · {g.room?.name ?? "—"}
+                        {substituteOf(g.id) && <span className="font-medium text-accent-ink"> · O&apos;rinbosar: {substituteOf(g.id)}</span>}
+                      </p>
+                    )}
                   </div>
                   <div className="hidden shrink-0 flex-col items-end gap-1.5 sm:flex">
                     {g.room && <DotMeter value={g._count.students} max={g.room.capacity} label={`${g._count.students} / ${g.room.capacity} o'rin`} />}

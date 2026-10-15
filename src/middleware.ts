@@ -4,7 +4,11 @@ import { SESSION_COOKIE, verifySession } from "@/lib/session";
 // Cheap signature check only; pages re-check the user (active, permissions) against the database.
 export async function middleware(req: NextRequest) {
   const session = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
-  if (!session && req.nextUrl.pathname !== "/login") return NextResponse.redirect(new URL("/login", req.url));
+  // A server action (a form saved in the background) gets no redirect here: the browser would follow it and get the
+  // login page instead of an answer ("unexpected response"). Every action checks the user itself and sends the
+  // browser to /login properly (requireUser), so an expired session lands on the login page.
+  const action = req.method === "POST" && req.headers.has("next-action");
+  if (!session && !action && req.nextUrl.pathname !== "/login") return NextResponse.redirect(new URL("/login", req.url));
   return NextResponse.next();
 }
 

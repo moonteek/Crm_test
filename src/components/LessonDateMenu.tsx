@@ -6,6 +6,7 @@ import { ArrowLeftRight, Ban, Check, ListChecks, RotateCcw } from "lucide-react"
 import { markAllPresent, removeSubstitute, restoreLesson, setAbsenceReason } from "@/app/(app)/actions";
 import { DialogFrame } from "./Modal";
 import { LessonChangeDialog, PopoverPanel, useLessonGrid, usePopover } from "./lesson-grid";
+import { lessonChangeOpen } from "@/lib/lesson-changes";
 
 type Absent = { studentId: number; name: string; reasonId: number | null };
 const WIDTH = 240;
@@ -34,7 +35,9 @@ export function LessonDateMenu({
   const show = (d: typeof dialog) => { popover.close(); setDialog(d); };
   const item = "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm hover:bg-ink/5";
   // a teacher on a lesson yet to come has nothing to do here: no empty menu
-  const anything = canManage || (cancelled === null && canMark && (past || absent.length > 0));
+  // cancel / substitute (and undo) only from this month on — the server refuses earlier ones
+  const manage = canManage && lessonChangeOpen(new Date(day), new Date());
+  const anything = manage || (cancelled === null && canMark && (past || absent.length > 0));
 
   return (
     <div className="inline-block">
@@ -56,7 +59,7 @@ export function LessonDateMenu({
         {cancelled === null && canMark && absent.length > 0 && (
           <button type="button" className={item} onClick={() => show("reasons")}><ListChecks className="h-4 w-4" /> Kelmaganlik sabablari</button>
         )}
-        {canManage && (cancelled === null ? (
+        {manage && (cancelled === null ? (
           <>
             {substitutes.length === 0 && <button type="button" className={`${item} text-danger`} onClick={() => show("cancel")}><Ban className="h-4 w-4" /> Darsni qoldirish</button>}
             <button type="button" className={item} onClick={() => show("substitute")}><ArrowLeftRight className="h-4 w-4" /> O&apos;qituvchini almashtirish</button>
