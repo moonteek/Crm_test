@@ -64,6 +64,7 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
                 <p className="truncate font-semibold">{t.name}</p>
                 <p className="text-xs text-muted">
                   {[t.role.name, t.gender ? STAFF_GENDERS[t.gender] : null, t.birthDate ? ageText(t.birthDate, today) : null].filter(Boolean).join(" · ")}
+                  {t.telegramChatId && <span className="ml-1.5 font-medium text-success" title="Telegram ulangan">· Telegram ✓</span>}
                 </p>
                 <a href={`tel:${t.phone}`} className="flex items-center gap-1 text-sm text-muted hover:underline"><Phone className="h-3.5 w-3.5" />{t.phone}</a>
               </div>

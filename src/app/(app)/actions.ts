@@ -4,6 +4,10 @@ import bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
+import { after } from "next/server";
+import { notify } from "@/lib/telegram-bot";
+import { telegramClient } from "@/lib/telegram-client";
+import { cancelText, restoreText, salaryText, substituteTexts, substituteUndoText, type Outgoing } from "@/lib/telegram-plan";
 import { teacherOn } from "@/lib/teachers-history";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -1148,6 +1152,13 @@ const lessonChangeSchema = z.object({
 });
 const isoOf = (d: Date) => d.toISOString().slice(0, 10).split("-").reverse().join(".");
 
+/** Telegram after the response (never delays or fails the action). */
+const tell = (msgs: Outgoing[]) => after(() => notify(msgs));
+
+/** Who had the group's lesson on `day` (teacher history), both roles. */
+const peopleOn = (group: { teachers: { userId: number | null; role: string; from: Date }[]; teacherId: number | null; assistantId: number | null }, day: Date) =>
+  [...new Set([teacherOn(group.teachers, group, day, "TEACHER"), teacherOn(group.teachers, group, day, "ASSISTANT")].filter((id): id is number => id !== null))];
+
 async function lessonChangeContext(user: Awaited<ReturnType<typeof requirePermission>>, groupId: number) {
   await assertGroupAccess(user, groupId);
   const [group, existing, holidays] = await Promise.all([
@@ -1166,13 +1177,14 @@ export async function cancelLesson(_: MemberActionState, f: FormData): Promise<M
     const { group, existing, holidays } = await lessonChangeContext(user, d.groupId);
     const problem = lessonChangeProblem({ kind: "CANCEL", date: d.date, days: group.days, holidays, existing }, new Date());
     if (problem) return { error: problem };
-    await db.$transaction([
+    const [change] = await db.$transaction([
       // role "ALL": the (group, date, kind, role) unique key then also stops a second cancel of the same lesson
       db.lessonChange.create({ data: { groupId: group.id, date: d.date, kind: "CANCEL", role: "ALL", reason: d.reason, userId: user.id } }),
       db.attendance.deleteMany({ where: { groupId: group.id, date: d.date } }),
       db.grade.deleteMany({ where: { groupId: group.id, date: d.date } }),
     ]);
     await logAction(user, "lesson.change", `Dars bekor qilindi: ${group.name}, ${isoOf(d.date)}${d.reason ? ` (${d.reason})` : ""}`);
+    tell(peopleOn(group, d.date).map((id) => ({ key: `cancel:${change.id}:${id}`, userId: id, text: cancelText(group.name, d.date, d.reason) })));
     revalidatePath(`/groups/${group.id}`);
     return { ok: true };
   } catch (e) {
@@ -1188,8 +1200,10 @@ export async function restoreLesson(groupId: number, isoDay: string) {
   const date = check(v.isoDay(), isoDay);
   const { group } = await lessonChangeContext(user, groupId);
   if (!lessonChangeOpen(date, new Date())) throw new Error("Faqat shu oydan boshlab");
+  const cancels = await db.lessonChange.findMany({ where: { groupId, date, kind: "CANCEL" } });
   const { count } = await db.lessonChange.deleteMany({ where: { groupId, date, kind: "CANCEL" } });
   if (!count) throw new Error("Bu dars bekor qilinmagan");
+  tell(peopleOn(group, date).map((id) => ({ key: `restore:${cancels[0].id}:${id}`, userId: id, text: restoreText(group.name, date) })));
   await logAction(user, "lesson.change", `Dars qayta tiklandi: ${group.name}, ${isoOf(date)}`);
   revalidatePath(`/groups/${groupId}`);
 }
@@ -1210,8 +1224,13 @@ export async function substituteLesson(_: MemberActionState, f: FormData): Promi
     if (existing.some((e) => e.kind === "SUBSTITUTE" && e.role === d.role && e.date.getTime() === d.date.getTime())) return { error: "Bu dars uchun o'rinbosar allaqachon bor" };
     const sub = await db.user.findFirst({ where: { id: d.substituteId!, isTeacher: true, active: true } });
     if (!sub) return { error: "O'rinbosar topilmadi" };
-    await db.lessonChange.create({ data: { groupId: group.id, date: d.date, kind: "SUBSTITUTE", role: d.role, substituteId: sub.id, reason: d.reason, userId: user.id } });
+    const change = await db.lessonChange.create({ data: { groupId: group.id, date: d.date, kind: "SUBSTITUTE", role: d.role, substituteId: sub.id, reason: d.reason, userId: user.id } });
     const absent = absentId === null ? null : (await db.user.findUnique({ where: { id: absentId }, select: { name: true } }))?.name;
+    const texts = substituteTexts(group.name, d.date, group.time, sub.name, absent ?? null);
+    tell([
+      { key: `sub:${change.id}:${sub.id}`, userId: sub.id, text: texts.toSubstitute },
+      ...(absentId ? [{ key: `sub:${change.id}:${absentId}`, userId: absentId, text: texts.toAbsent }] : []),
+    ]);
     await logAction(user, "lesson.change", `O'rinbosar: ${group.name}, ${isoOf(d.date)} — ${absent ?? "—"} o'rniga ${sub.name}`);
     revalidatePath(`/groups/${group.id}`);
     return { ok: true };
@@ -1227,8 +1246,11 @@ export async function removeSubstitute(groupId: number, isoDay: string, role: st
   check(z.enum(["TEACHER", "ASSISTANT"]), role);
   const { group } = await lessonChangeContext(user, groupId);
   if (!lessonChangeOpen(date, new Date())) throw new Error("Faqat shu oydan boshlab");
+  const subs = await db.lessonChange.findMany({ where: { groupId, date, kind: "SUBSTITUTE", role } });
   const { count } = await db.lessonChange.deleteMany({ where: { groupId, date, kind: "SUBSTITUTE", role } });
   if (!count) throw new Error("Bu darsda o'rinbosar yo'q");
+  const absentId = teacherOn(group.teachers, group, date, role as "TEACHER" | "ASSISTANT");
+  tell(subs.flatMap((c) => [c.substituteId, absentId].filter((id): id is number => id !== null).map((id) => ({ key: `subundo:${c.id}:${id}`, userId: id, text: substituteUndoText(group.name, date) }))));
   await logAction(user, "lesson.change", `O'rinbosar bekor qilindi: ${group.name}, ${isoOf(date)}`);
   revalidatePath(`/groups/${groupId}`);
 }
@@ -1323,8 +1345,9 @@ export async function paySalary(f: FormData) {
   const u = await db.user.findUniqueOrThrow({ where: { id: userId } });
   const date = picked ?? new Date();
   const expense = await db.expense.create({ data: { title: `Ish haqi — ${u.name} (${month})`, category: "SALARY", amount, date } });
-  await db.salaryPayment.create({ data: { userId, month, amount, note, date, expenseId: expense.id } });
+  const payout = await db.salaryPayment.create({ data: { userId, month, amount, note, date, expenseId: expense.id } });
   await logAction(me, "salary.pay", `Ish haqi to'landi: ${u.name} — ${money(amount)} (${month})`);
+  tell([{ key: `salary:${payout.id}`, userId, text: salaryText(month, amount) }]);
   revalidatePath("/salaries");
   revalidatePath("/finance");
 }
@@ -1644,6 +1667,31 @@ export async function saveTeacher(_: MemberActionState, f: FormData): Promise<Me
     revalidatePath("/teachers");
     revalidatePath("/settings");
     revalidatePath("/salaries");
+    return { ok: true };
+  } catch (e) {
+    unstable_rethrow(e); // the login redirect of an expired session must reach the browser
+    return { error: (e as Error).message };
+  }
+}
+
+// ---------- Telegram (Sozlamalar → Telegram) ----------
+export async function unlinkTelegram(userId: number) {
+  const me = await requirePermission("staff.manage");
+  const u = await db.user.update({ where: { id: userId }, data: { telegramChatId: null } });
+  await logAction(me, "telegram.unlink", `Telegram uzildi: ${u.name}`);
+  revalidatePath("/settings/telegram");
+  revalidatePath("/teachers");
+}
+
+/** "Sinov xabari": a message to the admin's own linked chat, sent right away so the answer shows here. */
+export async function sendTelegramTest(_: MemberActionState): Promise<MemberActionState> {
+  try {
+    const me = await requirePermission("staff.manage");
+    const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
+    if (!token) return { error: "Bot tokeni o'rnatilmagan (TELEGRAM_BOT_TOKEN)" };
+    const u = await db.user.findUniqueOrThrow({ where: { id: me.id } });
+    if (!u.telegramChatId) return { error: "Avval botda Start bosing va raqamingizni yuboring" };
+    await telegramClient(token, 10_000).sendMessage(u.telegramChatId, "Sinov xabari ✅");
     return { ok: true };
   } catch (e) {
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser

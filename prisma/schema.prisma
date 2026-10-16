@@ -59,6 +59,7 @@ model User {
   paymentEdits  PaymentEdit[]
   substitutions LessonChange[] @relation("Substitutions")
   lessonChanges LessonChange[] @relation("LessonChangeAuthor")
+  telegramMessages TelegramMessage[]
 }
 
 // Personal access tokens used by MCP clients. Only a SHA-256 hash is stored.
@@ -575,4 +576,23 @@ model Setting {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
+}
+
+// Telegram messages to staff (src/lib/telegram-queue.ts): each key happens once; PENDING → SENDING → SENT | FAILED.
+model TelegramMessage {
+  id        Int       @id @default(autoincrement())
+  key       String    @unique
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatId    String?
+  text      String
+  status    String    @default("PENDING")
+  tries     Int       @default(0)
+  error     String?
+  createdAt DateTime  @default(now())
+  // when a sender took it (SENDING): unresolved for 10 minutes → FAILED, never resent
+  claimedAt DateTime?
+  sentAt    DateTime?
+
+  @@index([status])
 }

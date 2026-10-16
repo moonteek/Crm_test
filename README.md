@@ -166,9 +166,18 @@ o'zgarmaydi. "Menejer" rolida "Chegirma berish" ruxsatini Rollar sahifasida bir 
 tugmasi sahifada ko'rinib turgan ma'lumotni (filtrlar bilan, barcha sahifalari) .xlsx qilib yuklaydi; "Google Sheets"
 tugmasi shu jadvalni nusxalaydi — Google Sheets'da Ctrl+V bosing.
 
+**Telegram xabarlari:** markaz boti xodimlarga yozadi — dars eslatmasi (30 daqiqa oldin), davomat belgilanmagan
+(15 daqiqadan keyin; administratorlarga ro'yxat), dars bekor qilinishi / o'rinbosar va ish haqi to'lovi. Sozlash:
+1. Telegram'da @BotFather → /newbot, tokenni oling.
+2. Serverdagi `.env` ga `TELEGRAM_BOT_TOKEN=...` yozing, `npm run db:push` va CRM'ni qayta ishga tushiring.
+3. Sozlamalar → Telegram'da bot nomi chiqadi; xodimlar botda Start bosib, «📱 Raqamni yuborish» bilan ulanadi.
+
+Bot faqat bitta server jarayonida ishlashi kerak (pm2 cluster emas). Kompyuteringizda sinash uchun alohida test bot
+tokenidan foydalaning yoki tokenni umuman yozmang — token bo'lmasa bot o'chiq.
+
 **O'qituvchilar:** "O'qituvchi qo'shish" va har bir kartochkadagi ✏️ (Administrator) to'liq formani ochadi: FISH, telefon,
 parol, jinsi, tug'ilgan sana, rol, ish haqi va maosh turi ("Ish haqini boshqarish" ruxsati bo'lsa), rasm (PNG/JPG, 300 KB
-gacha), Telegram chat ID (keyingi bosqichda bildirishnomalar uchun) va izoh. Yangilangandan keyin `npm run db:push`.
+gacha) va izoh; Telegram holati (ulangan / ulanmagan — xodim botda o'zi ulanadi). Yangilangandan keyin `npm run db:push`.
 
 **Chek:** to'lov saqlangach "Chek chiqarish" (chek printeriga, 80 yoki 58 mm) yoki "PDF yuklab olish". Har bir
 to'lov yonidagi 🧾 belgisi chekni istalgan vaqtda qayta ochadi; To'lovlar sahifasida "Chek №" bo'yicha topish mumkin.

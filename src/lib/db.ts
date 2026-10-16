@@ -2,6 +2,5 @@ import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
-export const db = globalForPrisma.prisma ?? new PrismaClient();
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
+// one client per server process (the pages and the Telegram bot load this module separately): fewer SQLite locks
+export const db = (globalForPrisma.prisma ??= new PrismaClient());

@@ -3,12 +3,9 @@ import { v } from "./validation";
 import { phoneKey } from "./phone";
 import { SALARY_TYPES } from "./salary-types";
 
-// The teacher form (O'qituvchilar → add / ✏️ edit): who they are, salary rule, photo, Telegram chat for later messages.
+// The teacher form (O'qituvchilar → add / ✏️ edit): who they are, salary rule, photo. Telegram is linked in the bot.
 
 export const STAFF_GENDERS: Record<string, string> = { M: "Erkak", F: "Ayol" };
-
-/** Digits only; a group chat's id starts with "-" (e.g. -1001234567890). */
-const TELEGRAM_ID = /^-?\d{5,20}$/;
 
 /** The form's fields. Adding needs a password and gender; editing keeps the password when left empty. */
 export function teacherFormSchema(mode: "create" | "edit") {
@@ -22,7 +19,6 @@ export function teacherFormSchema(mode: "create" | "edit") {
         ? z.preprocess((x) => x || undefined, z.enum(["M", "F"], { error: "Jinsini tanlang" }))
         : z.preprocess((x) => x || null, z.enum(["M", "F"]).nullable()),
       birthDate: v.optDate().refine((d) => d === null || d.getTime() <= Date.now(), "Tug'ilgan sana kelajakda bo'lishi mumkin emas"),
-      telegramChatId: v.optText(30).refine((t) => t === null || TELEGRAM_ID.test(t), "Telegram chat ID faqat raqamlardan iborat (guruh uchun boshida \"-\")"),
       note: v.optText(1000),
       salaryType: v.oneOf(SALARY_TYPES, "NONE"),
       salaryAmount: v.int("Ish haqi", { fallback: 0 }),
