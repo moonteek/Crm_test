@@ -19,13 +19,10 @@ test("editing: an empty password keeps the old one; gender may stay unset for ol
   assert.equal(r.data!.gender, null);
 });
 
-test("Telegram chat ID: digits only, a group chat may start with a minus; empty is fine", () => {
-  const p = (telegramChatId: string) => teacherFormSchema("create").safeParse({ ...base, telegramChatId });
-  assert.equal(p("123456789").data?.telegramChatId, "123456789");
-  assert.equal(p("-1001234567890").data?.telegramChatId, "-1001234567890");
-  assert.equal(p("").data?.telegramChatId, null);
-  assert.match(errors(p("@aziza")), /Telegram chat ID/);
-  assert.match(errors(p("12ab")), /Telegram chat ID/);
+test("the form never sets the Telegram chat: only the bot links it", () => {
+  const r = teacherFormSchema("edit").safeParse({ ...base, telegramChatId: "123456789" });
+  assert.ok(r.success);
+  assert.equal("telegramChatId" in r.data!, false);
 });
 
 test("salary on the form follows the Ish haqi rules", () => {

@@ -127,10 +127,11 @@ export function TeacherForm({
           <p className="mt-1 text-xs text-muted">PNG yoki JPG, 300 KB gacha</p>
         </Field>
 
-        <Field label="Telegram chat ID (ixtiyoriy)">
-          <input name="telegramChatId" className="input" inputMode="numeric" maxLength={30} defaultValue={teacher?.telegramChatId ?? ""} placeholder="Masalan: 123456789" />
+        <Field label="Telegram">
+          <p className={`rounded-xl border border-line px-3.5 py-2.5 text-sm ${teacher?.telegramChatId ? "text-success" : "text-muted"}`}>
+            {teacher?.telegramChatId ? "✓ Ulangan" : "Ulanmagan — o'qituvchi botda Start bosib, raqamini yuboradi"}
+          </p>
         </Field>
-        <p className="-mt-2 text-xs text-muted">Keyinchalik bildirishnomalar shu Telegram chatiga yuboriladi.</p>
         <Field label="Izoh"><textarea name="note" className="input" rows={2} maxLength={1000} defaultValue={teacher?.note ?? ""} /></Field>
 
         {error && <p className="rounded-xl bg-danger-tint px-3 py-2 text-sm text-danger">{error}</p>}

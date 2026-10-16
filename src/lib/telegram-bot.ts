@@ -6,7 +6,7 @@ import { parsePermissions } from "./permissions";
 import { lessonsPassed } from "./timetable";
 import { dueMessages, linkReply, type Outgoing } from "./telegram-plan";
 import { enqueue, flush } from "./telegram-queue";
-import { telegramClient, type TelegramClient, type Update } from "./telegram-client";
+import { TelegramError, telegramClient, type TelegramClient, type Update } from "./telegram-client";
 import { linkChat, prismaStore } from "./telegram-store";
 
 // The centre's Telegram bot, inside the CRM server: long-polls for Start / shared contacts, and every minute queues
@@ -89,7 +89,9 @@ async function poll(client: TelegramClient) {
       }
     } catch (e) {
       console.error("telegram poll:", (e as Error).message);
-      await new Promise((r) => setTimeout(r, 5000));
+      // a wrong token (401) or a second copy of the bot (409) won't fix itself in seconds: wait longer, log less
+      const status = e instanceof TelegramError ? e.status : 0;
+      await new Promise((r) => setTimeout(r, status === 401 || status === 409 ? 60_000 : 5000));
     }
   }
 }
