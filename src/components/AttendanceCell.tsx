@@ -5,6 +5,7 @@ import { ArrowLeftRight, Ban, Check, Clock, Flag, Minus, RotateCcw, X } from "lu
 import { removeSubstitute, restoreLesson, setAbsenceReason, setAttendance } from "@/app/(app)/actions";
 import type { MarkKey } from "@/lib/attendance";
 import { LessonChangeDialog, PopoverPanel, REASON_TONE, useLessonGrid, usePopover } from "./lesson-grid";
+import { lessonChangeOpen } from "@/lib/lesson-changes";
 
 type CellMark = { present: boolean; late: boolean; reason: { id: number; name: string; color: string } | null };
 const WIDTH = 252;
@@ -38,7 +39,8 @@ export function AttendanceCell({
   const [chosen, setChosen] = useState<{ key: MarkKey | null; reasonId: number | null } | null>(null);
   const current = chosen ?? { key: keyOf(mark), reasonId: mark?.reason?.id ?? null };
   const marks = canMark && past && !cancelled;
-  const manage = canManage;
+  // cancel / substitute (and undo) only from this month on — the server refuses earlier ones
+  const manage = canManage && lessonChangeOpen(new Date(day), new Date());
   if (cancelled && !manage) return <span className="label-mono text-faint" title="Dars bekor qilingan">—</span>;
 
   const run = (fn: () => Promise<unknown>, after: () => void) => start(async () => {

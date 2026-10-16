@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { attendancePercent, fillPresent, markWrite, plainMark, unmarkedToday } from "./attendance";
+import { attendancePercent, fillPresent, markWrite, unmarkedToday } from "./attendance";
 
 test("cell popover: each choice writes its mark; keldi/kechikdi drop a reason, kelmadi keeps it", () => {
   assert.deepEqual(markWrite("present"), { present: true, late: false, reasonId: null });
@@ -26,10 +26,6 @@ test("unmarked today: lesson started, not a holiday, nobody marked", () => {
   assert.deepEqual(unmarkedToday(groups, new Set(), now, ["2026-10-12"]), []);
 });
 
-test("a plain present/absent mark (AI tools) clears an earlier late flag", () => {
-  assert.deepEqual(plainMark(false), { present: false, late: false });
-  assert.deepEqual(plainMark(true), { present: true, late: false });
-});
 
 test("unmarked today ignores groups that haven't started or have nobody to mark", () => {
   const now = new Date("2026-10-12T06:00:00Z"); // Monday 11:00 Tashkent

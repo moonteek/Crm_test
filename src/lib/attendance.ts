@@ -5,8 +5,6 @@ import { centreToday, toMinutes } from "./schedule";
 
 export type Mark = { present: boolean; late: boolean };
 
-/** A plain keldi / kelmadi (the AI tools): never late, so an earlier "kechikdi" doesn't linger. */
-export const plainMark = (present: boolean): Mark => ({ present, late: false });
 
 export const MARK_KEYS = ["present", "late", "absent"] as const;
 export type MarkKey = (typeof MARK_KEYS)[number];

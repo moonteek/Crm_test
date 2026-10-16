@@ -36,6 +36,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
   const link = (change: Record<string, string | undefined>) => {
     const q = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => typeof e[1] === "string"));
     for (const [k, v] of Object.entries(change)) if (v) q.set(k, v); else q.delete(k);
+    q.delete("chek"); // a receipt lookup isn't a filter: its "Chek topilmadi" note goes away
     return `/payments?${q}`;
   };
   const allow = { edit: can(user, "payments.edit"), remove: can(user, "payments.delete") };

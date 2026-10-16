@@ -14,22 +14,31 @@ export function lessonChangeProblem(
     holidays: string[];
     existing: { kind: string; date: Date }[];
     substituteId?: number | null;
+    /** who had this lesson in the replaced role on that day (teacher history) */
     absentId?: number | null;
+    /** everyone who had this lesson that day (teacher and assistant) */
+    onLesson?: (number | null)[];
   },
   today: Date,
 ): string | null {
   if (!lessonWeekdays(input.days).includes(input.date.getUTCDay())) return "Bu kunda dars yo'q";
   if (input.holidays.includes(iso(input.date))) return "Bayram kuni — dars yo'q";
-  const t = centreToday(today);
-  if (input.date.getTime() < Date.UTC(t.year, t.month - 1, 1)) return "Faqat shu oydan boshlab";
+  if (!lessonChangeOpen(input.date, today)) return "Faqat shu oydan boshlab";
   const same = input.existing.filter((e) => iso(e.date) === iso(input.date));
   if (same.some((e) => e.kind === "CANCEL")) return "Bu dars allaqachon bekor qilingan";
   if (input.kind === "CANCEL" && same.some((e) => e.kind === "SUBSTITUTE")) return "Bu darsga o'rinbosar biriktirilgan — avval uni bekor qiling";
   if (input.kind === "SUBSTITUTE") {
     if (!input.substituteId) return "O'rinbosarni tanlang";
     if (input.substituteId === input.absentId) return "O'zini o'zi almashtira olmaydi";
+    if (input.onLesson?.includes(input.substituteId)) return "Bu darsda u allaqachon bor (guruhning o'qituvchisi)";
   }
   return null;
+}
+
+/** Cancel / substitute (and their undo) only for lessons from this month on, centre time. */
+export function lessonChangeOpen(date: Date, today: Date) {
+  const t = centreToday(today);
+  return date.getTime() >= Date.UTC(t.year, t.month - 1, 1);
 }
 
 /** The days a group has no lesson: the centre's holidays and its own cancelled lessons (ISO, each once). */

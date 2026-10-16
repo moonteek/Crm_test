@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { balance, priceNow, withHolidays } from "@/lib/billing";
 import { assertLessonOpen, closedDaysOf } from "@/lib/holidays-db";
-import { plainMark } from "@/lib/attendance";
+import { markWrite } from "@/lib/attendance";
 import { studentBillingInclude } from "@/lib/billing-include";
 import {
   assertGroupAccess, assertLeadAccess, assertStudentAccess, can, canSeeBalances, groupScope, leadScope, studentScope, type CurrentUser,
@@ -191,8 +191,8 @@ export function buildServer(user: CurrentUser) {
       if (!members.has(studentId)) continue;
       await db.attendance.upsert({
         where: { groupId_studentId_date: { groupId: group_id, studentId, date: day } },
-        create: { groupId: group_id, studentId, date: day, ...plainMark(present) },
-        update: plainMark(present),
+        create: { groupId: group_id, studentId, date: day, ...markWrite(present ? "present" : "absent") },
+        update: markWrite(present ? "present" : "absent"), // keldi drops an old absence reason, as on the screens
       });
     }
     const g = await db.group.findUniqueOrThrow({ where: { id: group_id } });

@@ -9,7 +9,10 @@ export function PrintButtons({ pdfHref, autoPrint }: { pdfHref: string; autoPrin
   useEffect(() => {
     if (!autoPrint || done.current) return;
     done.current = true;
-    window.print();
+    // wait for the logo and the font, so the first print isn't missing them (at most 3 s on a slow connection)
+    const images = [...document.images].map((img) => (img.complete ? Promise.resolve() : new Promise((r) => { img.onload = img.onerror = r; })));
+    const timeout = new Promise((r) => setTimeout(r, 3000));
+    Promise.race([Promise.all([document.fonts.ready, ...images]), timeout]).then(() => window.print());
   }, [autoPrint]);
   const close = () => (window.opener || history.length <= 1 ? window.close() : history.back());
   return (

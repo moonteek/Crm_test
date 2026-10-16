@@ -3,7 +3,8 @@
 import bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
+import { teacherOn } from "@/lib/teachers-history";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requirePermission, requireUser } from "@/lib/auth";
@@ -22,7 +23,7 @@ import {
 import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
 import { assertLessonOpen, closedDaysOf, holidayDays } from "@/lib/holidays-db";
-import { lessonChangeProblem } from "@/lib/lesson-changes";
+import { lessonChangeOpen, lessonChangeProblem } from "@/lib/lesson-changes";
 import { canDeleteHoliday, expandRange, holidayProblem } from "@/lib/holidays";
 import { canDelete, canEnd, discountProblem, lastMonth } from "@/lib/discounts";
 import { editDiff } from "@/lib/payments";
@@ -301,6 +302,7 @@ export async function memberAction(_: MemberActionState, f: FormData): Promise<M
     revalidatePath(`/students/${gs.studentId}`);
     return { ok: true };
   } catch (e) {
+    unstable_rethrow(e); // the login redirect of an expired session must reach the browser
     return { error: (e as Error).message };
   }
 }
@@ -334,6 +336,7 @@ export async function transferStudent(_: MemberActionState, f: FormData): Promis
     revalidatePath(`/students/${gs.studentId}`);
     return { ok: true };
   } catch (e) {
+    unstable_rethrow(e); // the login redirect of an expired session must reach the browser
     return { error: (e as Error).message };
   }
 }
@@ -403,6 +406,7 @@ export async function saveNewGroup(_: MemberActionState, f: FormData): Promise<M
   try {
     to = await insertGroup(f);
   } catch (e) {
+    unstable_rethrow(e); // the login redirect of an expired session must reach the browser
     return { error: (e as Error).message };
   }
   redirect(to);
@@ -460,6 +464,7 @@ export async function saveGroup(_: MemberActionState, f: FormData): Promise<Memb
     const { warnings } = await updateGroup(check(v.id(), f.get("groupId")), f);
     return { ok: true, warning: warnings.join("; ") || undefined };
   } catch (e) {
+    unstable_rethrow(e); // the login redirect of an expired session must reach the browser
     return { error: (e as Error).message };
   }
 }
@@ -759,6 +764,7 @@ export async function createPayment(_: PaymentState, f: FormData): Promise<Payme
   try {
     return await takePayment(f);
   } catch (e) {
+    unstable_rethrow(e); // the login redirect of an expired session must reach the browser
     return { error: (e as Error).message };
   }
 }
@@ -808,6 +814,7 @@ export async function editPayment(_: MemberActionState, f: FormData): Promise<Me
     revalidatePath(`/students/${before.studentId}`);
     return { ok: true };
   } catch (e) {
+    unstable_rethrow(e); // the login redirect of an expired session must reach the browser
     return { error: (e as Error).message };
   }
 }
@@ -929,6 +936,7 @@ export async function saveLevelExamScores(_: MemberActionState, f: FormData): Pr
     revalidatePath(`/groups/${groupId}`);
     return { ok: true };
   } catch (e) {
+    unstable_rethrow(e); // the login redirect of an expired session must reach the browser
     // two people saving the same exam for the first time at once: the second hits the (group, level) unique
     if ((e as { code?: string }).code === "P2002") return { error: "Natijalar hozirgina boshqa foydalanuvchi tomonidan saqlandi — qayta urinib ko'ring" };
     return { error: (e as Error).message };
@@ -1057,6 +1065,7 @@ export async function saveDiscount(_: MemberActionState, f: FormData): Promise<M
     revalidatePath(`/students/${gs.studentId}`);
     return { ok: true };
   } catch (e) {
+    unstable_rethrow(e); // the login redirect of an expired session must reach the browser
     return { error: (e as Error).message };
   }
 }
@@ -1102,6 +1111,7 @@ export async function createHolidays(_: MemberActionState, f: FormData): Promise
     revalidatePath("/settings/holidays");
     return { ok: true };
   } catch (e) {
+    unstable_rethrow(e); // the login redirect of an expired session must reach the browser
     return { error: (e as Error).message };
   }
 }
@@ -1141,7 +1151,7 @@ const isoOf = (d: Date) => d.toISOString().slice(0, 10).split("-").reverse().joi
 async function lessonChangeContext(user: Awaited<ReturnType<typeof requirePermission>>, groupId: number) {
   await assertGroupAccess(user, groupId);
   const [group, existing, holidays] = await Promise.all([
-    db.group.findUniqueOrThrow({ where: { id: groupId }, include: { teacher: true, assistant: true } }),
+    db.group.findUniqueOrThrow({ where: { id: groupId }, include: { teacher: true, assistant: true, teachers: true } }),
     db.lessonChange.findMany({ where: { groupId } }),
     holidayDays(),
   ]);
@@ -1157,7 +1167,8 @@ export async function cancelLesson(_: MemberActionState, f: FormData): Promise<M
     const problem = lessonChangeProblem({ kind: "CANCEL", date: d.date, days: group.days, holidays, existing }, new Date());
     if (problem) return { error: problem };
     await db.$transaction([
-      db.lessonChange.create({ data: { groupId: group.id, date: d.date, kind: "CANCEL", reason: d.reason, userId: user.id } }),
+      // role "ALL": the (group, date, kind, role) unique key then also stops a second cancel of the same lesson
+      db.lessonChange.create({ data: { groupId: group.id, date: d.date, kind: "CANCEL", role: "ALL", reason: d.reason, userId: user.id } }),
       db.attendance.deleteMany({ where: { groupId: group.id, date: d.date } }),
       db.grade.deleteMany({ where: { groupId: group.id, date: d.date } }),
     ]);
@@ -1165,6 +1176,8 @@ export async function cancelLesson(_: MemberActionState, f: FormData): Promise<M
     revalidatePath(`/groups/${group.id}`);
     return { ok: true };
   } catch (e) {
+    unstable_rethrow(e); // the login redirect of an expired session must reach the browser
+    if ((e as { code?: string }).code === "P2002") return { error: "Bu dars allaqachon bekor qilingan" };
     return { error: (e as Error).message };
   }
 }
@@ -1174,9 +1187,9 @@ export async function restoreLesson(groupId: number, isoDay: string) {
   const user = await requirePermission("lessons.manage");
   const date = check(v.isoDay(), isoDay);
   const { group } = await lessonChangeContext(user, groupId);
-  const t = centreDay();
-  if (date.getTime() < Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), 1)) throw new Error("Faqat shu oydan boshlab");
-  await db.lessonChange.deleteMany({ where: { groupId, date, kind: "CANCEL" } });
+  if (!lessonChangeOpen(date, new Date())) throw new Error("Faqat shu oydan boshlab");
+  const { count } = await db.lessonChange.deleteMany({ where: { groupId, date, kind: "CANCEL" } });
+  if (!count) throw new Error("Bu dars bekor qilinmagan");
   await logAction(user, "lesson.change", `Dars qayta tiklandi: ${group.name}, ${isoOf(date)}`);
   revalidatePath(`/groups/${groupId}`);
 }
@@ -1187,19 +1200,23 @@ export async function substituteLesson(_: MemberActionState, f: FormData): Promi
     const user = await requirePermission("lessons.manage");
     const d = parseForm(lessonChangeSchema, f);
     const { group, existing, holidays } = await lessonChangeContext(user, d.groupId);
-    const absentId = d.role === "ASSISTANT" ? group.assistantId : group.teacherId;
+    // who had this lesson that day (teacher history), not necessarily today's teacher / assistant
+    const teacherThen = teacherOn(group.teachers, group, d.date, "TEACHER");
+    const assistantThen = teacherOn(group.teachers, group, d.date, "ASSISTANT");
+    const absentId = d.role === "ASSISTANT" ? assistantThen : teacherThen;
     if (d.role === "ASSISTANT" && !absentId) return { error: "Guruhda yordamchi o'qituvchi yo'q" };
-    const problem = lessonChangeProblem({ kind: "SUBSTITUTE", date: d.date, days: group.days, holidays, existing, substituteId: d.substituteId, absentId }, new Date());
+    const problem = lessonChangeProblem({ kind: "SUBSTITUTE", date: d.date, days: group.days, holidays, existing, substituteId: d.substituteId, absentId, onLesson: [teacherThen, assistantThen] }, new Date());
     if (problem) return { error: problem };
     if (existing.some((e) => e.kind === "SUBSTITUTE" && e.role === d.role && e.date.getTime() === d.date.getTime())) return { error: "Bu dars uchun o'rinbosar allaqachon bor" };
     const sub = await db.user.findFirst({ where: { id: d.substituteId!, isTeacher: true, active: true } });
     if (!sub) return { error: "O'rinbosar topilmadi" };
     await db.lessonChange.create({ data: { groupId: group.id, date: d.date, kind: "SUBSTITUTE", role: d.role, substituteId: sub.id, reason: d.reason, userId: user.id } });
-    const absent = d.role === "ASSISTANT" ? group.assistant?.name : group.teacher?.name;
+    const absent = absentId === null ? null : (await db.user.findUnique({ where: { id: absentId }, select: { name: true } }))?.name;
     await logAction(user, "lesson.change", `O'rinbosar: ${group.name}, ${isoOf(d.date)} — ${absent ?? "—"} o'rniga ${sub.name}`);
     revalidatePath(`/groups/${group.id}`);
     return { ok: true };
   } catch (e) {
+    unstable_rethrow(e); // the login redirect of an expired session must reach the browser
     return { error: (e as Error).message };
   }
 }
@@ -1207,10 +1224,11 @@ export async function substituteLesson(_: MemberActionState, f: FormData): Promi
 export async function removeSubstitute(groupId: number, isoDay: string, role: string) {
   const user = await requirePermission("lessons.manage");
   const date = check(v.isoDay(), isoDay);
+  check(z.enum(["TEACHER", "ASSISTANT"]), role);
   const { group } = await lessonChangeContext(user, groupId);
-  const t = centreDay();
-  if (date.getTime() < Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), 1)) throw new Error("Faqat shu oydan boshlab");
-  await db.lessonChange.deleteMany({ where: { groupId, date, kind: "SUBSTITUTE", role } });
+  if (!lessonChangeOpen(date, new Date())) throw new Error("Faqat shu oydan boshlab");
+  const { count } = await db.lessonChange.deleteMany({ where: { groupId, date, kind: "SUBSTITUTE", role } });
+  if (!count) throw new Error("Bu darsda o'rinbosar yo'q");
   await logAction(user, "lesson.change", `O'rinbosar bekor qilindi: ${group.name}, ${isoOf(date)}`);
   revalidatePath(`/groups/${groupId}`);
 }
@@ -1227,12 +1245,19 @@ export async function createAbsenceReason(f: FormData) {
   revalidatePath("/settings/reasons");
 }
 
-export async function updateAbsenceReason(id: number, f: FormData) {
-  const user = await requirePermission("staff.manage");
-  const d = parseForm(absenceReasonSchema, f);
-  await db.absenceReason.update({ where: { id }, data: d });
-  await logAction(user, "reason.update", `Kelmaganlik sababi o'zgartirildi: ${d.name}`);
-  revalidatePath("/settings/reasons");
+export async function updateAbsenceReason(id: number, _: MemberActionState, f: FormData): Promise<MemberActionState> {
+  try {
+    const user = await requirePermission("staff.manage");
+    const d = parseForm(absenceReasonSchema, f);
+    if (await db.absenceReason.findFirst({ where: { name: d.name, NOT: { id } } })) return { error: "Bunday sabab bor" };
+    await db.absenceReason.update({ where: { id }, data: d });
+    await logAction(user, "reason.update", `Kelmaganlik sababi o'zgartirildi: ${d.name}`);
+    revalidatePath("/settings/reasons");
+    return { ok: true };
+  } catch (e) {
+    unstable_rethrow(e); // the login redirect of an expired session must reach the browser
+    return { error: (e as Error).message };
+  }
 }
 
 export async function toggleAbsenceReason(id: number) {
@@ -1266,6 +1291,7 @@ export async function setSlot(userId: number, dayType: DayType, hour: number, st
     revalidatePath("/teachers");
     return { ok: true };
   } catch (e) {
+    unstable_rethrow(e); // the login redirect of an expired session must reach the browser
     return { error: (e as Error).message };
   }
 }
@@ -1393,6 +1419,7 @@ export async function createSale(_: SaleState, f: FormData): Promise<SaleState> 
       .map(([k, val]) => ({ productId: check(v.id("Mahsulot"), k.slice(4)), qty: check(saleQty, val) }))
       .filter((x) => x.qty > 0);
   } catch (e) {
+    unstable_rethrow(e); // the login redirect of an expired session must reach the browser
     return { error: (e as Error).message };
   }
   if (!wanted.length) return { error: "Kamida bitta mahsulot tanlang" };
@@ -1533,6 +1560,7 @@ export async function saveSubject(_: MemberActionState, f: FormData): Promise<Me
     revalidatePath("/courses");
     return { ok: true };
   } catch (e) {
+    unstable_rethrow(e); // the login redirect of an expired session must reach the browser
     return { error: (e as Error).message };
   }
 }
@@ -1568,6 +1596,7 @@ export async function saveReceipt(_: MemberActionState, f: FormData): Promise<Me
     revalidatePath("/settings/receipt");
     return { ok: true };
   } catch (e) {
+    unstable_rethrow(e); // the login redirect of an expired session must reach the browser
     return { error: (e as Error).message };
   }
 }
@@ -1617,6 +1646,7 @@ export async function saveTeacher(_: MemberActionState, f: FormData): Promise<Me
     revalidatePath("/salaries");
     return { ok: true };
   } catch (e) {
+    unstable_rethrow(e); // the login redirect of an expired session must reach the browser
     return { error: (e as Error).message };
   }
 }

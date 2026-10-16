@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { closedDays, lessonChangeProblem, markProblem, whoTaught } from "./lesson-changes";
+import { closedDays, lessonChangeOpen, lessonChangeProblem, markProblem, whoTaught } from "./lesson-changes";
 
 const d = (y: number, m: number, day: number) => new Date(Date.UTC(y, m - 1, day));
 const today = new Date("2026-11-04T08:00:00Z");
@@ -34,4 +34,20 @@ test("marks: only lessons that already happened (today included)", () => {
   assert.equal(markProblem(new Date("2026-10-12T00:00:00Z"), today), null);
   assert.equal(markProblem(new Date("2026-10-10T00:00:00Z"), today), null);
   assert.equal(markProblem(new Date("2026-10-13T00:00:00Z"), today), "Hali bo'lmagan darsni belgilab bo'lmaydi");
+});
+
+test("substitute: not the person who had that lesson, nor the group's other teacher on it", () => {
+  const today = new Date("2026-11-02T00:00:00Z");
+  const base = { kind: "SUBSTITUTE" as const, date: new Date("2026-11-10T00:00:00Z"), days: "EVEN", holidays: [], existing: [] };
+  // teacher on that day was 3 (history), the assistant 4; today's teacher (7) doesn't matter
+  assert.equal(lessonChangeProblem({ ...base, substituteId: 3, absentId: 3, onLesson: [3, 4] }, today), "O'zini o'zi almashtira olmaydi");
+  assert.equal(lessonChangeProblem({ ...base, substituteId: 4, absentId: 3, onLesson: [3, 4] }, today), "Bu darsda u allaqachon bor (guruhning o'qituvchisi)");
+  assert.equal(lessonChangeProblem({ ...base, substituteId: 7, absentId: 3, onLesson: [3, 4] }, today), null);
+});
+
+test("lesson changes are open from this month on (centre time), for the menus and the server alike", () => {
+  const today = new Date("2026-11-02T00:00:00Z");
+  assert.equal(lessonChangeOpen(new Date("2026-11-01T00:00:00Z"), today), true);
+  assert.equal(lessonChangeOpen(new Date("2026-12-20T00:00:00Z"), today), true);
+  assert.equal(lessonChangeOpen(new Date("2026-10-31T00:00:00Z"), today), false);
 });
