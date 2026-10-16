@@ -177,7 +177,7 @@ tokenidan foydalaning yoki tokenni umuman yozmang — token bo'lmasa bot o'chiq.
 
 **O'qituvchilar:** "O'qituvchi qo'shish" va har bir kartochkadagi ✏️ (Administrator) to'liq formani ochadi: FISH, telefon,
 parol, jinsi, tug'ilgan sana, rol, ish haqi va maosh turi ("Ish haqini boshqarish" ruxsati bo'lsa), rasm (PNG/JPG, 300 KB
-gacha), Telegram chat ID (keyingi bosqichda bildirishnomalar uchun) va izoh. Yangilangandan keyin `npm run db:push`.
+gacha) va izoh; Telegram holati (ulangan / ulanmagan — xodim botda o'zi ulanadi). Yangilangandan keyin `npm run db:push`.
 
 **Chek:** to'lov saqlangach "Chek chiqarish" (chek printeriga, 80 yoki 58 mm) yoki "PDF yuklab olish". Har bir
 to'lov yonidagi 🧾 belgisi chekni istalgan vaqtda qayta ochadi; To'lovlar sahifasida "Chek №" bo'yicha topish mumkin.

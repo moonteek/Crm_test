@@ -18,9 +18,12 @@ export function prismaStore(): QueueStore {
       return n;
     },
     pending: () => db.telegramMessage.findMany({ where: { status: "PENDING" }, orderBy: { id: "asc" }, take: 100 }),
-    async claim(id) {
-      const { count } = await db.telegramMessage.updateMany({ where: { id, status: "PENDING" }, data: { status: "SENDING" } });
+    async claim(id, now) {
+      const { count } = await db.telegramMessage.updateMany({ where: { id, status: "PENDING" }, data: { status: "SENDING", claimedAt: now } });
       return count === 1;
+    },
+    async stuck(before) {
+      return (await db.telegramMessage.findMany({ where: { status: "SENDING", claimedAt: { lt: before } }, select: { id: true } })).map((r) => r.id);
     },
     async recipient(userId) {
       const u = await db.user.findUnique({ where: { id: userId }, select: { telegramChatId: true, active: true } });

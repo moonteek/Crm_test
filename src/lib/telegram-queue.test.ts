@@ -4,7 +4,7 @@ import { enqueue, flush, TelegramError, type QueueRow, type QueueStore, type Tel
 
 /** An in-memory store with the same rules as the database one. */
 function memoryStore(users: Record<number, { chatId: string | null; active: boolean }>) {
-  const rows: (QueueRow & { status: string; error: string | null; chatId: string | null })[] = [];
+  const rows: (QueueRow & { status: string; error: string | null; chatId: string | null; claimedAt?: Date })[] = [];
   const store: QueueStore = {
     async insertNew(msgs, now) {
       let n = 0;
@@ -12,7 +12,8 @@ function memoryStore(users: Record<number, { chatId: string | null; active: bool
       return n;
     },
     async pending() { return rows.filter((r) => r.status === "PENDING"); },
-    async claim(id) { const r = rows.find((x) => x.id === id)!; if (r.status !== "PENDING") return false; r.status = "SENDING"; return true; },
+    async claim(id, at) { const r = rows.find((x) => x.id === id)!; if (r.status !== "PENDING") return false; r.status = "SENDING"; r.claimedAt = at; return true; },
+    async stuck(before) { return rows.filter((r) => r.status === "SENDING" && r.claimedAt! < before).map((r) => r.id); },
     async recipient(userId) { return users[userId] ?? null; },
     async markSent(id, chatId) { const r = rows.find((x) => x.id === id)!; r.status = "SENT"; r.chatId = chatId; },
     async markFailed(id, error, final) { const r = rows.find((x) => x.id === id)!; r.tries++; r.error = error; r.status = final ? "FAILED" : "PENDING"; },
@@ -73,10 +74,12 @@ test("the person blocked the bot (403): failed at once and unlinked", async () =
   assert.equal(users[10].chatId, null);
 });
 
-test("unlinked or blocked staff get nothing", async () => {
-  for (const user of [{ chatId: null, active: true }, { chatId: "555", active: false }]) {
-    const { store, rows } = memoryStore({ 10: user });
+test("unlinked or blocked after the message was queued: they get nothing", async () => {
+  for (const later of [{ chatId: null, active: true }, { chatId: "555", active: false }]) {
+    const users: Record<number, { chatId: string | null; active: boolean }> = { 10: { chatId: "555", active: true } };
+    const { store, rows } = memoryStore(users);
     await enqueue(store, [msg], now);
+    users[10] = later;
     const { client, sent } = fakeClient();
     await flush(store, client, now);
     assert.deepEqual(sent, []);
@@ -101,4 +104,27 @@ test("two senders at once: only one sends", async () => {
   const { client, sent } = fakeClient();
   await Promise.all([flush(store, client, now), flush(store, client, now)]);
   assert.equal(sent.length, 1);
+});
+
+test("recording a sent message fails: it is never sent again, and later shows as failed", async () => {
+  const { store, rows } = memoryStore({ 10: { chatId: "555", active: true } });
+  await enqueue(store, [msg], now);
+  const markSent = store.markSent;
+  store.markSent = async () => { throw new Error("database is locked"); };
+  const { client, sent } = fakeClient();
+  await flush(store, client, now).catch(() => {});
+  store.markSent = markSent;
+  await flush(store, client, now);
+  assert.equal(sent.length, 1);
+  assert.equal(rows[0].status, "SENDING");
+  // a message claimed but never resolved (crash, lock) becomes FAILED after 10 minutes — never resent
+  await flush(store, client, new Date(now.getTime() + 11 * 60_000));
+  assert.equal(rows[0].status, "FAILED");
+  assert.equal(sent.length, 1);
+});
+
+test("messages for staff without a linked Telegram aren't even queued", async () => {
+  const { store, rows } = memoryStore({ 10: { chatId: null, active: true }, 11: { chatId: "556", active: false } });
+  assert.equal(await enqueue(store, [msg, { ...msg, key: "k2", userId: 11 }], now), 0);
+  assert.equal(rows.length, 0);
 });

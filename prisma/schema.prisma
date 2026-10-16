@@ -590,6 +590,8 @@ model TelegramMessage {
   tries     Int       @default(0)
   error     String?
   createdAt DateTime  @default(now())
+  // when a sender took it (SENDING): unresolved for 10 minutes → FAILED, never resent
+  claimedAt DateTime?
   sentAt    DateTime?
 
   @@index([status])

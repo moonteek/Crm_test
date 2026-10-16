@@ -54,7 +54,7 @@ test("not marked 15 minutes after start: teacher, assistant, and one list per ad
   const admin = msgs.filter((m) => m.key.startsWith("admin-unmarked:"));
   assert.equal(admin.length, 1);
   assert.equal(admin[0].userId, 1);
-  assert.equal(admin[0].key, "admin-unmarked:2026-10-15:6,9:1");
+  assert.equal(admin[0].key, "admin-unmarked:2026-10-15:09:00:1");
   assert.equal(admin[0].text, "📋 Davomat qilinmagan: ROBO-3 (09:00), KS-21 (09:00)");
   assert.deepEqual(dueMessages([group], ctx(at("09:15"), { markedGroups: new Set([6]) })), []);
 });
@@ -82,4 +82,18 @@ test("linking: only your own contact, matched to active staff by digits", () => 
   assert.deepEqual(linkReply({ fromId: 55, contact: { userId: 99, phone: "930000000" } }, staff), { userId: null, text: "Faqat o'zingizning raqamingizni yuboring." });
   assert.deepEqual(linkReply({ fromId: 55, contact: { userId: 55, phone: "911111111" } }, staff), { userId: null, text: "Bu raqam CRM'da topilmadi. Administratorga murojaat qiling." });
   assert.deepEqual(linkReply({ fromId: 55 }, staff), { userId: null, text: "Ulanish uchun pastdagi «📱 Raqamni yuborish» tugmasini bosing." });
+});
+
+test("admins get one list per lesson start time, even as teachers mark during the window", () => {
+  const a = { ...group, id: 6, name: "ROBO-3", time: "09:00" };
+  const b = { ...group, id: 9, name: "KS-21", time: "09:00" };
+  const first = dueMessages([a, b], ctx(at("09:15"))).find((m) => m.key.startsWith("admin-unmarked:"))!;
+  // ROBO-3 gets marked at 09:17: the admins' message for the 09:00 lessons keeps the same key, so it isn't sent again
+  const later = dueMessages([a, b], ctx(at("09:17"), { markedGroups: new Set([6]) })).find((m) => m.key.startsWith("admin-unmarked:"))!;
+  assert.equal(first.key, "admin-unmarked:2026-10-15:09:00:1");
+  assert.equal(later.key, first.key);
+  // a group starting at 09:05 gets its own list
+  const c = { ...group, id: 11, name: "PY-07", time: "09:05" };
+  const keys = dueMessages([a, c], ctx(at("09:20"))).filter((m) => m.key.startsWith("admin-unmarked:")).map((m) => m.key).sort();
+  assert.deepEqual(keys, ["admin-unmarked:2026-10-15:09:00:1", "admin-unmarked:2026-10-15:09:05:1"]);
 });

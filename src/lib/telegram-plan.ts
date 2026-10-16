@@ -68,10 +68,10 @@ export function dueMessages(groups: PlanGroup[], ctx: PlanContext): Outgoing[] {
     }
   }
 
-  if (unmarked.length) {
-    const ids = unmarked.map((g) => g.id).sort((a, b) => a - b).join(",");
-    const text = `📋 Davomat qilinmagan: ${unmarked.map((g) => `${g.name} (${g.time})`).join(", ")}`;
-    for (const [id, u] of ctx.linked) if (u.isAdmin) out.push({ key: `admin-unmarked:${iso}:${ids}:${id}`, userId: id, text });
+  // one list per lesson start time: the key stays the same while teachers mark during the window, so it's sent once
+  for (const time of [...new Set(unmarked.map((g) => g.time))]) {
+    const text = `📋 Davomat qilinmagan: ${unmarked.filter((g) => g.time === time).map((g) => `${g.name} (${g.time})`).join(", ")}`;
+    for (const [id, u] of ctx.linked) if (u.isAdmin) out.push({ key: `admin-unmarked:${iso}:${time}:${id}`, userId: id, text });
   }
   return out;
 }
