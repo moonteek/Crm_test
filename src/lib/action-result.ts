@@ -12,11 +12,14 @@ const PRISMA_CODES: Record<string, string> = {
 };
 const FAILED = "Saqlab bo'lmadi — qayta urinib ko'ring";
 
-/** The words a person sees for a failed action: our own refusals as written, database errors in plain words. */
+/** Our own refusals are plain `Error`s (ForbiddenError too); anything else — a TypeError, a crash — is a bug. */
+const isRefusal = (e: unknown): e is Error => e instanceof Error && (e.name === "Error" || e.name === "ForbiddenError");
+
+/** The words a person sees for a failed action: our own refusals as written, database errors in plain words, bugs as a plain failure. */
 export function errorText(e: unknown): string {
-  if (!(e instanceof Error)) return FAILED;
-  if (e.name.startsWith("PrismaClient")) return PRISMA_CODES[(e as Error & { code?: string }).code ?? ""] ?? FAILED;
-  return e.message || FAILED;
+  if (isRefusal(e)) return e.message || FAILED;
+  if (e instanceof Error && e.name.startsWith("PrismaClient")) return PRISMA_CODES[(e as Error & { code?: string }).code ?? ""] ?? FAILED;
+  return FAILED;
 }
 
 /** Runs an action's work; a refusal comes back as `{ error }`, while redirects (login, the page after a delete) still go through. */
@@ -26,7 +29,20 @@ export async function tryAction(work: () => Promise<unknown>): Promise<ActionSta
     return { ok: true };
   } catch (e) {
     unstable_rethrow(e);
-    if (errorText(e) === FAILED) console.error(e);
+    if (!isRefusal(e)) console.error(e); // a bug or a database error: keep it in the server log
     return { error: errorText(e) };
+  }
+}
+
+/**
+ * For client code that calls an action itself: the refusal to show, or null. A lost connection counts as one too, but
+ * a redirect (the page after a delete, the login after an expired session) is passed on for the router to follow.
+ */
+export async function answer(res: Promise<ActionState>): Promise<string | null> {
+  try {
+    return (await res)?.error ?? null;
+  } catch (e) {
+    unstable_rethrow(e);
+    return "Aloqa uzildi — qayta urinib ko'ring";
   }
 }

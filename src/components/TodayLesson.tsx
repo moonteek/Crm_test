@@ -3,7 +3,7 @@
 import { useOptimistic, useState, useTransition } from "react";
 import { Check, Clock, X } from "lucide-react";
 import { markAllPresent, markToday, setAbsenceReason } from "@/app/(app)/actions";
-import { answer } from "./ActionForm";
+import { answer } from "@/lib/action-result";
 
 type MarkKey = "present" | "late" | "absent";
 type Row = { id: number; name: string; mark: MarkKey | null; reasonId: number | null };

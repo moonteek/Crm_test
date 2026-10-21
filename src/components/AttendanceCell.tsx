@@ -5,7 +5,7 @@ import { ArrowLeftRight, Ban, Check, Clock, Flag, Minus, RotateCcw, X } from "lu
 import { removeSubstitute, restoreLesson, setAbsenceReason, setAttendance } from "@/app/(app)/actions";
 import type { MarkKey } from "@/lib/attendance";
 import type { ActionState } from "@/lib/action-result";
-import { answer } from "./ActionForm";
+import { answer } from "@/lib/action-result";
 import { LessonChangeDialog, PopoverPanel, REASON_TONE, useLessonGrid, usePopover } from "./lesson-grid";
 import { lessonChangeOpen } from "@/lib/lesson-changes";
 

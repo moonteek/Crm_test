@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { ArrowLeftRight, Ban, Check, ListChecks, RotateCcw } from "lucide-react";
 import { markAllPresent, removeSubstitute, restoreLesson, setAbsenceReason } from "@/app/(app)/actions";
 import { DialogFrame } from "./Modal";
-import { answer } from "./ActionForm";
+import { answer } from "@/lib/action-result";
 import type { ActionState } from "@/lib/action-result";
 import { LessonChangeDialog, PopoverPanel, useLessonGrid, usePopover } from "./lesson-grid";
 import { lessonChangeOpen } from "@/lib/lesson-changes";

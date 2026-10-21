@@ -2,7 +2,8 @@
 
 import { useTransition } from "react";
 import { setGrade } from "@/app/(app)/actions";
-import { answer, ErrorNote, useFadingError } from "./ActionForm";
+import { ErrorNote, useFadingError } from "./ActionForm";
+import { answer } from "@/lib/action-result";
 
 const TONE: Record<number, string> = {
   5: "border-success/40 bg-success-tint text-success",

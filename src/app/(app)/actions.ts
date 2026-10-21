@@ -154,17 +154,21 @@ export async function convertLead(id: number, _: ActionState, f: FormData): Prom
     await assertLeadAccess(user, id);
     const { groupId } = parseForm(z.object({ groupId: v.optId() }), f);
     const lead = await db.lead.findUniqueOrThrow({ where: { id } });
-    const student = await db.student.create({
-      data: {
-        name: lead.name,
-        phone: lead.phone,
-        note: lead.note,
-        source: lead.source,
-      },
+    // all or nothing: a refused group start must not leave a student behind (the form stays open for another try)
+    const student = await db.$transaction(async (tx) => {
+      const s = await tx.student.create({
+        data: {
+          name: lead.name,
+          phone: lead.phone,
+          note: lead.note,
+          source: lead.source,
+        },
+      });
+      if (groupId) await startMembership(tx, { groupId, studentId: s.id, mode: "TRIAL", date: centreDay(), userId: user.id });
+      await tx.lead.update({ where: { id }, data: { status: "WON", wonAt: new Date(), studentId: s.id, nextActionAt: null } });
+      await tx.leadActivity.create({ data: { leadId: id, userId: user.id, type: "STATUS", result: "WON" } });
+      return s;
     });
-    if (groupId) await db.$transaction((tx) => startMembership(tx, { groupId, studentId: student.id, mode: "TRIAL", date: centreDay(), userId: user.id }));
-    await db.lead.update({ where: { id }, data: { status: "WON", wonAt: new Date(), studentId: student.id, nextActionAt: null } });
-    await db.leadActivity.create({ data: { leadId: id, userId: user.id, type: "STATUS", result: "WON" } });
     await logAction(user, "lead.convert", `Lid o'quvchiga aylantirildi: ${lead.name}`, { studentId: student.id });
     revalidatePath("/leads");
     redirect(`/students/${student.id}`);
@@ -251,12 +255,12 @@ export async function createStudent(_: ActionState, f: FormData): Promise<Action
     const user = await requirePermission("students.manage");
     const { groupId, mode, joinedAt, ...data } = parseForm(studentSchema.extend({ groupId: v.optId(), mode: v.oneOf(MODES, "TRIAL"), joinedAt: v.optDate() }), f);
     if (groupId) await assertGroupAccess(user, groupId);
-    const student = await db.student.create({
-      data,
+    // all or nothing: a refused group start must not leave a student behind (the form stays open for another try)
+    const student = await db.$transaction(async (tx) => {
+      const s = await tx.student.create({ data });
+      if (groupId) await startMembership(tx, { groupId, studentId: s.id, mode: mode as "TRIAL" | "ACTIVE", date: joinedAt ?? centreDay(), userId: user.id });
+      return s;
     });
-    if (groupId) {
-      await db.$transaction((tx) => startMembership(tx, { groupId, studentId: student.id, mode: mode as "TRIAL" | "ACTIVE", date: joinedAt ?? centreDay(), userId: user.id }));
-    }
     await logAction(user, "student.create", `Yangi o'quvchi: ${student.name}`, { studentId: student.id });
     redirect(`/students/${student.id}`);
   });

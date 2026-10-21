@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { MoreHorizontal, Trash2 } from "lucide-react";
 import { DialogFrame } from "./Modal";
-import { answer } from "./ActionForm";
+import { answer } from "@/lib/action-result";
 import type { ActionState } from "@/lib/action-result";
 
 /** The group's "⋯" menu; deleting asks first, because it removes the group's attendance, grades and exams too. */

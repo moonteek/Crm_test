@@ -3,15 +3,6 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { ActionState } from "@/lib/action-result";
 
-/** For client code that calls an action itself: the refusal to show, or null. A lost connection counts as one too. */
-export async function answer(res: Promise<ActionState>): Promise<string | null> {
-  try {
-    return (await res)?.error ?? null;
-  } catch {
-    return "Aloqa uzildi — qayta urinib ko'ring";
-  }
-}
-
 const ERROR = "basis-full rounded-xl bg-danger-tint px-3 py-2 text-sm text-danger";
 
 /**
