@@ -136,3 +136,34 @@ export function isContacted(reasons: Reason[], contactDay: Date | null): boolean
   if (!t) return true;
   return contactDay !== null && contactDay >= t;
 }
+
+export type RiskGroup = { id: number; name: string; teacherId: number | null; teacher: string | null; reasons: Reason[] };
+export type RiskRow = {
+  student: { id: number; name: string; phone: string; parentPhone: string | null };
+  groups: RiskGroup[];
+  contact: { at: Date; who: string | null; result: keyof typeof CONTACT_RESULTS; comment: string | null } | null;
+  contacted: boolean;
+  newest: Date;
+};
+export type RiskParams = { tab?: string; group?: string; teacher?: string; kind?: string };
+
+const reasonCount = (r: RiskRow) => r.groups.reduce((n, g) => n + g.reasons.length, 0);
+
+/**
+ * The report's view: tab "open" (default, not contacted) / "done" / "all"; group, teacher and reason-type filters keep
+ * only the matching groups (and reasons) and drop students left with none. Most reasons first, then the newest problem.
+ */
+export function filterRows(rows: RiskRow[], p: RiskParams): RiskRow[] {
+  const kind = p.kind && p.kind in RISK_KINDS ? (p.kind as RiskKind) : null;
+  return rows
+    .filter((r) => (p.tab === "all" ? true : p.tab === "done" ? r.contacted : !r.contacted))
+    .map((r) => ({
+      ...r,
+      groups: r.groups
+        .filter((g) => (!p.group || String(g.id) === p.group) && (!p.teacher || String(g.teacherId) === p.teacher))
+        .map((g) => (kind ? { ...g, reasons: g.reasons.filter((x) => x.kind === kind) } : g))
+        .filter((g) => g.reasons.length > 0),
+    }))
+    .filter((r) => r.groups.length > 0)
+    .sort((a, b) => reasonCount(b) - reasonCount(a) || b.newest.getTime() - a.newest.getTime());
+}

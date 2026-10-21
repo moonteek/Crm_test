@@ -40,7 +40,7 @@ import { imageProblem } from "@/lib/image";
 import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, fitsDay, groupClashes, needsClashCheck, teacherGrid, type DayType, type LessonLike } from "@/lib/availability";
 import { check, parseForm, v } from "@/lib/validation";
 import { errorText, tryAction, type ActionState } from "@/lib/action-result";
-import { riskSettingsSchema } from "@/lib/risk";
+import { CONTACT_RESULTS, riskSettingsSchema } from "@/lib/risk";
 import { storeRiskSettings } from "@/lib/risk-db";
 import { phoneKey } from "@/lib/phone";
 
@@ -1835,5 +1835,22 @@ export async function saveRiskSettings(_: ActionState, f: FormData): Promise<Act
     await logAction(user, "risk.settings", "Xavfli o'quvchilar chegaralari o'zgartirildi");
     revalidatePath("/risk");
     revalidatePath("/settings/risk");
+  });
+}
+
+const riskContactSchema = z.object({
+  result: z.enum(Object.keys(CONTACT_RESULTS) as [keyof typeof CONTACT_RESULTS], { error: "Natijani tanlang" }),
+  comment: v.optText(500),
+});
+
+/** "Bog'lanildi": a call to a risky student or parent; it also shows in the student's Tarix. */
+export async function recordRiskContact(studentId: number, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("risk.view");
+    const d = parseForm(riskContactSchema, f);
+    await db.student.findUniqueOrThrow({ where: { id: studentId }, select: { id: true } });
+    await db.riskContact.create({ data: { studentId, userId: user.id, result: d.result, comment: d.comment } });
+    await logAction(user, "risk.contact", `Bog'lanildi (xavfli o'quvchi): ${CONTACT_RESULTS[d.result]}${d.comment ? ` — ${d.comment}` : ""}`, { studentId });
+    revalidatePath("/risk");
   });
 }
