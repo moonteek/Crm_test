@@ -114,3 +114,16 @@ test("a substitute for the assistant doesn't touch the teacher's lessons", () =>
   assert.equal(teacherEarnings(ASSIST, { type: "PERCENT", amount: 10 }, [m], 2026, 10, NOW).rows[0].lessons, 12);
   assert.equal(teacherEarnings(SUB, { type: "PERCENT", amount: 10 }, [m], 2026, 10, NOW).rows[0].lessons, 1);
 });
+
+test("a different make-up teacher earns the moved lesson; the regular teacher loses exactly it", async () => {
+  const { makeupSubstitutes } = await import("./lesson-changes");
+  // FE-14 (B) cancels 11 Nov and moves it to Saturday 14 Nov, taught by SUB
+  const subs = makeupSubstitutes(
+    [{ groupId: FE.id, date: nov(11), charged: false, makeupDate: nov(14), makeupTime: "14:00", makeupRoomId: null, makeupTeacherId: SUB }],
+    () => B,
+  );
+  const m = member({ ...FE, substitutes: subs }, ["ACTIVATE", nov(1)]);
+  const lesson = lessonValues(m, 2026, 10, NOW).find((v) => v.day.getTime() === nov(11).getTime())!.value;
+  assert.equal(teacherEarnings(SUB, { type: "PERCENT", amount: 30 }, [m], 2026, 10, NOW).total, Math.round(lesson * 0.3));
+  assert.equal(teacherEarnings(B, { type: "PERCENT", amount: 40 }, [m], 2026, 10, NOW).total, Math.round((600_000 - lesson) * 0.4));
+});

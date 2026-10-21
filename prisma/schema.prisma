@@ -60,6 +60,7 @@ model User {
   substitutions LessonChange[] @relation("Substitutions")
   lessonChanges LessonChange[] @relation("LessonChangeAuthor")
   telegramMessages TelegramMessage[]
+  makeups          LessonChange[] @relation("Makeups")
   riskContacts RiskContact[]
 }
 
@@ -118,6 +119,7 @@ model Room {
   name     String
   capacity Int     @default(15)
   groups   Group[]
+  makeups   LessonChange[] @relation("MakeupRoom")
 }
 
 model Group {
@@ -577,6 +579,15 @@ model LessonChange {
   substituteId Int?
   substitute   User?    @relation("Substitutions", fields: [substituteId], references: [id], onDelete: SetNull)
   reason       String?
+  // CANCEL only: true = toggle OFF (no lesson, but charged and paid as if held)
+  charged         Boolean  @default(false)
+  // CANCEL only: the lesson moved to this day (money stays on the original day)
+  makeupDate      DateTime?
+  makeupTime      String?
+  makeupRoomId    Int?
+  makeupRoom      Room?    @relation("MakeupRoom", fields: [makeupRoomId], references: [id], onDelete: SetNull)
+  makeupTeacherId Int?
+  makeupTeacher   User?    @relation("Makeups", fields: [makeupTeacherId], references: [id], onDelete: SetNull)
   userId       Int?
   user         User?    @relation("LessonChangeAuthor", fields: [userId], references: [id], onDelete: SetNull)
   createdAt    DateTime @default(now())

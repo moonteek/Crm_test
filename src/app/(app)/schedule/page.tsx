@@ -9,7 +9,7 @@ import { ExportButtons } from "@/components/ExportButtons";
 import { CurriculumBadge } from "@/components/CurriculumBar";
 import { curriculumOn, type Progress } from "@/lib/curriculum";
 import { centreDay } from "@/lib/membership-db";
-import { closedDaysOf, holidayDays } from "@/lib/holidays-db";
+import { closedDaysOf, makeupDaysOf, holidayDays } from "@/lib/holidays-db";
 import { COURSE_TONE, courseColor, lessonsPassed } from "@/lib/timetable";
 import { HorizontalTimetable } from "@/components/schedule/HorizontalTimetable";
 
@@ -51,11 +51,12 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const shown = new Date(centreDay().getTime() + (((day + 6) % 7) - ((today + 6) % 7) + (today === 0 ? 7 : 0)) * 86_400_000);
   const holidays = await holidayDays();
   const closedFor = await closedDaysOf();
+  const makeupsFor = await makeupDaysOf();
   // the centre is closed that day: no lessons to show
   const closed = holidays.includes(shown.toISOString().slice(0, 10));
   const shownIso = shown.toISOString().slice(0, 10);
   const lessons = (closed ? [] : perDay.get(day) ?? []).map(withTimes).map((l) => {
-    const cur = curriculumOn({ ...l, holidays: closedFor(l.id) }, l.section?.subjects ?? [], shown);
+    const cur = curriculumOn({ ...l, holidays: closedFor(l.id), extraDays: makeupsFor(l.id) }, l.section?.subjects ?? [], shown);
     return {
       ...l, progress: cur.progress, exam: cur.nextExam !== null && cur.nextExam.date.getTime() === shown.getTime(),
       color: courseColor(l.course),

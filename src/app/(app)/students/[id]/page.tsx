@@ -6,7 +6,7 @@ import { centreDay } from "@/lib/membership-db";
 import { requirePage } from "@/lib/auth";
 import { can, canSeeBalances, groupScope, studentScope } from "@/lib/access";
 import { balance, priceNow, withHolidays } from "@/lib/billing";
-import { closedDaysOf } from "@/lib/holidays-db";
+import { unchargedDaysOf } from "@/lib/holidays-db";
 import { statement } from "@/lib/statement";
 import { upcomingPrice } from "@/lib/prices";
 import { passed } from "@/lib/curriculum";
@@ -72,7 +72,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
   const reasons = await db.reason.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } });
   if (!student) notFound();
 
-  const closed = await closedDaysOf();
+  const closed = await unchargedDaysOf();
   const groups = withHolidays(student.groups, closed);
   const b = balance(groups, student.payments);
   const present = student.attendance.filter((a) => a.present).length;

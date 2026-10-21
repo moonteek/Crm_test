@@ -274,3 +274,13 @@ test("an October changed in the app (per-lesson) still ignores holidays", () => 
   ] };
   assert.equal(chargeLines(m, d(2026, 11, 15)).find((l) => l.month === 9)?.amount, 230_769);
 });
+
+test("a moved or charged cancel is billed like a held lesson; a plain cancel is not", async () => {
+  const { unchargedDays } = await import("./lesson-changes");
+  const charge = (cancel: { charged: boolean; makeupDate: Date | null } | null) =>
+    novCharge({ ...even(["ACTIVATE", nov(1)]), holidays: cancel ? unchargedDays([], [{ date: nov(10), ...cancel }]) : [] });
+  const full = charge(null);
+  assert.equal(charge({ charged: false, makeupDate: nov(16) }), full); // moved to Monday 16th
+  assert.equal(charge({ charged: true, makeupDate: null }), full); // toggle OFF
+  assert.equal(charge({ charged: false, makeupDate: null }), Math.round((full * 11) / 12)); // like a holiday
+});

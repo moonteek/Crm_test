@@ -6,7 +6,7 @@ import { centreDay } from "@/lib/membership-db";
 import { requirePage } from "@/lib/auth";
 import { can, canSeeBalances, groupScope } from "@/lib/access";
 import { balance, priceNow, withHolidays } from "@/lib/billing";
-import { closedDaysOf, holidayDays } from "@/lib/holidays-db";
+import { closedDaysOf, holidayDays, makeupDaysOf, unchargedDaysOf } from "@/lib/holidays-db";
 import { upcomingPrice } from "@/lib/prices";
 import { membershipInclude } from "@/lib/billing-include";
 import { date, GROUP_DAYS, isoDate, lessonDates, lessonWeekdays, money, MONTHS } from "@/lib/format";
@@ -88,7 +88,9 @@ export default async function GroupPage({
   // this group's closed days: the centre's holidays and its own cancelled lessons
   const closed = await closedDaysOf();
   const holidays = closed(id);
-  const planGroup = { ...group, holidays };
+  // money follows the not-charged days (a moved or "charged" cancel is billed as held); the plan counts make-up days
+  const uncharged = await unchargedDaysOf();
+  const planGroup = { ...group, holidays, extraDays: (await makeupDaysOf())(id) };
   // the group's section: its level lines, and its name when the course has several sections
   const lines = group.section?.subjects ?? [];
   const sectionName = group.course._count.sections > 1 ? group.section?.name ?? null : null;
@@ -266,7 +268,7 @@ export default async function GroupPage({
               <tbody>
                 {group.students.map((gs) => {
                   const { student } = gs;
-                  const b = balance(withHolidays(student.groups, closed), student.payments);
+                  const b = balance(withHolidays(student.groups, uncharged), student.payments);
                   const marks = days.map((d) => mark.get(`${student.id}:${isoDate(d)}`)).filter((v) => v !== undefined);
                   const scores = days.map((d) => gradeMap.get(`${student.id}:${isoDate(d)}`)).filter((v): v is number => v !== undefined);
                   return (
@@ -281,9 +283,9 @@ export default async function GroupPage({
                             </p>
                           </div>
                           <MemberMenu
-                            member={toMemberData({ ...gs, group: thisGroup }, { id: student.id, name: student.name }, { money: allow.balance, holidays })}
+                            member={toMemberData({ ...gs, group: thisGroup }, { id: student.id, name: student.name }, { money: allow.balance, holidays: uncharged(id) })}
                             reasons={reasons}
-                            groups={transferGroups.map((g) => toMemberGroup(g, closed(g.id)))}
+                            groups={transferGroups.map((g) => toMemberGroup(g, uncharged(g.id)))}
                             balance={allow.balance ? b : null}
                             canManage={allow.students}
                             canPay={allow.pay}

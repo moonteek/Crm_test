@@ -28,7 +28,7 @@ import {
 import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
 import { levelExamToSave } from "@/lib/group-exams";
-import { assertLessonOpen, closedDaysOf, holidayDays } from "@/lib/holidays-db";
+import { assertLessonOpen, closedDaysOf, holidayDays, makeupDaysOf } from "@/lib/holidays-db";
 import { lessonChangeOpen, lessonChangeProblem } from "@/lib/lesson-changes";
 import { canDeleteHoliday, expandRange, holidayProblem } from "@/lib/holidays";
 import { canDelete, canEnd, discountProblem, lastMonth } from "@/lib/discounts";
@@ -1025,7 +1025,7 @@ export async function saveLevelExamScores(_: MemberActionState, f: FormData): Pr
     // level numbers belong to the group's section, so its own lines decide the title and date
     const saved = await db.exam.findUnique({ where: { groupId_level: { groupId, level } }, select: { date: true, _count: { select: { results: true } } } });
     const auto = levelExamToSave(
-      levelExams({ ...group, holidays: (await closedDaysOf())(group.id) }, group.section?.subjects ?? []),
+      levelExams({ ...group, holidays: (await closedDaysOf())(group.id), extraDays: (await makeupDaysOf())(group.id) }, group.section?.subjects ?? []),
       level,
       saved ? { date: saved.date, scored: saved._count.results > 0 } : null,
       centreDay(),
