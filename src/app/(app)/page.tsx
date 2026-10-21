@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertCircle, GraduationCap, UserPlus, Users, UsersRound, Wallet } from "lucide-react";
+import { AlertCircle, GraduationCap, ShieldAlert, UserPlus, Users, UsersRound, Wallet } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { can, firstAllowedPage, groupScope, studentScope } from "@/lib/access";
@@ -13,6 +13,7 @@ import { DotMeter, Empty, PageHeader, StatCard } from "@/components/ui";
 import { alertsFor } from "@/lib/alerts-db";
 import { loadDebtors } from "@/lib/lists/debtors";
 import { loadUnmarkedToday } from "@/lib/lists/unmarked";
+import { countOpenRisk } from "@/lib/lists/risk";
 
 export default async function Dashboard() {
   const user = await requireUser();
@@ -22,6 +23,7 @@ export default async function Dashboard() {
     leads: can(user, "leads.view"),
     payments: can(user, "payments.view"),
     debtors: can(user, "debtors.view"),
+    risk: can(user, "risk.view"),
   };
   const now = new Date();
   const today = centreToday(now);
@@ -58,6 +60,7 @@ export default async function Dashboard() {
   const substituteOf = (groupId: number) => changes.filter((c) => c.kind === "SUBSTITUTE" && c.groupId === groupId).map((c) => c.substitute?.name ?? "—").join(", ");
   // the same count as the Qarzdorlar page (everyone who owes, current and former students)
   const debtors = show.debtors ? (await loadDebtors(user)).debtors.length : 0;
+  const risky = show.risk ? await countOpenRisk() : 0;
   const income = (monthPayments._sum.amount ?? 0) + (monthShop._sum.total ?? 0);
   const expense = monthExpenses._sum.amount ?? 0;
   const totalLeads = leadCounts.reduce((s, l) => s + l._count, 0) || 1;
@@ -80,6 +83,7 @@ export default async function Dashboard() {
         <StatCard label="Faol guruhlar" value={groups} icon={<UsersRound />} href="/groups" />
         {show.leads && <StatCard label="Yangi lidlar" value={leads} icon={<UserPlus />} tone="amber" href="/leads" />}
         {show.debtors && <StatCard label="Qarzdorlar" value={debtors} icon={<AlertCircle />} tone="rose" href="/debtors" />}
+        {show.risk && <StatCard label="Xavfli o'quvchilar (bog'lanilmagan)" value={risky} icon={<ShieldAlert />} tone="amber" href="/risk" />}
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 md:mt-6 md:gap-6 xl:grid-cols-3">

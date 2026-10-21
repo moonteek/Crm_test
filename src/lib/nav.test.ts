@@ -35,3 +35,9 @@ test("the menu is grouped; sections with nothing allowed disappear", () => {
   const teacher = navSections(["groups.view", "students.view", "attendance.mark", "self.teacher"]);
   assert.deepEqual(teacher.map((s) => [s.title, s.items.map((i) => i.href)]), [["O'quv", ["/students", "/groups", "/schedule", "/availability"]]]);
 });
+
+test("risky students sit after O'quvchilar for risk.view", () => {
+  const quv = (perms: string[]) => navSections(perms).find((s) => s.title === "O'quv")!.items.map((i) => i.href);
+  assert.deepEqual(quv(["students.view", "risk.view"]), ["/students", "/risk"]);
+  assert.deepEqual(quv(["students.view"]), ["/students"]);
+});

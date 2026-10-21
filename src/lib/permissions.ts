@@ -38,6 +38,7 @@ export const PERMISSION_GROUPS: { title: string; items: { key: string; label: st
       { key: "students.delete", label: "O'quvchini o'chirish" },
       { key: "students.tags", label: "Teglarni boshqarish" },
       { key: "students.discount", label: "Chegirma berish" },
+      { key: "risk.view", label: "Xavfli o'quvchilar: ko'rish va bog'lanishni belgilash" },
     ],
   },
   {
