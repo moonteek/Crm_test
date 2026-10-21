@@ -3,10 +3,11 @@ import { monthBounds } from "./month";
 import { salesStats } from "./sales";
 import { billedStudentCount, PER_LESSON_FROM, withHolidays } from "./billing";
 import { teacherEarnings } from "./teacher-pay";
-import { ownsOn } from "./teachers-history";
+import { ownsOn, teacherOn } from "./teachers-history";
 import { dayOf } from "./membership-legacy";
 import { membershipInclude } from "./billing-include";
-import { closedDaysOf } from "./holidays-db";
+import { unchargedDaysOf } from "./holidays-db";
+import { makeupSubstitutes } from "./lesson-changes";
 
 import { SALARY_TYPES } from "./salary-types";
 
@@ -76,7 +77,7 @@ export async function salariesForMonth(month: string, { allActive = false } = {}
 /** Groups the person teaches now or taught at some point (current teacher/assistant or in the history). */
 // groups the person teaches or taught, or where they stood in for someone (a substitute is paid for that lesson)
 const taughtBy = (userId: number) => ({
-  OR: [{ teacherId: userId }, { assistantId: userId }, { teachers: { some: { userId } } }, { lessonChanges: { some: { kind: "SUBSTITUTE", substituteId: userId } } }],
+  OR: [{ teacherId: userId }, { assistantId: userId }, { teachers: { some: { userId } } }, { lessonChanges: { some: { kind: "SUBSTITUTE", substituteId: userId } } }, { lessonChanges: { some: { kind: "CANCEL", makeupTeacherId: userId } } }],
 });
 
 /** Before November: payments recorded to a group while this person taught it (the payment day decides). */
@@ -98,7 +99,7 @@ async function oldRuleStudents(userId: number, month: string) {
   });
   const [y, m] = month.split("-").map(Number);
   const first = new Date(Date.UTC(y, m - 1, 1));
-  const closed = await closedDaysOf();
+  const closed = await unchargedDaysOf();
   return memberships.filter((ms) => ownsOn(ms.group, userId, first) && billedStudentCount([{ ...ms, holidays: closed(ms.groupId) }], y, m - 1) > 0);
 }
 
@@ -120,9 +121,18 @@ async function earningsFor(userId: number, salary: { type: "PERCENT" | "PER_STUD
     include: { ...membershipInclude, student: { select: { id: true, name: true } }, group: { include: { course: true, prices: true, teachers: true } } },
   });
   const [y, m] = month.split("-").map(Number);
-  const substitutes = await db.lessonChange.findMany({ where: { kind: "SUBSTITUTE", date: { gte: from, lt: to } } });
-  const withSubs = memberships.map((ms) => ({ ...ms, group: { ...ms.group, substitutes: substitutes.filter((s) => s.groupId === ms.groupId) } }));
-  return teacherEarnings(userId, salary, withHolidays(withSubs, await closedDaysOf()), y, m - 1);
+  const [substitutes, moved] = await Promise.all([
+    db.lessonChange.findMany({ where: { kind: "SUBSTITUTE", date: { gte: from, lt: to } } }),
+    // moved lessons are paid on their original day; a different make-up teacher earns them like a substitute
+    db.lessonChange.findMany({ where: { kind: "CANCEL", date: { gte: from, lt: to }, makeupDate: { not: null } } }),
+  ]);
+  const groupOf = new Map(memberships.map((ms) => [ms.groupId, ms.group]));
+  const makeupSubs = makeupSubstitutes(moved, (groupId, day) => {
+    const g = groupOf.get(groupId);
+    return g ? teacherOn(g.teachers, g, day, "TEACHER") : null;
+  });
+  const withSubs = memberships.map((ms) => ({ ...ms, group: { ...ms.group, substitutes: [...substitutes, ...makeupSubs].filter((s) => s.groupId === ms.groupId) } }));
+  return teacherEarnings(userId, salary, withHolidays(withSubs, await unchargedDaysOf()), y, m - 1);
 }
 
 export type SalaryBreakdown =

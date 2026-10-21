@@ -13,6 +13,7 @@ import { DotMeter, Empty, PageHeader, StatCard } from "@/components/ui";
 import { alertsFor } from "@/lib/alerts-db";
 import { loadDebtors } from "@/lib/lists/debtors";
 import { loadUnmarkedToday } from "@/lib/lists/unmarked";
+import { CoverLessons } from "@/components/CoverLessons";
 import { countOpenRisk } from "@/lib/lists/risk";
 
 export default async function Dashboard() {
@@ -57,6 +58,15 @@ export default async function Dashboard() {
     include: { substitute: { select: { name: true } } },
   });
   const cancelled = new Map(changes.filter((c) => c.kind === "CANCEL").map((c) => [c.groupId, c.reason ?? ""]));
+  // lessons moved to today ("Qo'shimcha dars"): listed with today's lessons at their own time, room and teacher
+  const todayMakeups = todayClosed ? [] : await db.lessonChange.findMany({
+    where: { kind: "CANCEL", makeupDate: new Date(`${todayIso}T00:00:00Z`), group: { status: "ACTIVE", ...groupScope(user) } },
+    include: { makeupRoom: true, makeupTeacher: true, group: { include: { course: true, _count: { select: { students: { where: { leftAt: null } } } } } } },
+  });
+  const todayList = [
+    ...todayGroups.map((g) => ({ ...g, key: String(g.id), makeup: false })),
+    ...todayMakeups.map((c) => ({ ...c.group, key: `m${c.id}`, time: c.makeupTime ?? c.group.time, room: c.makeupRoom, teacher: c.makeupTeacher, makeup: true })),
+  ].sort((a, b) => a.time.localeCompare(b.time));
   const substituteOf = (groupId: number) => changes.filter((c) => c.kind === "SUBSTITUTE" && c.groupId === groupId).map((c) => c.substitute?.name ?? "—").join(", ");
   // the same count as the Qarzdorlar page (everyone who owes, current and former students)
   const debtors = show.debtors ? (await loadDebtors(user)).debtors.length : 0;
@@ -77,6 +87,7 @@ export default async function Dashboard() {
         eyebrow={`${weekday} · ${pad(today.day)}.${pad(today.month)}.${today.year}`}
         title={`${greeting(today.hour)}, ${user.name}`}
       />
+      <CoverLessons user={user} />
 
       <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
         <StatCard label="Faol o'quvchilar" value={students.length} icon={<Users />} href="/students" hero />
@@ -105,23 +116,23 @@ export default async function Dashboard() {
             <h2 className="font-semibold">Bugungi darslar</h2>
             <Link href="/schedule" className="label-mono hover:text-ink">Jadval →</Link>
           </div>
-          {todayGroups.length === 0 || todayClosed ? (
+          {todayList.length === 0 || todayClosed ? (
             <Empty text={todayClosed ? "Bayram — dars yo'q" : "Bugun dars yo'q"} />
           ) : (
             <div className="space-y-2">
-              {todayGroups.map((g) => (
+              {todayList.map((g) => (
                 <Link
-                  key={g.id}
+                  key={g.key}
                   href={`/groups/${g.id}`}
-                  className={`press flex items-center gap-4 rounded-xl border border-line bg-raised px-3.5 py-3 hover:border-line-strong ${cancelled.has(g.id) ? "text-faint" : ""}`}
+                  className={`press flex items-center gap-4 rounded-xl border border-line bg-raised px-3.5 py-3 hover:border-line-strong ${g.makeup ? "border-dashed" : cancelled.has(g.id) ? "text-faint" : ""}`}
                 >
                   <div className="w-[68px] shrink-0">
                     <p className="font-dot text-xl leading-none font-black">{g.time}</p>
                     <p className="label-mono mt-1">{fromMinutes(toMinutes(g.time) + g.course.lessonMin)}</p>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className={`truncate font-medium ${cancelled.has(g.id) ? "line-through" : ""}`}>{g.name}</p>
-                    {cancelled.has(g.id) ? (
+                    <p className={`truncate font-medium ${!g.makeup && cancelled.has(g.id) ? "line-through" : ""}`}>{g.name}{g.makeup && <span className="label-mono ml-2 text-accent-ink">qo&apos;shimcha dars</span>}</p>
+                    {!g.makeup && cancelled.has(g.id) ? (
                       <p className="truncate text-xs font-medium text-danger">Bekor qilingan{cancelled.get(g.id) ? `: ${cancelled.get(g.id)}` : ""}</p>
                     ) : (
                       <p className="truncate text-xs text-muted">

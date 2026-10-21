@@ -6,7 +6,7 @@ import { centreDay } from "@/lib/membership-db";
 import { requirePage } from "@/lib/auth";
 import { can, canSeeBalances, groupScope } from "@/lib/access";
 import { balance, priceNow, withHolidays } from "@/lib/billing";
-import { closedDaysOf, holidayDays } from "@/lib/holidays-db";
+import { closedDaysOf, holidayDays, makeupDaysOf, unchargedDaysOf } from "@/lib/holidays-db";
 import { upcomingPrice } from "@/lib/prices";
 import { membershipInclude } from "@/lib/billing-include";
 import { date, GROUP_DAYS, isoDate, lessonDates, lessonWeekdays, money, MONTHS } from "@/lib/format";
@@ -64,7 +64,16 @@ export default async function GroupPage({
   });
   if (!group) notFound();
 
-  const days = lessonDates(group.days, year, month);
+  // this month's columns: the group's lesson days plus make-up days (moved lessons) that fall in it
+  const monthStart = new Date(Date.UTC(year, month, 1));
+  const monthEnd = new Date(Date.UTC(year, month + 1, 1));
+  const [monthMakeups, cancelInfo] = await Promise.all([
+    db.lessonChange.findMany({ where: { groupId: id, kind: "CANCEL", makeupDate: { gte: monthStart, lt: monthEnd } } }),
+    db.lessonChange.findMany({ where: { groupId: id, kind: "CANCEL", date: { gte: monthStart, lt: monthEnd } }, select: { date: true, charged: true, makeupDate: true } }),
+  ]);
+  const makeupOn = new Map(monthMakeups.map((c) => [isoDate(c.makeupDate!), { original: isoDate(c.date), date: isoDate(c.makeupDate!), time: c.makeupTime ?? group.time, roomId: c.makeupRoomId, teacherId: c.makeupTeacherId }]));
+  const cancelOn = new Map(cancelInfo.map((c) => [isoDate(c.date), { makeupDate: c.makeupDate ? isoDate(c.makeupDate) : null, charged: c.charged }]));
+  const days = [...lessonDates(group.days, year, month), ...monthMakeups.map((c) => c.makeupDate!)].sort((a, b) => a.getTime() - b.getTime());
   const range = { gte: days[0] ?? new Date(), lte: days.at(-1) ?? new Date() };
   const [attendance, grades, exams, courses, teachers, rooms, others, reasons, transferGroups, changes, absenceReasons, centreHolidays] = await Promise.all([
     db.attendance.findMany({ where: { groupId: id, date: range }, include: { reason: true } }),
@@ -88,7 +97,9 @@ export default async function GroupPage({
   // this group's closed days: the centre's holidays and its own cancelled lessons
   const closed = await closedDaysOf();
   const holidays = closed(id);
-  const planGroup = { ...group, holidays };
+  // money follows the not-charged days (a moved or "charged" cancel is billed as held); the plan counts make-up days
+  const uncharged = await unchargedDaysOf();
+  const planGroup = { ...group, holidays, extraDays: (await makeupDaysOf())(id) };
   // the group's section: its level lines, and its name when the course has several sections
   const lines = group.section?.subjects ?? [];
   const sectionName = group.course._count.sections > 1 ? group.section?.name ?? null : null;
@@ -107,7 +118,8 @@ export default async function GroupPage({
   const examCols = examColumns(planGroup, lines, exams, centreDay());
   // "Bugungi dars": on the group's lesson day (not a holiday) its current students with today's mark
   const todayIso = isoDate(centreDay());
-  const todayRows = group.status === "ACTIVE" && group.startDate.getTime() <= Date.now() && lessonWeekdays(group.days).includes(centreDay().getUTCDay()) && !holidays.includes(todayIso)
+  const lessonToday = (lessonWeekdays(group.days).includes(centreDay().getUTCDay()) && !holidays.includes(todayIso)) || planGroup.extraDays.includes(todayIso);
+  const todayRows = group.status === "ACTIVE" && group.startDate.getTime() <= Date.now() && lessonToday
     ? await todayMarks(id, group.students.filter((gs) => gs.status === "ACTIVE" || gs.status === "TRIAL").map((gs) => ({ id: gs.student.id, name: gs.student.name })))
     : null;
   const mark = new Map(attendance.map((a) => [`${a.studentId}:${isoDate(a.date)}`, { present: a.present, late: a.late, reason: a.reason }]));
@@ -236,6 +248,9 @@ export default async function GroupPage({
             teachers: teachers.filter((t) => t.id !== group.teacherId && t.id !== group.assistantId).map((t) => ({ id: t.id, name: t.name })),
             hasAssistant: group.assistantId !== null,
             reasons: absenceReasons.map((r) => ({ id: r.id, name: r.name, color: r.color })),
+            allTeachers: teachers.map((t) => ({ id: t.id, name: t.name })),
+            rooms: rooms.map((r) => ({ id: r.id, name: r.name })),
+            groupTime: group.time, groupRoomId: group.roomId,
           }}>
           <div className="overflow-x-auto pt-2">
             <table className="table">
@@ -252,6 +267,8 @@ export default async function GroupPage({
                         <LessonDateMenu
                           day={key} label={String(d.getUTCDate())}
                           cancelled={cancelledOn.has(key) ? cancelledOn.get(key)! : null}
+                          cancelInfo={cancelOn.get(key) ?? null}
+                          makeup={makeupOn.get(key) ?? null}
                           substitutes={subsOn(key)}
                           absent={group.students.flatMap((gs) => {
                             const a = attendance.find((x) => x.studentId === gs.student.id && isoDate(x.date) === key);
@@ -266,7 +283,7 @@ export default async function GroupPage({
               <tbody>
                 {group.students.map((gs) => {
                   const { student } = gs;
-                  const b = balance(withHolidays(student.groups, closed), student.payments);
+                  const b = balance(withHolidays(student.groups, uncharged), student.payments);
                   const marks = days.map((d) => mark.get(`${student.id}:${isoDate(d)}`)).filter((v) => v !== undefined);
                   const scores = days.map((d) => gradeMap.get(`${student.id}:${isoDate(d)}`)).filter((v): v is number => v !== undefined);
                   return (
@@ -281,9 +298,9 @@ export default async function GroupPage({
                             </p>
                           </div>
                           <MemberMenu
-                            member={toMemberData({ ...gs, group: thisGroup }, { id: student.id, name: student.name }, { money: allow.balance, holidays })}
+                            member={toMemberData({ ...gs, group: thisGroup }, { id: student.id, name: student.name }, { money: allow.balance, holidays: uncharged(id) })}
                             reasons={reasons}
-                            groups={transferGroups.map((g) => toMemberGroup(g, closed(g.id)))}
+                            groups={transferGroups.map((g) => toMemberGroup(g, uncharged(g.id)))}
                             balance={allow.balance ? b : null}
                             canManage={allow.students}
                             canPay={allow.pay}

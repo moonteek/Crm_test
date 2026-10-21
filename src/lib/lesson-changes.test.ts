@@ -51,3 +51,104 @@ test("lesson changes are open from this month on (centre time), for the menus an
   assert.equal(lessonChangeOpen(new Date("2026-12-20T00:00:00Z"), today), true);
   assert.equal(lessonChangeOpen(new Date("2026-10-31T00:00:00Z"), today), false);
 });
+
+test("day sets: plain cancel, charged cancel, moved lesson", async () => {
+  const { unchargedDays, makeupDays } = await import("./lesson-changes");
+  const cancels = [
+    { date: d(2026, 11, 12), charged: false, makeupDate: null },
+    { date: d(2026, 11, 14), charged: true, makeupDate: null },
+    { date: d(2026, 11, 17), charged: false, makeupDate: d(2026, 11, 21) },
+  ];
+  const holidays = ["2026-11-10"];
+  assert.deepEqual(closedDays(holidays, cancels.map((c) => c.date)).sort(), ["2026-11-10", "2026-11-12", "2026-11-14", "2026-11-17"]);
+  assert.deepEqual(unchargedDays(holidays, cancels).sort(), ["2026-11-10", "2026-11-12"]);
+  assert.deepEqual(makeupDays(cancels), ["2026-11-21"]);
+});
+
+test("make-up date rules", async () => {
+  const { makeupProblem } = await import("./lesson-changes");
+  const p = { original: d(2026, 11, 16), today: d(2026, 11, 16), days: "ODD", holidays: ["2026-11-28"], noLesson: ["2026-11-24"] };
+  assert.equal(makeupProblem({ ...p, date: d(2026, 11, 21) }), null);
+  assert.equal(makeupProblem({ ...p, date: d(2026, 11, 18) }), "Guruhning shu kuni darsi bor");
+  assert.equal(makeupProblem({ ...p, date: d(2026, 11, 28) }), "Bayram kuni");
+  assert.equal(makeupProblem({ ...p, date: d(2026, 11, 24) }), "Bu kun ham bekor qilingan");
+  assert.equal(makeupProblem({ ...p, date: d(2026, 11, 15) }), "Sana bugundan 60 kungacha bo'lishi kerak");
+  assert.equal(makeupProblem({ ...p, date: d(2027, 1, 16) }), "Sana bugundan 60 kungacha bo'lishi kerak");
+  assert.equal(makeupProblem({ ...p, date: d(2027, 1, 14) }), null); // 59 days ahead, a Thursday
+});
+
+test("date clash: teacher (or as assistant) and room", async () => {
+  const { clashesOn } = await import("./lesson-changes");
+  const cand = { start: "14:00", minutes: 120, teacherId: 5, roomId: 2 };
+  const other = (o: object) => ({ name: "PY-07", start: "15:00", minutes: 120, teacherId: null, assistantId: null, roomId: null, ...o });
+  assert.deepEqual(clashesOn(cand, [other({ teacherId: 5 })]), ["O'qituvchi band: PY-07 15:00–17:00"]);
+  assert.deepEqual(clashesOn(cand, [other({ assistantId: 5 })]), ["O'qituvchi band: PY-07 15:00–17:00"]);
+  assert.deepEqual(clashesOn(cand, [other({ roomId: 2 })]), ["Xona band: PY-07 15:00–17:00"]);
+  assert.deepEqual(clashesOn(cand, [other({ roomId: 2, start: "16:00" })]), []); // ends as the other starts
+});
+
+test("a make-up teacher is paid like a substitute only when it isn't the group's teacher", async () => {
+  const { makeupSubstitutes } = await import("./lesson-changes");
+  const row = (makeupTeacherId: number | null) => ({ groupId: 1, date: d(2026, 11, 16), charged: false, makeupDate: d(2026, 11, 21), makeupTime: "14:00", makeupRoomId: null, makeupTeacherId });
+  assert.deepEqual(makeupSubstitutes([row(7), row(5), row(null)], () => 5), [{ groupId: 1, date: d(2026, 11, 16), role: "TEACHER", substituteId: 7 }]);
+});
+
+test("cover access: that group, that day, only on the day", async () => {
+  const { coverAllowed } = await import("./lesson-changes");
+  const subs = [{ groupId: 1, date: d(2026, 11, 21), substituteId: 7 }];
+  const makeups = [{ groupId: 1, date: d(2026, 11, 16), charged: false, makeupDate: d(2026, 11, 21), makeupTime: "14:00", makeupRoomId: null, makeupTeacherId: 9 }];
+  const ok = (userId: number, groupId: number, day: string, today: string) => coverAllowed({ userId, groupId, day, today, subs, makeups });
+  assert.equal(ok(7, 1, "2026-11-21", "2026-11-21"), true);
+  assert.equal(ok(7, 1, "2026-11-21", "2026-11-22"), false);
+  assert.equal(ok(7, 2, "2026-11-21", "2026-11-21"), false);
+  assert.equal(ok(8, 1, "2026-11-21", "2026-11-21"), false);
+  assert.equal(ok(9, 1, "2026-11-21", "2026-11-21"), true);
+  assert.equal(ok(9, 1, "2026-11-16", "2026-11-16"), false); // the original day isn't theirs
+});
+
+test("a make-up with marks or grades can't be undone or moved", async () => {
+  const { makeupLocked } = await import("./lesson-changes");
+  assert.equal(makeupLocked(0, 0), null);
+  assert.equal(makeupLocked(1, 0), "Qo'shimcha darsda davomat bor — avval uni o'chiring");
+  assert.equal(makeupLocked(0, 2), "Qo'shimcha darsda davomat bor — avval uni o'chiring");
+});
+
+test("a make-up day can be marked; the original day and holidays can't", async () => {
+  const { lessonOpenOn } = await import("./lesson-changes");
+  const sets = { noLesson: ["2026-11-16", "2026-11-10"], extra: ["2026-11-21"] };
+  assert.equal(lessonOpenOn("2026-11-21", { ...sets, weekdayLesson: false }), true); // Saturday make-up
+  assert.equal(lessonOpenOn("2026-11-16", { ...sets, weekdayLesson: true }), false); // moved away
+  assert.equal(lessonOpenOn("2026-11-10", { ...sets, weekdayLesson: true }), false); // holiday
+  assert.equal(lessonOpenOn("2026-11-18", { ...sets, weekdayLesson: true }), true);
+  assert.equal(lessonOpenOn("2026-11-19", { ...sets, weekdayLesson: false }), false);
+});
+
+test("two lessons can't be moved to the same day", async () => {
+  const { makeupProblem } = await import("./lesson-changes");
+  const p = { original: d(2026, 11, 16), today: d(2026, 11, 16), days: "ODD", holidays: [], noLesson: [] };
+  assert.equal(makeupProblem({ ...p, date: d(2026, 11, 21), taken: ["2026-11-21"] }), "Bu kunga boshqa dars ko'chirilgan");
+  assert.equal(makeupProblem({ ...p, date: d(2026, 11, 21), taken: ["2026-11-28"] }), null);
+});
+
+test("a make-up whose original lesson is in a past month: it can still be moved (same teacher), not cancelled or undone", async () => {
+  const { makeupEditProblem } = await import("./lesson-changes");
+  const original = d(2026, 10, 30); // moved to 2 Nov; now it's November
+  const nowNov = new Date("2026-11-02T06:00:00Z");
+  assert.equal(makeupEditProblem("move", original, nowNov, false), null);
+  assert.equal(makeupEditProblem("move", original, nowNov, true), "O'tgan oy darsi: faqat kuni, vaqti va xonasini o'zgartirish mumkin");
+  assert.equal(makeupEditProblem("cancel", original, nowNov, false), "O'tgan oy darsi: faqat kuni, vaqti va xonasini o'zgartirish mumkin");
+  assert.equal(makeupEditProblem("restore", original, nowNov, false), "O'tgan oy darsi: faqat kuni, vaqti va xonasini o'zgartirish mumkin");
+  const nowOct = new Date("2026-10-30T06:00:00Z");
+  assert.equal(makeupEditProblem("cancel", original, nowOct, true), null);
+});
+
+test("who hears that a make-up is off: on undo everyone involved, on a move the replaced teacher", async () => {
+  const { makeupOffRecipients } = await import("./lesson-changes");
+  // undo / cancel: the group's people and the make-up teacher, once each
+  assert.deepEqual(makeupOffRecipients([10, 7], 8, null), [10, 7, 8]);
+  assert.deepEqual(makeupOffRecipients([10, 7], 10, null), [10, 7]);
+  // moved to another teacher: only the replaced make-up teacher (the group's people get the new "ko'chirildi" text)
+  assert.deepEqual(makeupOffRecipients([10, 7], 8, 9, true), [8]);
+  assert.deepEqual(makeupOffRecipients([10, 7], 8, 8, true), []); // same teacher: nothing extra
+  assert.deepEqual(makeupOffRecipients([10, 7], 10, 9, true), []); // the old one is the group's teacher: told by the new text
+});

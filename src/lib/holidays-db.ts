@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { db } from "./db";
 import { holidayRefusal } from "./holidays";
-import { closedDays, markProblem } from "./lesson-changes";
+import { closedDays, makeupDays, markProblem, unchargedDays, type CancelRow } from "./lesson-changes";
 import { centreDay } from "./membership-db";
 
 /** The centre's holidays as ISO days ("2026-11-10"), loaded once per request; billing and the course plan need them. */
@@ -32,6 +32,34 @@ export const closedDaysOf = cache(async (): Promise<(groupId: number) => string[
     if (!cached.has(groupId)) cached.set(groupId, closedDays(holidays, byGroup.get(groupId) ?? []));
     return cached.get(groupId)!;
   };
+});
+
+/** Every group's cancels with their make-up and charge details, loaded once per request. */
+export const cancelsOf = cache(async (): Promise<(groupId: number) => CancelRow[]> => {
+  const rows = await db.lessonChange.findMany({
+    where: { kind: "CANCEL" },
+    select: { groupId: true, date: true, charged: true, makeupDate: true, makeupTime: true, makeupRoomId: true, makeupTeacherId: true },
+  });
+  return (groupId) => rows.filter((r) => r.groupId === groupId);
+});
+
+/**
+ * Each group's days nobody is charged or paid for: holidays and its plain cancels. A moved lesson (make-up) or a cancel
+ * kept "charged" is billed and paid as if it was held. Billing, teacher pay, debtors and balances use this.
+ */
+export const unchargedDaysOf = cache(async (): Promise<(groupId: number) => string[]> => {
+  const [holidays, cancels] = await Promise.all([holidayDays(), cancelsOf()]);
+  const cached = new Map<number, string[]>();
+  return (groupId) => {
+    if (!cached.has(groupId)) cached.set(groupId, unchargedDays(holidays, cancels(groupId)));
+    return cached.get(groupId)!;
+  };
+});
+
+/** Each group's make-up days (ISO): extra lessons for the course plan, the grid and marking. */
+export const makeupDaysOf = cache(async (): Promise<(groupId: number) => string[]> => {
+  const cancels = await cancelsOf();
+  return (groupId) => makeupDays(cancels(groupId));
 });
 
 /**

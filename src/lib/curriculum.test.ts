@@ -141,3 +141,10 @@ test("course length in months comes from its levels: the longest section, 13 les
   assert.equal(courseMonths([{ subjects: [line(1, "Scratch", 1, 8)] }]), 1); // never 0
   assert.equal(courseMonths([{ subjects: [] }]), null); // no levels: the course's own "Davomiylik (oy)"
 });
+
+test("a make-up day counts as a lesson", () => {
+  const [w] = levelWindows({ ...group, holidays: ["2026-09-09"], extraDays: ["2026-09-12"] }, [HTML]);
+  assert.equal(w.lessons.length, 13);
+  assert.ok(w.lessons.some((l) => iso(l) === "2026-09-12"));
+  assert.equal(iso(w.to), "2026-10-05"); // same end as with no cancel at all
+});

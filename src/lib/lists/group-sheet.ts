@@ -4,7 +4,7 @@ import { groupScope, type CurrentUser } from "../access";
 import { isoDate, lessonDates, MONTHS } from "../format";
 import { centreDay } from "../membership-db";
 import { examColumns } from "../group-exams";
-import { closedDaysOf, holidayDays } from "../holidays-db";
+import { closedDaysOf, makeupDaysOf, holidayDays } from "../holidays-db";
 import { fmtDate, type Table } from "../export";
 
 /** One group page tab as a table: attendance or grades of the shown month, or exam scores. Null when not allowed. */
@@ -20,7 +20,7 @@ export async function groupSheet(user: CurrentUser, groupId: number, params: { t
 
   if (params.tab === "exams") {
     const exams = await db.exam.findMany({ where: { groupId }, include: { results: true }, orderBy: { date: "asc" } });
-    const cols = examColumns({ ...group, holidays: (await closedDaysOf())(groupId) }, group.section?.subjects ?? [], exams, centreDay());
+    const cols = examColumns({ ...group, holidays: (await closedDaysOf())(groupId), extraDays: (await makeupDaysOf())(groupId) }, group.section?.subjects ?? [], exams, centreDay());
     return {
       title: `${group.name} imtihonlar`,
       columns: ["O'quvchi", ...cols.map((c) => `${c.title} (${fmtDate(c.date)}, ${c.maxScore})`)],
@@ -28,7 +28,9 @@ export async function groupSheet(user: CurrentUser, groupId: number, params: { t
     };
   }
 
-  const days = lessonDates(group.days, year, month);
+  // the month's lesson days plus make-up days (moved lessons) that fall in it
+  const makeups = (await makeupDaysOf())(groupId).filter((x) => x.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`));
+  const days = [...lessonDates(group.days, year, month), ...makeups.map((x) => new Date(x + "T00:00:00Z"))].sort((a, b) => a.getTime() - b.getTime());
   // closed days: the centre's holidays ("Bayram") and this group's cancelled lessons ("Bekor")
   const holidays = new Set(await holidayDays());
   const off = new Set((await closedDaysOf())(groupId));
@@ -41,7 +43,7 @@ export async function groupSheet(user: CurrentUser, groupId: number, params: { t
       .map((a) => [`${a.studentId}:${isoDate(a.date)}`, a.late ? "K" : a.present ? "✓" : a.reason ? `✗ ${a.reason.name}` : "✗"]));
   return {
     title: `${group.name} ${grades ? "baholar" : "davomat"} ${MONTHS[month]} ${year}`,
-    columns: ["O'quvchi", ...days.map((d) => fmtDate(d).slice(0, 5))],
+    columns: ["O'quvchi", ...days.map((d) => fmtDate(d).slice(0, 5) + (makeups.includes(isoDate(d)) ? " (q)" : ""))],
     rows: students.map((st) => [st.name, ...days.map((d) => (closedMark(isoDate(d)) ?? marks.get(`${st.id}:${isoDate(d)}`) ?? null))]),
   };
 }

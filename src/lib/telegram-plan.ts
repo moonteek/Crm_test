@@ -15,6 +15,8 @@ export type PlanGroup = {
   students: number;
   /** lessons held up to today, today included (lessonsPassed) */
   passed: number;
+  /** a moved lesson (make-up) is held today at `time`, whatever the group's usual days */
+  makeupToday?: boolean;
 };
 
 export type PlanContext = {
@@ -54,8 +56,8 @@ export function dueMessages(groups: PlanGroup[], ctx: PlanContext): Outgoing[] {
   const unmarked: PlanGroup[] = [];
 
   for (const g of groups) {
-    if (!lessonWeekdays(g.days).includes(t.weekday) || g.startDate.getTime() > day.getTime() || g.students === 0) continue;
-    if (ctx.closed(g.id).includes(iso)) continue;
+    if (!(g.makeupToday || lessonWeekdays(g.days).includes(t.weekday)) || g.startDate.getTime() > day.getTime() || g.students === 0) continue;
+    if (!g.makeupToday && ctx.closed(g.id).includes(iso)) continue;
     const start = toMinutes(g.time);
     const people = teachersOn(g, day, ctx.subs).filter((id) => ctx.linked.has(id));
     if (inWindow(start - REMIND_BEFORE)) {
@@ -82,6 +84,15 @@ export const substituteTexts = (group: string, day: Date, time: string, substitu
   toSubstitute: `🔁 ${ddmm(day)} ${time} ${group} darsini siz o'tasiz${absent ? ` (${absent} o'rniga)` : ""}`,
   toAbsent: `🔁 ${ddmm(day)} ${group} darsingizni ${substitute} o'tadi`,
 });
+/** A moved lesson: `regular` for the group's teacher and assistant, `cover` for a different make-up teacher. */
+export function makeupTexts(group: string, original: Date, makeup: Date, time: string, room: string | null) {
+  const where = room ? ` (${room})` : "";
+  return {
+    regular: `${group}: ${ddmm(original)} dagi dars ${ddmm(makeup)} ${time} ga ko'chirildi${where}`,
+    cover: `Siz ${group} guruhining ${ddmm(makeup)} ${time} dagi qo'shimcha darsini o'tasiz${where}`,
+  };
+}
+export const makeupUndoText = (group: string, makeup: Date) => `${group}: ${ddmm(makeup)} dagi qo'shimcha dars bekor qilindi`;
 export const substituteUndoText = (group: string, day: Date) => `↩️ ${ddmm(day)} ${group}: o'rinbosar bekor qilindi`;
 /** `month` as YYYY-MM */
 export function salaryText(month: string, amount: number) {

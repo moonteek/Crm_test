@@ -7,7 +7,7 @@ import { CurriculumBadge } from "@/components/CurriculumBar";
 
 export type TimetableLesson = {
   id: number; name: string; level: string | null; start: number; end: number; progress: Progress; exam: boolean;
-  roomId: number | null; color: CourseColor; cancelled: boolean; passed: number;
+  roomId: number | null; color: CourseColor; cancelled: boolean; passed: number; makeup?: boolean;
   course: { name: string }; teacher: { name: string } | null; assistant: { name: string } | null;
   room: { name: string; capacity: number } | null; _count: { students: number };
 };
@@ -84,8 +84,8 @@ function TimetableCard({ lesson: l, clash }: { lesson: TimetableLesson; clash?: 
   return (
     <Link
       href={`/groups/${l.id}`}
-      title={l.cancelled ? "Dars bekor qilingan" : undefined}
-      className={`press flex h-full flex-col overflow-hidden rounded-xl border border-l-4 px-2.5 py-2 text-xs ${
+      title={l.cancelled ? "Dars bekor qilingan" : l.makeup ? "Qo'shimcha dars" : undefined}
+      className={`press flex h-full flex-col overflow-hidden rounded-xl border border-l-4 px-2.5 py-2 text-xs ${l.makeup ? "border-dashed " : ""}${
         l.cancelled ? "border-line bg-raised text-faint" : clash ? "border-warning bg-warning-tint" : `${tone.card} hover:brightness-95`
       }`}
     >
@@ -93,7 +93,7 @@ function TimetableCard({ lesson: l, clash }: { lesson: TimetableLesson; clash?: 
         <span className={`truncate text-sm font-semibold ${l.cancelled ? "line-through" : "text-ink"}`}>{l.name}</span>
         {l.exam && !l.cancelled && <span className="badge shrink-0 bg-accent text-on-accent">Imtihon</span>}
       </span>
-      <span className={`truncate font-medium ${l.cancelled ? "" : tone.ink}`}>{l.course.name}</span>
+      <span className={`truncate font-medium ${l.cancelled ? "" : tone.ink}`}>{l.makeup ? "Qo'shimcha dars" : l.course.name}</span>
       <span className="mt-0.5 flex items-center gap-1 truncate text-muted">
         <User className="h-3 w-3 shrink-0" />
         <span className="truncate">{l.teacher?.name ?? "O'qituvchi yo'q"}{l.assistant && ` + ${l.assistant.name}`}</span>

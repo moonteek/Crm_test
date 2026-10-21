@@ -7,7 +7,7 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { after } from "next/server";
 import { notify } from "@/lib/telegram-bot";
 import { telegramClient } from "@/lib/telegram-client";
-import { cancelText, restoreText, salaryText, substituteTexts, substituteUndoText, type Outgoing } from "@/lib/telegram-plan";
+import { cancelText, makeupTexts, makeupUndoText, restoreText, salaryText, substituteTexts, substituteUndoText, type Outgoing } from "@/lib/telegram-plan";
 import { teacherOn } from "@/lib/teachers-history";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -28,8 +28,8 @@ import {
 import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
 import { levelExamToSave } from "@/lib/group-exams";
-import { assertLessonOpen, closedDaysOf, holidayDays } from "@/lib/holidays-db";
-import { lessonChangeOpen, lessonChangeProblem } from "@/lib/lesson-changes";
+import { assertLessonOpen, closedDaysOf, holidayDays, makeupDaysOf } from "@/lib/holidays-db";
+import { clashesOn, lessonChangeOpen, lessonOpenOn, makeupEditProblem, makeupOffRecipients, lessonChangeProblem, makeupLocked, makeupProblem } from "@/lib/lesson-changes";
 import { canDeleteHoliday, expandRange, holidayProblem } from "@/lib/holidays";
 import { canDelete, canEnd, discountProblem, lastMonth } from "@/lib/discounts";
 import { editDiff } from "@/lib/payments";
@@ -43,6 +43,7 @@ import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY
 import { check, parseForm, v } from "@/lib/validation";
 import { errorText, tryAction, type ActionState } from "@/lib/action-result";
 import { structureProblem, type LineShape } from "@/lib/curriculum-convert";
+import { assertMarkAccess } from "@/lib/cover-db";
 import { CONTACT_RESULTS, riskSettingsSchema } from "@/lib/risk";
 import { storeRiskSettings } from "@/lib/risk-db";
 import { phoneKey } from "@/lib/phone";
@@ -556,8 +557,8 @@ export async function deleteGroup(id: number): Promise<ActionState> {
 export async function setAttendance(groupId: number, studentId: number, isoDay: string, mark: MarkKey | null): Promise<ActionState> {
   return tryAction(async () => {
     const user = await requirePermission("attendance.mark");
-    await assertGroupAccess(user, groupId);
     const date = check(v.isoDay(), isoDay);
+    await assertMarkAccess(user, groupId, isoDate(date));
     const key = mark === null ? null : check(z.enum(MARK_KEYS), mark);
     await assertLessonOpen(groupId, date);
     if (!(await db.groupStudent.findFirst({ where: { groupId, studentId } }))) throw new Error("O'quvchi bu guruhda emas");
@@ -571,10 +572,11 @@ export async function setAttendance(groupId: number, studentId: number, isoDay: 
   });
 }
 
-/** Today's lesson for the group (or a refusal): the day must be one of its lesson days and not a holiday. */
+/** Today's lesson for the group (or a refusal): one of its lesson days or a make-up day, not a holiday or cancelled. */
 async function lessonOf(groupId: number, date: Date) {
   const group = await db.group.findUniqueOrThrow({ where: { id: groupId } });
-  if (!lessonWeekdays(group.days).includes(date.getUTCDay())) throw new Error("Bu kunda guruhda dars yo'q");
+  const open = lessonOpenOn(isoDate(date), { noLesson: [], extra: (await makeupDaysOf())(groupId), weekdayLesson: lessonWeekdays(group.days).includes(date.getUTCDay()) });
+  if (!open) throw new Error("Bu kunda guruhda dars yo'q");
   await assertLessonOpen(groupId, date);
   return { group, date };
 }
@@ -585,7 +587,7 @@ const todayLessonOf = (groupId: number) => lessonOf(groupId, centreDay());
 export async function markToday(groupId: number, studentId: number, mark: MarkKey): Promise<ActionState> {
   return tryAction(async () => {
     const user = await requirePermission("attendance.mark");
-    await assertGroupAccess(user, groupId);
+    await assertMarkAccess(user, groupId, isoDate(centreDay()));
     const { date } = await todayLessonOf(groupId);
     const value = markWrite(check(z.enum(MARK_KEYS), mark));
     if (!(await db.groupStudent.findFirst({ where: { groupId, studentId, leftAt: null } }))) throw new Error("O'quvchi bu guruhda emas");
@@ -602,8 +604,9 @@ export async function markToday(groupId: number, studentId: number, mark: MarkKe
 export async function markAllPresent(groupId: number, isoDay?: string): Promise<ActionState> {
   return tryAction(async () => {
     const user = await requirePermission("attendance.mark");
-    await assertGroupAccess(user, groupId);
-    const { group, date } = await lessonOf(groupId, isoDay ? check(v.isoDay(), isoDay) : centreDay());
+    const day = isoDay ? check(v.isoDay(), isoDay) : centreDay();
+    await assertMarkAccess(user, groupId, isoDate(day));
+    const { group, date } = await lessonOf(groupId, day);
     const [all, marked] = await Promise.all([
       db.groupStudent.findMany({ where: { groupId }, select: { studentId: true, status: true, leftAt: true, events: { select: { type: true, date: true }, orderBy: [{ date: "asc" }, { id: "asc" }] } } }),
       db.attendance.findMany({ where: { groupId, date } }),
@@ -969,8 +972,8 @@ const gradeScore = z.number().int().min(1, "Baho 1 dan 5 gacha bo'lishi kerak").
 export async function setGrade(groupId: number, studentId: number, isoDay: string, score: number | null): Promise<ActionState> {
   return tryAction(async () => {
     const user = await requirePermission("grades.manage");
-    await assertGroupAccess(user, groupId);
     const date = check(v.isoDay(), isoDay);
+    await assertMarkAccess(user, groupId, isoDate(date));
     await assertLessonOpen(groupId, date);
     const value = check(gradeScore, score);
     const key = { groupId_studentId_date: { groupId, studentId, date } };
@@ -1025,7 +1028,7 @@ export async function saveLevelExamScores(_: MemberActionState, f: FormData): Pr
     // level numbers belong to the group's section, so its own lines decide the title and date
     const saved = await db.exam.findUnique({ where: { groupId_level: { groupId, level } }, select: { date: true, _count: { select: { results: true } } } });
     const auto = levelExamToSave(
-      levelExams({ ...group, holidays: (await closedDaysOf())(group.id) }, group.section?.subjects ?? []),
+      levelExams({ ...group, holidays: (await closedDaysOf())(group.id), extraDays: (await makeupDaysOf())(group.id) }, group.section?.subjects ?? []),
       level,
       saved ? { date: saved.date, scored: saved._count.results > 0 } : null,
       centreDay(),
@@ -1274,8 +1277,8 @@ export async function deleteHoliday(id: number): Promise<ActionState> {
 export async function setAbsenceReason(groupId: number, studentId: number, isoDay: string, reasonId: number | null): Promise<ActionState> {
   return tryAction(async () => {
     const user = await requirePermission("attendance.mark");
-    await assertGroupAccess(user, groupId);
     const date = check(v.isoDay(), isoDay);
+    await assertMarkAccess(user, groupId, isoDate(date));
     const mark = await db.attendance.findUnique({ where: { groupId_studentId_date: { groupId, studentId, date } } });
     if (!mark || mark.present) throw new Error("Avval \"kelmadi\" deb belgilang");
     if (reasonId !== null && !(await db.absenceReason.findFirst({ where: { id: reasonId, active: true } }))) throw new Error("Sabab topilmadi");
@@ -1303,11 +1306,112 @@ const peopleOn = (group: { teachers: { userId: number | null; role: string; from
 async function lessonChangeContext(user: Awaited<ReturnType<typeof requirePermission>>, groupId: number) {
   await assertGroupAccess(user, groupId);
   const [group, existing, holidays] = await Promise.all([
-    db.group.findUniqueOrThrow({ where: { id: groupId }, include: { teacher: true, assistant: true, teachers: true } }),
+    db.group.findUniqueOrThrow({ where: { id: groupId }, include: { teacher: true, assistant: true, teachers: true, course: { select: { lessonMin: true } } } }),
     db.lessonChange.findMany({ where: { groupId } }),
     holidayDays(),
   ]);
   return { group, existing, holidays };
+}
+
+// ---------- make-up lessons ("Ha, roziman") ----------
+const makeupSchema = z.object({ makeupDate: v.isoDay(), makeupTime: v.time(), makeupRoomId: v.optId(), makeupTeacherId: v.optId() });
+type MakeupGroup = Awaited<ReturnType<typeof lessonChangeContext>>["group"];
+type Makeup = { makeupDate: Date; makeupTime: string; makeupRoomId: number | null; makeupTeacherId: number | null };
+
+/**
+ * Reads and checks a make-up from the form: allowed day (today … 60 days, not a holiday, not a usual lesson day), fits
+ * 08:00–20:00, and the teacher and room are free then (weekly lessons that weekday and other make-ups that date).
+ * The teacher defaults to the group's teacher on the original day.
+ */
+async function checkMakeup(group: MakeupGroup, original: Date, f: FormData): Promise<Makeup> {
+  const m = parseForm(makeupSchema, f);
+  const teacherId = m.makeupTeacherId ?? teacherOn(group.teachers, group, original, "TEACHER");
+  const [holidays, closed] = await Promise.all([holidayDays(), closedDaysOf()]);
+  // the group's other make-ups (not the one being moved) already take their days
+  const taken = (await db.lessonChange.findMany({ where: { groupId: group.id, kind: "CANCEL", makeupDate: { not: null }, NOT: { date: original } }, select: { makeupDate: true } }))
+    .map((c) => c.makeupDate!.toISOString().slice(0, 10));
+  const problem = makeupProblem({ date: m.makeupDate, original, today: centreDay(), days: group.days, holidays, noLesson: closed(group.id), taken });
+  if (problem) throw new Error(problem);
+  const minutes = group.course.lessonMin;
+  if (!fitsDay(m.makeupTime, minutes)) throw new Error("Dars 08:00–20:00 oralig'ida bo'lishi kerak");
+  const day = m.makeupDate.toISOString().slice(0, 10);
+  const [groups, makeups] = await Promise.all([
+    db.group.findMany({ where: { status: "ACTIVE", NOT: { id: group.id }, startDate: { lte: m.makeupDate } }, include: { course: { select: { lessonMin: true } } } }),
+    db.lessonChange.findMany({ where: { kind: "CANCEL", makeupDate: m.makeupDate, NOT: { groupId: group.id } }, include: { group: { include: { course: { select: { lessonMin: true } } } } } }),
+  ]);
+  const others = [
+    ...groups
+      .filter((g) => lessonWeekdays(g.days).includes(m.makeupDate.getUTCDay()) && !closed(g.id).includes(day))
+      .map((g) => ({ name: g.name, start: g.time, minutes: g.course.lessonMin, teacherId: g.teacherId, assistantId: g.assistantId, roomId: g.roomId })),
+    ...makeups.map((c) => ({ name: `${c.group.name} (qo'shimcha)`, start: c.makeupTime ?? c.group.time, minutes: c.group.course.lessonMin, teacherId: c.makeupTeacherId, assistantId: c.group.assistantId, roomId: c.makeupRoomId })),
+  ];
+  const clashes = clashesOn({ start: m.makeupTime, minutes, teacherId, roomId: m.makeupRoomId }, others);
+  if (clashes.length) throw new Error(clashes.join("; "));
+  return { makeupDate: m.makeupDate, makeupTime: m.makeupTime, makeupRoomId: m.makeupRoomId, makeupTeacherId: teacherId };
+}
+
+/** Refuses when the make-up day already has marks or grades (they'd be lost). */
+async function assertMakeupFree(groupId: number, makeupDate: Date) {
+  const [marks, grades] = await Promise.all([db.attendance.count({ where: { groupId, date: makeupDate } }), db.grade.count({ where: { groupId, date: makeupDate } })]);
+  const locked = makeupLocked(marks, grades);
+  if (locked) throw new Error(locked);
+}
+
+/** Telegram for a moved lesson: the group's people get "ko'chirildi"; a different make-up teacher gets their own line. */
+async function tellMakeup(group: MakeupGroup, original: Date, m: Makeup, changeId: number) {
+  const room = m.makeupRoomId ? (await db.room.findUnique({ where: { id: m.makeupRoomId }, select: { name: true } }))?.name ?? null : null;
+  const texts = makeupTexts(group.name, original, m.makeupDate, m.makeupTime, room);
+  const people = peopleOn(group, original);
+  const day = m.makeupDate.toISOString().slice(0, 10);
+  tell([
+    ...people.map((id) => ({ key: `makeup:${changeId}:${id}:${day}`, userId: id, text: texts.regular })),
+    ...(m.makeupTeacherId && !people.includes(m.makeupTeacherId) ? [{ key: `makeup:${changeId}:${m.makeupTeacherId}:${day}:cover`, userId: m.makeupTeacherId, text: texts.cover }] : []),
+  ]);
+}
+
+const makeupTarget = z.object({ groupId: v.id("Guruh"), date: v.isoDay() });
+
+async function movedLesson(user: Awaited<ReturnType<typeof requirePermission>>, f: FormData) {
+  const t = parseForm(makeupTarget, f);
+  const { group } = await lessonChangeContext(user, t.groupId);
+  // the original month's lock (makeupEditProblem) is checked by each action: moving may still be allowed
+  const change = await db.lessonChange.findFirst({ where: { groupId: group.id, date: t.date, kind: "CANCEL" } });
+  if (!change?.makeupDate) throw new Error("Bu darsning qo'shimcha darsi yo'q");
+  await assertMakeupFree(group.id, change.makeupDate);
+  return { group, change, original: t.date, oldMakeup: change.makeupDate };
+}
+
+/** "Qo'shimcha darsni ko'chirish": a new day / time / room / teacher for a moved lesson, same checks as the first time. */
+export async function moveMakeup(_: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("lessons.manage");
+    const { group, change, original, oldMakeup } = await movedLesson(user, f);
+    const m = await checkMakeup(group, original, f);
+    const locked = makeupEditProblem("move", original, new Date(), m.makeupTeacherId !== change.makeupTeacherId);
+    if (locked) throw new Error(locked);
+    await db.lessonChange.update({ where: { id: change.id }, data: m });
+    await logAction(user, "lesson.change", `Qo'shimcha dars ko'chirildi: ${group.name}, ${isoOf(oldMakeup)} → ${isoOf(m.makeupDate)} ${m.makeupTime}`);
+    await tellMakeup(group, original, m, change.id);
+    // a replaced make-up teacher who isn't on the group hears the lesson is no longer theirs
+    tell(makeupOffRecipients(peopleOn(group, original), change.makeupTeacherId, m.makeupTeacherId, true).map((id) => ({ key: `makeup-undo:${change.id}:${id}:${oldMakeup.toISOString().slice(0, 10)}`, userId: id, text: makeupUndoText(group.name, oldMakeup) })));
+    revalidatePath(`/groups/${group.id}`);
+  });
+}
+
+/** "Qo'shimcha darsni bekor qilish": the moved lesson becomes a plain cancel — charged or not, as the toggle says. */
+export async function cancelMakeup(_: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("lessons.manage");
+    const { group, change, original, oldMakeup } = await movedLesson(user, f);
+    const locked = makeupEditProblem("cancel", original, new Date(), false);
+    if (locked) throw new Error(locked);
+    const charged = f.get("charged") === "1";
+    await db.lessonChange.update({ where: { id: change.id }, data: { makeupDate: null, makeupTime: null, makeupRoomId: null, makeupTeacherId: null, charged } });
+    await logAction(user, "lesson.change", `Qo'shimcha dars bekor qilindi: ${group.name}, ${isoOf(oldMakeup)}${charged ? " (to'lov saqlanadi)" : ""}`);
+    const people = makeupOffRecipients(peopleOn(group, original), change.makeupTeacherId, null);
+    tell(people.map((id) => ({ key: `makeup-undo:${change.id}:${id}:${oldMakeup.toISOString().slice(0, 10)}`, userId: id, text: makeupUndoText(group.name, oldMakeup) })));
+    revalidatePath(`/groups/${group.id}`);
+  });
 }
 
 /** "Darsni qoldirish": the lesson didn't happen — not charged, not paid (from November 2026), marks removed. */
@@ -1318,14 +1422,19 @@ export async function cancelLesson(_: MemberActionState, f: FormData): Promise<M
     const { group, existing, holidays } = await lessonChangeContext(user, d.groupId);
     const problem = lessonChangeProblem({ kind: "CANCEL", date: d.date, days: group.days, holidays, existing }, new Date());
     if (problem) return { error: problem };
+    // "Ha, roziman": moved to a make-up day (money stays on this day); else the toggle decides whether it's charged
+    const makeup = f.get("makeup") === "1" ? await checkMakeup(group, d.date, f) : null;
+    const charged = !makeup && f.get("charged") === "1";
     const [change] = await db.$transaction([
       // role "ALL": the (group, date, kind, role) unique key then also stops a second cancel of the same lesson
-      db.lessonChange.create({ data: { groupId: group.id, date: d.date, kind: "CANCEL", role: "ALL", reason: d.reason, userId: user.id } }),
+      db.lessonChange.create({ data: { groupId: group.id, date: d.date, kind: "CANCEL", role: "ALL", reason: d.reason, userId: user.id, charged, ...(makeup ?? {}) } }),
       db.attendance.deleteMany({ where: { groupId: group.id, date: d.date } }),
       db.grade.deleteMany({ where: { groupId: group.id, date: d.date } }),
     ]);
-    await logAction(user, "lesson.change", `Dars bekor qilindi: ${group.name}, ${isoOf(d.date)}${d.reason ? ` (${d.reason})` : ""}`);
-    tell(peopleOn(group, d.date).map((id) => ({ key: `cancel:${change.id}:${id}`, userId: id, text: cancelText(group.name, d.date, d.reason) })));
+    const how = makeup ? ` → ${isoOf(makeup.makeupDate)} ${makeup.makeupTime}` : charged ? " (to'lov saqlanadi)" : "";
+    await logAction(user, "lesson.change", `Dars bekor qilindi: ${group.name}, ${isoOf(d.date)}${how}${d.reason ? ` (${d.reason})` : ""}`);
+    if (makeup) await tellMakeup(group, d.date, makeup, change.id);
+    else tell(peopleOn(group, d.date).map((id) => ({ key: `cancel:${change.id}:${id}`, userId: id, text: cancelText(group.name, d.date, d.reason) })));
     revalidatePath(`/groups/${group.id}`);
     return { ok: true };
   } catch (e) {
@@ -1343,9 +1452,13 @@ export async function restoreLesson(groupId: number, isoDay: string): Promise<Ac
     const { group } = await lessonChangeContext(user, groupId);
     if (!lessonChangeOpen(date, new Date())) throw new Error("Faqat shu oydan boshlab");
     const cancels = await db.lessonChange.findMany({ where: { groupId, date, kind: "CANCEL" } });
+    if (cancels[0]?.makeupDate) await assertMakeupFree(groupId, cancels[0].makeupDate);
     const { count } = await db.lessonChange.deleteMany({ where: { groupId, date, kind: "CANCEL" } });
     if (!count) throw new Error("Bu dars bekor qilinmagan");
     tell(peopleOn(group, date).map((id) => ({ key: `restore:${cancels[0].id}:${id}`, userId: id, text: restoreText(group.name, date) })));
+    // a moved lesson's make-up is gone too: tell everyone who was to hold it
+    const made = cancels[0]?.makeupDate;
+    if (made) tell(makeupOffRecipients(peopleOn(group, date), cancels[0].makeupTeacherId, null).map((id) => ({ key: `makeup-undo:${cancels[0].id}:${id}:${made.toISOString().slice(0, 10)}`, userId: id, text: makeupUndoText(group.name, made) })));
     await logAction(user, "lesson.change", `Dars qayta tiklandi: ${group.name}, ${isoOf(date)}`);
     revalidatePath(`/groups/${groupId}`);
   });

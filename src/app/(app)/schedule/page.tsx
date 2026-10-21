@@ -9,7 +9,7 @@ import { ExportButtons } from "@/components/ExportButtons";
 import { CurriculumBadge } from "@/components/CurriculumBar";
 import { curriculumOn, type Progress } from "@/lib/curriculum";
 import { centreDay } from "@/lib/membership-db";
-import { closedDaysOf, holidayDays } from "@/lib/holidays-db";
+import { closedDaysOf, makeupDaysOf, holidayDays } from "@/lib/holidays-db";
 import { COURSE_TONE, courseColor, lessonsPassed } from "@/lib/timetable";
 import { HorizontalTimetable } from "@/components/schedule/HorizontalTimetable";
 
@@ -51,18 +51,38 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const shown = new Date(centreDay().getTime() + (((day + 6) % 7) - ((today + 6) % 7) + (today === 0 ? 7 : 0)) * 86_400_000);
   const holidays = await holidayDays();
   const closedFor = await closedDaysOf();
+  const makeupsFor = await makeupDaysOf();
   // the centre is closed that day: no lessons to show
   const closed = holidays.includes(shown.toISOString().slice(0, 10));
   const shownIso = shown.toISOString().slice(0, 10);
-  const lessons = (closed ? [] : perDay.get(day) ?? []).map(withTimes).map((l) => {
-    const cur = curriculumOn({ ...l, holidays: closedFor(l.id) }, l.section?.subjects ?? [], shown);
+  const regular = (closed ? [] : perDay.get(day) ?? []).map(withTimes).map((l) => {
+    const cur = curriculumOn({ ...l, holidays: closedFor(l.id), extraDays: makeupsFor(l.id) }, l.section?.subjects ?? [], shown);
     return {
       ...l, progress: cur.progress, exam: cur.nextExam !== null && cur.nextExam.date.getTime() === shown.getTime(),
       color: courseColor(l.course),
       cancelled: closedFor(l.id).includes(shownIso), // "Darsni qoldirish" for that day
       passed: lessonsPassed(l, closedFor(l.id), shown),
+      makeup: false,
     };
   });
+  // lessons moved to this day ("Qo'shimcha dars"): at their own time, room and teacher
+  const moved = closed ? [] : await db.lessonChange.findMany({
+    where: { kind: "CANCEL", makeupDate: shown, group: { status: "ACTIVE", ...groupScope(user) } },
+    include: {
+      makeupTeacher: true, makeupRoom: true,
+      group: { include: { course: true, section: { include: { subjects: { orderBy: { position: "asc" } } } }, assistant: true, _count: { select: { students: { where: { leftAt: null } } } } } },
+    },
+  });
+  const makeups = moved.map((c) => {
+    const l = withTimes({ ...c.group, time: c.makeupTime ?? c.group.time });
+    const cur = curriculumOn({ ...c.group, holidays: closedFor(c.groupId), extraDays: makeupsFor(c.groupId) }, c.group.section?.subjects ?? [], shown);
+    return {
+      ...l, roomId: c.makeupRoomId, room: c.makeupRoom, teacherId: c.makeupTeacherId, teacher: c.makeupTeacher,
+      progress: cur.progress, exam: cur.nextExam !== null && cur.nextExam.date.getTime() === shown.getTime(),
+      color: courseColor(c.group.course), cancelled: false, passed: 0, makeup: true,
+    };
+  });
+  const lessons = [...regular, ...makeups].sort((a, b) => a.start - b.start);
   // a cancelled lesson doesn't hold its room or teacher
   const clashes = findClashes(
     (centreGroups?.map(withTimes) ?? lessons).filter((l) => !closedFor(l.id).includes(shownIso)).map((l) => ({
@@ -192,7 +212,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
 
 type Lesson = {
   id: number; name: string; level: string | null; start: number; end: number; progress: Progress; exam: boolean;
-  color: keyof typeof COURSE_TONE; cancelled: boolean; passed: number;
+  color: keyof typeof COURSE_TONE; cancelled: boolean; passed: number; makeup?: boolean;
   course: { name: string }; teacher: { name: string } | null; assistant: { name: string } | null;
   room: { name: string; capacity: number } | null; _count: { students: number };
 };
@@ -202,7 +222,7 @@ function LessonCard({ lesson: l, clash, showRoom = false }: { lesson: Lesson; cl
   return (
     <Link
       href={`/groups/${l.id}`}
-      className={`press block rounded-xl border border-l-4 p-3 ${l.cancelled ? "border-line bg-raised text-faint" : clash ? "border-warning bg-warning-tint" : `${COURSE_TONE[l.color].card} hover:brightness-95`}`}
+      className={`press block rounded-xl border border-l-4 p-3 ${l.makeup ? "border-dashed " : ""}${l.cancelled ? "border-line bg-raised text-faint" : clash ? "border-warning bg-warning-tint" : `${COURSE_TONE[l.color].card} hover:brightness-95`}`}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="font-dot text-lg leading-none font-black text-ink">{fromMinutes(l.start)}<span className="label-mono ml-1.5 align-middle">→ {fromMinutes(l.end)}</span></span>
@@ -212,7 +232,7 @@ function LessonCard({ lesson: l, clash, showRoom = false }: { lesson: Lesson; cl
         </span>
       </div>
       <p className={`mt-1 truncate font-medium ${l.cancelled ? "line-through" : "text-ink"}`}>{l.name}</p>
-      <p className={`truncate text-xs ${l.cancelled ? "" : COURSE_TONE[l.color].ink}`}>{l.course.name}{l.cancelled ? " · Bekor qilingan" : ` · ${l.passed}-dars`}</p>
+      <p className={`truncate text-xs ${l.cancelled ? "" : COURSE_TONE[l.color].ink}`}>{l.course.name}{l.cancelled ? " · Bekor qilingan" : l.makeup ? " · Qo'shimcha dars" : ` · ${l.passed}-dars`}</p>
       <div className="mt-2 space-y-1 text-xs text-muted">
         <p className="flex items-center gap-1.5">
           <User className="h-3.5 w-3.5 shrink-0 text-faint" />

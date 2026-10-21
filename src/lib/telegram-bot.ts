@@ -31,7 +31,7 @@ export async function notify(msgs: Outgoing[]) {
 /** Everything due now (reminders, nudges, the admins' list), from the database. */
 export async function dueNow(now: Date): Promise<Outgoing[]> {
   const day = centreDay(now);
-  const [groups, closed, subs, marked, linked] = await Promise.all([
+  const [groups, closed, subs, marked, linked, makeups] = await Promise.all([
     db.group.findMany({
       where: { status: "ACTIVE" },
       include: { room: true, course: { select: { lessonMin: true } }, teachers: true, _count: { select: { students: { where: { leftAt: null } } } } },
@@ -40,12 +40,21 @@ export async function dueNow(now: Date): Promise<Outgoing[]> {
     db.lessonChange.findMany({ where: { kind: "SUBSTITUTE", date: day } }),
     db.attendance.groupBy({ by: ["groupId"], where: { date: day } }),
     db.user.findMany({ where: { active: true, telegramChatId: { not: null } }, include: { role: true } }),
+    // lessons moved to today: reminded at their own time, to the make-up teacher (and the group's assistant)
+    db.lessonChange.findMany({
+      where: { kind: "CANCEL", makeupDate: day, group: { status: "ACTIVE" } },
+      include: { makeupRoom: true, group: { include: { course: { select: { lessonMin: true } }, _count: { select: { students: { where: { leftAt: null } } } } } } },
+    }),
   ]);
   return dueMessages(
     groups.map((g) => ({
       id: g.id, name: g.name, time: g.time, days: g.days, startDate: g.startDate, lessonMin: g.course.lessonMin, room: g.room?.name ?? null,
       teacherId: g.teacherId, assistantId: g.assistantId, teachers: g.teachers, students: g._count.students, passed: lessonsPassed(g, closed(g.id), day),
-    })),
+    })).concat(makeups.map((c) => ({
+      id: c.groupId, name: c.group.name, time: c.makeupTime ?? c.group.time, days: c.group.days, startDate: c.group.startDate, lessonMin: c.group.course.lessonMin,
+      room: c.makeupRoom?.name ?? null, teacherId: c.makeupTeacherId ?? c.group.teacherId, assistantId: c.group.assistantId, teachers: [],
+      students: c.group._count.students, passed: lessonsPassed(c.group, closed(c.groupId), day), makeupToday: true,
+    }))),
     {
       now, closed, subs, markedGroups: new Set(marked.map((m) => m.groupId)),
       linked: new Map(linked.map((u) => [u.id, { name: u.name, isAdmin: parsePermissions(u.role).has("staff.manage") }])),
