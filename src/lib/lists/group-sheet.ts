@@ -11,7 +11,7 @@ import { fmtDate, type Table } from "../export";
 export async function groupSheet(user: CurrentUser, groupId: number, params: { tab?: string; m?: string }): Promise<Table | null> {
   const group = await db.group.findFirst({
     where: { id: groupId, ...groupScope(user) },
-    include: { course: { include: { subjects: true } }, students: { where: { leftAt: null }, include: { student: true }, orderBy: { student: { name: "asc" } } } },
+    include: { section: { include: { subjects: { orderBy: { position: "asc" } } } }, students: { where: { leftAt: null }, include: { student: true }, orderBy: { student: { name: "asc" } } } },
   });
   if (!group) return null;
   const now = new Date();
@@ -20,7 +20,7 @@ export async function groupSheet(user: CurrentUser, groupId: number, params: { t
 
   if (params.tab === "exams") {
     const exams = await db.exam.findMany({ where: { groupId }, include: { results: true }, orderBy: { date: "asc" } });
-    const cols = examColumns({ ...group, holidays: (await closedDaysOf())(groupId) }, group.course.subjects, exams, centreDay());
+    const cols = examColumns({ ...group, holidays: (await closedDaysOf())(groupId) }, group.section?.subjects ?? [], exams, centreDay());
     return {
       title: `${group.name} imtihonlar`,
       columns: ["O'quvchi", ...cols.map((c) => `${c.title} (${fmtDate(c.date)}, ${c.maxScore})`)],

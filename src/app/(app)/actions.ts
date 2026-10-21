@@ -387,6 +387,7 @@ const groupSchema = z.object({
   startSubjectId: v.optId(),
   startLevel: v.int("Boshlanish darajasi", { min: 1, max: 24, fallback: 1 }),
   courseId: v.id("Kurs"),
+  sectionId: v.optId(),
   teacherId: v.optId(),
   assistantId: v.optId(),
   roomId: v.optId(),
@@ -394,13 +395,23 @@ const groupSchema = z.object({
   time: v.time(),
 });
 
-/** Keeps the start point inside the chosen course: another course's subject or a level past its months falls back. */
-async function startPoint(courseId: number, startSubjectId: number | null, startLevel: number) {
-  const subject = startSubjectId ? await db.subject.findFirst({ where: { id: startSubjectId, courseId } }) : null;
-  const first = await db.subject.findFirst({ where: { courseId }, orderBy: { position: "asc" } });
-  // the course's beginning is stored as "no start point", so reordering or deleting subjects can't move the group
-  if (!subject || (subject.id === first?.id && startLevel <= 1)) return { startSubjectId: null, startLevel: 1 };
-  return { startSubjectId: subject.id, startLevel: Math.min(startLevel, subject.months) };
+/** The section the group studies: one of its course's (empty = the course's first section). */
+async function groupSection(courseId: number, sectionId: number | null) {
+  const section = sectionId
+    ? await db.section.findUnique({ where: { id: sectionId } })
+    : await db.section.findFirst({ where: { courseId }, orderBy: { position: "asc" } });
+  if (sectionId && section?.courseId !== courseId) throw new Error("Bo'lim bu kursga tegishli emas");
+  return section;
+}
+
+/** Keeps the start point inside the chosen section: another section's line or a level past its levels falls back. */
+async function startPoint(sectionId: number | null, startSubjectId: number | null, startLevel: number) {
+  if (!sectionId) return { startSubjectId: null, startLevel: 1 };
+  const line = startSubjectId ? await db.subject.findFirst({ where: { id: startSubjectId, sectionId } }) : null;
+  const first = await db.subject.findFirst({ where: { sectionId }, orderBy: { position: "asc" } });
+  // the section's beginning is stored as "no start point", so reordering or deleting lines can't move the group
+  if (!line || (line.id === first?.id && startLevel <= 1)) return { startSubjectId: null, startLevel: 1 };
+  return { startSubjectId: line.id, startLevel: Math.min(startLevel, line.levels) };
 }
 
 type GroupTime = { id?: number; name: string; days: string; time: string; courseId: number; teacherId: number | null; assistantId: number | null; roomId: number | null };
@@ -430,7 +441,12 @@ async function insertGroup(f: FormData) {
   const user = await requirePermission("groups.manage");
   const { startDate, ...data } = parseForm(groupSchema.extend({ startDate: v.optDate() }), f);
   const { warnings } = await checkGroupTime(data);
-  const group = await db.group.create({ data: { ...data, ...(await startPoint(data.courseId, data.startSubjectId, data.startLevel)), startDate: startDate ?? new Date() } });
+  const section = await groupSection(data.courseId, data.sectionId);
+  // a new group takes its section's price when it has one (else it follows the course price)
+  const price = data.price ?? section?.price ?? null;
+  const group = await db.group.create({
+    data: { ...data, price, sectionId: section?.id ?? null, ...(await startPoint(section?.id ?? null, data.startSubjectId, data.startLevel)), startDate: startDate ?? new Date() },
+  });
   await logAction(user, "group.create", `Yangi guruh: ${group.name}`);
   // only a flag in the link: the group page works the warning out itself, so a link can't show made-up text
   return `/groups/${group.id}${warnings.length ? "?warn=1" : ""}`;
@@ -458,9 +474,15 @@ export async function updateGroup(id: number, f: FormData) {
   // a new teacher / assistant takes over from the chosen day; earlier lessons stay with the previous person
   const from = teacherFrom ?? centreDay();
   // a new price (own, or the new course's) starts next month; past months keep what they were charged
-  const target = data.price ?? (await db.course.findUniqueOrThrow({ where: { id: data.courseId } })).price;
+  const section = await groupSection(data.courseId, data.sectionId);
+  // level exams are numbered within the section: once one is scored the group stays in its section
+  if (data.courseId === before.courseId && (section?.id ?? null) !== before.sectionId) {
+    const scored = await db.exam.findFirst({ where: { groupId: id, level: { not: null }, results: { some: {} } }, select: { id: true } });
+    if (scored) throw new Error("Guruhda daraja imtihoni baholangan — bo'limni o'zgartirib bo'lmaydi");
+  }
+  const target = data.price ?? section?.price ?? (await db.course.findUniqueOrThrow({ where: { id: data.courseId } })).price;
   const current = before.price ?? before.course.price;
-  const start = await startPoint(data.courseId, data.startSubjectId, data.startLevel);
+  const start = await startPoint(section?.id ?? null, data.startSubjectId, data.startLevel);
   const changes: string[] = [];
   // teacher history, price history and the group are saved together: all or nothing
   const repriced = await db.$transaction(async (tx) => {
@@ -472,10 +494,10 @@ export async function updateGroup(id: number, f: FormData) {
       await changeTeacher(tx, id, "ASSISTANT", before.assistantId, data.assistantId, from);
       changes.push("yordamchi");
     }
-    // saved level exams are numbered by the old course's months: keep them as ordinary exams
+    // saved level exams are numbered within the old course's section: keep them as ordinary exams
     if (data.courseId !== before.courseId) await tx.exam.updateMany({ where: { groupId: id, level: { not: null } }, data: { level: null } });
     const priced = await schedulePrice(tx, id, target, current, user.id);
-    await tx.group.update({ where: { id }, data: { ...data, ...start } });
+    await tx.group.update({ where: { id }, data: { ...data, sectionId: section?.id ?? null, ...start } });
     return priced;
   });
   if (changes.length) await logAction(user, "group.teacher", `${before.name}: ${changes.join(" va ")} ${isoDate(from)} dan almashtirildi`);

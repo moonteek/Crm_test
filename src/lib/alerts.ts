@@ -1,10 +1,10 @@
 import { levelWindows, type CurriculumGroup, type CurriculumSubject } from "./curriculum";
 
-export type AlertGroup = CurriculumGroup & { id: number; name: string; status: string; course: { subjects: CurriculumSubject[] } };
+export type AlertGroup = CurriculumGroup & { id: number; name: string; status: string; section: { subjects: CurriculumSubject[] } | null };
 export type CourseEndAlert = { groupId: number; name: string; endsOn: Date; state: "ending" | "ended" };
 
 /**
- * Groups the admin should finish soon: active groups whose course ends this month or next ("ending"),
+ * Groups the admin should finish soon: active groups whose section ends this month or next ("ending"),
  * and those whose course is over but are still active ("ended"). Ended first, then by end date.
  */
 export function courseEndAlerts(groups: AlertGroup[], today: Date): CourseEndAlert[] {
@@ -12,7 +12,7 @@ export function courseEndAlerts(groups: AlertGroup[], today: Date): CourseEndAle
   const out: CourseEndAlert[] = [];
   for (const g of groups) {
     if (g.status !== "ACTIVE") continue;
-    const last = levelWindows(g, g.course.subjects).at(-1);
+    const last = levelWindows(g, g.section?.subjects ?? []).at(-1);
     if (!last) continue;
     if (last.to < today) out.push({ groupId: g.id, name: g.name, endsOn: last.to, state: "ended" });
     else if (last.to <= horizon) out.push({ groupId: g.id, name: g.name, endsOn: last.to, state: "ending" });

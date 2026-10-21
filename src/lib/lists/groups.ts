@@ -14,7 +14,7 @@ export const PROGRESS: Record<Progress["state"], string> = {
   "in-progress": "O'qimoqda",
   finishing: "Oxirgi oy",
   finished: "Kursi tugagan",
-  none: "Fanlarsiz",
+  none: "Darajalarsiz",
 };
 
 export type GroupFilters = { status?: string; course?: string; subject?: string; progress?: string; unmarked?: string };
@@ -28,12 +28,12 @@ export async function loadGroups(user: CurrentUser, params: GroupFilters) {
   const [all, courses] = await Promise.all([
     db.group.findMany({
       where: { status, ...(courseId ? { courseId } : {}), ...groupScope(user) },
-      include: { course: { include: { subjects: true } }, teacher: true, assistant: true, room: true, prices: true, _count: { select: { students: { where: { leftAt: null } } } } },
+      include: { course: { include: { _count: { select: { sections: true } } } }, section: { include: { subjects: { orderBy: { position: "asc" } } } }, teacher: true, assistant: true, room: true, prices: true, _count: { select: { students: { where: { leftAt: null } } } } },
       orderBy: [{ days: "asc" }, { time: "asc" }],
     }),
-    db.course.findMany({ orderBy: { name: "asc" }, include: { subjects: { orderBy: { position: "asc" } } } }),
+    db.course.findMany({ orderBy: { name: "asc" }, include: { sections: { orderBy: { position: "asc" }, include: { subjects: { orderBy: { position: "asc" } } } } } }),
   ]);
-  const subjectOptions = courses.filter((c) => !courseId || c.id === courseId).flatMap((c) => c.subjects.map((s) => ({ id: s.id, label: courseId ? s.name : `${c.name} · ${s.name}` })));
+  const subjectOptions = courses.filter((c) => !courseId || c.id === courseId).flatMap((c) => c.sections.flatMap((sec) => sec.subjects.map((s) => ({ id: s.id, label: [courseId ? null : c.name, c.sections.length > 1 ? sec.name : null, s.name].filter(Boolean).join(" · ") }))));
   // a subject of another course (left in the link after switching course) is ignored
   const subjectId = subjectOptions.some((s) => s.id === asked) ? asked : null;
   const today = centreDay();
@@ -41,16 +41,16 @@ export async function loadGroups(user: CurrentUser, params: GroupFilters) {
   // "Davomat qilinmagan": only groups whose lesson started today and aren't marked
   const unmarkedIds = params.unmarked === "1" ? new Set((await loadUnmarkedToday(user)).map((g) => g.id)) : null;
   const groups = all
-    .map((g) => ({ ...g, cur: curriculumOn({ ...g, holidays: closed(g.id) }, g.course.subjects, today) }))
+    .map((g) => ({ ...g, cur: curriculumOn({ ...g, holidays: closed(g.id) }, g.section?.subjects ?? [], today) }))
     .filter((g) => (!subjectId || (g.cur.progress.state !== "finished" && g.cur.progress.window?.subjectId === subjectId)) && (!progress || g.cur.progress.state === progress))
     .filter((g) => !unmarkedIds || unmarkedIds.has(g.id));
   const where = (g: (typeof groups)[number]) => {
     const p = g.cur.progress;
-    return p.state === "none" ? g.level : p.state === "finished" ? "Kurs tugadi" : p.window ? `${p.window.subject} ${p.window.levelInSubject}-daraja` : PROGRESS[p.state];
+    return p.state === "none" ? g.level : p.state === "finished" ? "Bo'lim tugadi" : p.window ? [g.course._count.sections > 1 ? g.section?.name : null, p.window.label].filter(Boolean).join(" · ") : PROGRESS[p.state];
   };
   const table: Table = {
     title: status === "FINISHED" ? "Guruhlar arxivi" : "Guruhlar",
-    columns: ["Guruh", "Kurs", "Hozirgi fan / daraja", "Kunlar", "Vaqt", "O'qituvchi", "Yordamchi", "Xona", "O'quvchilar", "Narx", "Boshlangan"],
+    columns: ["Guruh", "Kurs", "Hozirgi daraja", "Kunlar", "Vaqt", "O'qituvchi", "Yordamchi", "Xona", "O'quvchilar", "Narx", "Boshlangan"],
     rows: groups.map((g) => [
       g.name, g.course.name, where(g), GROUP_DAYS[g.days] ?? g.days, g.time, g.teacher?.name ?? null, g.assistant?.name ?? null,
       g.room?.name ?? null, g._count.students, priceNow(g), fmtDate(g.startDate),

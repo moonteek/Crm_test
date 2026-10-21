@@ -1,11 +1,11 @@
-import type { Progress, Window } from "@/lib/curriculum";
+import { progressLabel, type Progress, type Window } from "@/lib/curriculum";
 import { LevelBadge } from "./ui";
 
 /**
- * Progress through the course, one segment per subject (sized by its months), like EduTrack's level bar:
- * "JavaScript · 2/3-daraja · 8/13 dars" and the course percentage.
+ * Progress through the group's section, one segment per level line (sized by its levels), like EduTrack's level bar:
+ * "Frontend · JS · 3/5-daraja · 8/13 dars" and the section percentage. `sectionName` only for courses with several.
  */
-export function CurriculumBar({ windows, progress, mode = "card" }: { windows: Window[]; progress: Progress; mode?: "card" | "mini" }) {
+export function CurriculumBar({ windows, progress, sectionName = null, mode = "card" }: { windows: Window[]; progress: Progress; sectionName?: string | null; mode?: "card" | "mini" }) {
   if (!windows.length) return null;
   // levels fully done: all of them when finished, none before the start, else those before the current one
   const doneBelow = progress.state === "finished" ? Infinity : progress.state === "not-started" || !progress.window ? -Infinity : progress.window.level;
@@ -21,12 +21,7 @@ export function CurriculumBar({ windows, progress, mode = "card" }: { windows: W
       seg.current = true;
     } else if (w.level < doneBelow) seg.done += w.lessons.length;
   }
-  const w = progress.window;
-  const label =
-    progress.state === "not-started" ? "Hali boshlanmagan"
-    : progress.state === "finished" ? "Kurs tugadi"
-    : w ? `${w.subject} · ${w.levelInSubject}/${w.subjectLevels}-daraja · ${progress.doneInWindow}/${progress.lessonsInWindow} dars`
-    : "";
+  const label = progress.state === "not-started" ? "Hali boshlanmagan" : progressLabel(sectionName, progress, windows[windows.length - 1].level);
 
   return (
     <div className={mode === "card" ? "space-y-2" : "space-y-1.5"}>
@@ -48,15 +43,15 @@ export function CurriculumBar({ windows, progress, mode = "card" }: { windows: W
   );
 }
 
-/** Where the group is now: its current subject, "Kurs tugadi", or (courses without subjects) the old level label. */
+/** Where the group is now: its current level, "Bo'lim tugadi", or (courses without levels) the old level label. */
 export function CurriculumBadge({ progress, level }: { progress: Progress; level: string | null }) {
   if (progress.state === "none") return <LevelBadge level={level} />;
-  if (progress.state === "finished") return <span className="badge bg-ink text-page">Kurs tugadi</span>;
+  if (progress.state === "finished") return <span className="badge bg-ink text-page">Bo&apos;lim tugadi</span>;
   const w = progress.window;
   return (
     <span className="badge border border-line-strong text-ink">
       <i className="h-1.5 w-1.5 rounded-full bg-accent" />
-      {w ? `${w.subject} ${w.levelInSubject}` : "Boshlanmagan"}
+      {w ? w.label : "Boshlanmagan"}
     </span>
   );
 }

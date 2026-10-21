@@ -8,13 +8,13 @@ export function GroupFields({
   courses, teachers, rooms, g,
 }: {
   courses: CourseOption[]; teachers: Opt[]; rooms: Opt[];
-  g?: { name: string; level: string | null; price: number | null; courseId: number; startSubjectId: number | null; startLevel: number; teacherId: number | null; assistantId: number | null; roomId: number | null; days: string; time: string; status: string; startDate: Date };
+  g?: { name: string; level: string | null; price: number | null; courseId: number; sectionId: number | null; startSubjectId: number | null; startLevel: number; teacherId: number | null; assistantId: number | null; roomId: number | null; days: string; time: string; status: string; startDate: Date };
 }) {
   return (
     <>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Guruh nomi"><input name="name" className="input" required defaultValue={g?.name} placeholder="Frontend-12" /></Field>
-        <Field label="Daraja (fanlarsiz kurslar uchun)">
+        <Field label="Daraja (darajalarsiz kurslar uchun)">
           <select name="level" className="input" defaultValue={g?.level ?? ""}>
             <option value="">—</option>
             {GROUP_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
@@ -22,7 +22,7 @@ export function GroupFields({
         </Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <CourseStartFields courses={courses} courseId={g?.courseId} startSubjectId={g?.startSubjectId} startLevel={g?.startLevel} />
+        <CourseStartFields courses={courses} courseId={g?.courseId} sectionId={g?.sectionId} startSubjectId={g?.startSubjectId} startLevel={g?.startLevel} price={g?.price} />
       </div>
       <div className="grid grid-cols-1 gap-3">
         <Field label="O'qituvchi">
@@ -32,10 +32,6 @@ export function GroupFields({
           </select>
         </Field>
       </div>
-      <Field label="Guruh narxi, so'm / oy (bo'sh qoldirilsa — kurs narxi)">
-        <input name="price" type="number" min={1} className="input" defaultValue={g?.price ?? ""} placeholder="Kurs narxi" />
-        <span className="mt-1 block text-xs text-muted">Narx o&apos;zgarsa, yangi narx keyingi oyning 1-sanasidan amal qiladi</span>
-      </Field>
       {g && (
         <Field label="O'qituvchi yoki yordamchi almashsa — qaysi kundan">
           <input name="teacherFrom" type="date" className="input" />

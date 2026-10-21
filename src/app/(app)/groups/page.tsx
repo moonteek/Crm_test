@@ -45,8 +45,8 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
           <option value="">Barcha kurslar</option>
           {courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <select name="subject" defaultValue={subjectId ?? ""} className="input min-w-0 sm:w-auto" aria-label="Hozirgi fan">
-          <option value="">Barcha fanlar</option>
+        <select name="subject" defaultValue={subjectId ?? ""} className="input min-w-0 sm:w-auto" aria-label="Hozirgi daraja">
+          <option value="">Barcha darajalar</option>
           {subjectOptions.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
         <select name="progress" defaultValue={progress ?? ""} className="input min-w-0 sm:w-auto" aria-label="Holat">
@@ -84,7 +84,7 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
                 <p className="flex min-w-0 items-center gap-2"><User className="h-4 w-4 shrink-0 text-faint" /><span className="truncate">{g.teacher?.name ?? "O'qituvchi biriktirilmagan"}{g.assistant && <span className="text-faint"> · yordamchi: {g.assistant.name}</span>}</span></p>
                 <p className="flex items-center gap-2"><DoorOpen className="h-4 w-4 text-faint" />{g.room?.name ?? "Xona yo'q"}</p>
               </div>
-              {g.cur.windows.length > 0 && <div className="mt-4"><CurriculumBar windows={g.cur.windows} progress={g.cur.progress} mode="mini" /></div>}
+              {g.cur.windows.length > 0 && <div className="mt-4"><CurriculumBar windows={g.cur.windows} progress={g.cur.progress} sectionName={g.course._count.sections > 1 ? g.section?.name ?? null : null} mode="mini" /></div>}
               <div className="label-mono mt-4 flex justify-between border-t border-line pt-3">
                 <span>Boshlangan: {date(g.startDate)}</span>
                 <span>{money(priceNow(g))}</span>
