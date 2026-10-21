@@ -50,3 +50,15 @@ test("planPriceChange: setting back to the current price cancels the scheduled c
 test("planPriceChange: no change when nothing differs", () => {
   assert.deepEqual(planPriceChange([], 450_000, 450_000, d(2026, 11)), { baseline: null, action: "none" });
 });
+
+test("editing a group: the section price applies only when the group moves to that section", async () => {
+  const { editedGroupPrice } = await import("./prices");
+  // follows the course price; its section got a price later; a plain edit (rename) changes nothing
+  assert.deepEqual(editedGroupPrice({ formPrice: null, sectionChanged: false, sectionPrice: 800_000, coursePrice: 600_000 }), { own: null, target: 600_000 });
+  // moved to a section with its own price: the group takes it (and stops following the course)
+  assert.deepEqual(editedGroupPrice({ formPrice: null, sectionChanged: true, sectionPrice: 800_000, coursePrice: 600_000 }), { own: 800_000, target: 800_000 });
+  // moved to a section without a price: follows the course
+  assert.deepEqual(editedGroupPrice({ formPrice: null, sectionChanged: true, sectionPrice: null, coursePrice: 600_000 }), { own: null, target: 600_000 });
+  // a typed price always wins
+  assert.deepEqual(editedGroupPrice({ formPrice: 700_000, sectionChanged: true, sectionPrice: 800_000, coursePrice: 600_000 }), { own: 700_000, target: 700_000 });
+});

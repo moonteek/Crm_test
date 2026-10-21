@@ -42,6 +42,12 @@ export function levelLabel(name: string, levelInSubject: number, levels: number)
 export const sectionLevels = (lines: CurriculumSubject[]) => lines.reduce((n, l) => n + l.levels, 0);
 export const sectionLessons = (lines: CurriculumSubject[]) => lines.reduce((n, l) => n + l.levels * l.lessons, 0);
 
+/** A course's length in months from its levels: its longest section, 13 lessons ≈ a month; null without levels. */
+export function courseMonths(sections: { subjects: CurriculumSubject[] }[]): number | null {
+  const lessons = Math.max(0, ...sections.map((s) => sectionLessons(s.subjects)));
+  return lessons ? Math.max(1, Math.round(lessons / 13)) : null;
+}
+
 /** The group's next `count` held lessons from `start` (gives up after ten years of nothing). */
 function heldFrom(days: string, start: Date, count: number, holidays: string[]) {
   const out: Date[] = [];

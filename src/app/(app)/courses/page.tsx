@@ -9,11 +9,11 @@ import { Empty, Field, PageHeader } from "@/components/ui";
 import { createCourse, updateCourse } from "../actions";
 import { SectionEditor } from "@/components/SectionEditor";
 import { CoursePicture } from "@/components/CoursePicture";
-import { sectionLessons, sectionLevels } from "@/lib/curriculum";
+import { courseMonths, sectionLessons, sectionLevels } from "@/lib/curriculum";
 import { COURSE_COLOR_LABEL, COURSE_COLORS, COURSE_TONE, courseColor } from "@/lib/timetable";
 import { ActionForm } from "@/components/ActionForm";
 
-type C = { name: string; price: number; durationMon: number; lessonMin: number; description: string | null; passPercent: number; color: string | null; image: string | null; subjects?: unknown[] };
+type C = { name: string; price: number; durationMon: number; months?: number | null; lessonMin: number; description: string | null; passPercent: number; color: string | null; image: string | null; subjects?: unknown[] };
 
 function CourseFields({ c }: { c?: C }) {
   return (
@@ -22,7 +22,7 @@ function CourseFields({ c }: { c?: C }) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Field label="Oylik narx"><input name="price" type="number" className="input" required defaultValue={c?.price} /></Field>
         <Field label="Davomiyligi (oy)">
-          <input name="durationMon" type="number" className="input" defaultValue={c?.durationMon ?? 6} readOnly={!!c?.subjects?.length} title={c?.subjects?.length ? "Darajalar bo'yicha hisoblanadi (Bo'limlar va darajalar)" : undefined} />
+          <input name="durationMon" type="number" className="input" defaultValue={c?.months ?? c?.durationMon ?? 6} readOnly={!!c?.months} title={c?.months ? "Darajalar bo'yicha hisoblanadi (Bo'limlar va darajalar)" : undefined} />
         </Field>
         <Field label="Dars (daqiqa)"><input name="lessonMin" type="number" className="input" defaultValue={c?.lessonMin ?? 120} /></Field>
         <Field label="O'tish bali, %"><input name="passPercent" type="number" min={1} max={100} className="input" defaultValue={c?.passPercent ?? 60} /></Field>
@@ -43,6 +43,7 @@ export default async function CoursesPage() {
   const user = await requirePage("courses.view");
   const manage = can(user, "courses.manage");
   const courses = await db.course.findMany({
+    omit: { image: false },
     include: { subjects: true, sections: { orderBy: { position: "asc" }, include: { subjects: { orderBy: { position: "asc" } } } }, groups: { where: { status: "ACTIVE" }, include: { _count: { select: { students: { where: { leftAt: null } } } } } } },
     orderBy: { name: "asc" },
   });
@@ -66,7 +67,7 @@ export default async function CoursesPage() {
             <div className="flex items-start justify-between gap-2">
               <h3 className="text-lg font-semibold">{c.name}</h3>
               {manage && <Modal title="Kursni tahrirlash" triggerClassName="text-faint hover:text-ink" trigger={<Pencil className="h-4 w-4" />}>
-                <ActionForm action={updateCourse.bind(null, c.id)} className="space-y-3"><CourseFields c={c} /></ActionForm>
+                <ActionForm action={updateCourse.bind(null, c.id)} className="space-y-3"><CourseFields c={{ ...c, months: courseMonths(c.sections) }} /></ActionForm>
               </Modal>}
             </div>
             <p className="mt-1 text-sm text-muted">{c.description}</p>
@@ -85,7 +86,7 @@ export default async function CoursesPage() {
             </div>
             <p className="mt-4 text-xl font-semibold tracking-tight text-accent-ink">{money(c.price)}<span className="text-sm font-normal text-muted"> / oy</span></p>
             <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3 text-xs text-muted">
-              <span className="badge bg-ink/5">{c.durationMon} oy</span>
+              <span className="badge bg-ink/5">{courseMonths(c.sections) ?? c.durationMon} oy</span>
               <span className="badge bg-ink/5">{c.lessonMin} daqiqa</span>
               <span className={`badge border ${COURSE_TONE[courseColor(c)].card} ${COURSE_TONE[courseColor(c)].ink}`} title="Dars jadvalidagi rang">{COURSE_COLOR_LABEL[courseColor(c)]}</span>
               <span className="badge bg-accent-tint text-accent-ink">{c.groups.length} guruh</span>

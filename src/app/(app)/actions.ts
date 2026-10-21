@@ -19,6 +19,7 @@ import { ALL_PERMISSIONS } from "@/lib/permissions";
 import { logAction } from "@/lib/audit";
 import { centreDay, recordEvent, startMembership } from "@/lib/membership-db";
 import { nextMonthStart, schedulePrice } from "@/lib/prices-db";
+import { editedGroupPrice } from "@/lib/prices";
 import { changeTeacher } from "@/lib/teachers-db";
 import { menuActions, statusOn, systemLeaveDate, type EventType, type Status } from "@/lib/membership";
 import {
@@ -26,6 +27,7 @@ import {
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
+import { levelExamToSave } from "@/lib/group-exams";
 import { assertLessonOpen, closedDaysOf, holidayDays } from "@/lib/holidays-db";
 import { lessonChangeOpen, lessonChangeProblem } from "@/lib/lesson-changes";
 import { canDeleteHoliday, expandRange, holidayProblem } from "@/lib/holidays";
@@ -480,7 +482,8 @@ export async function updateGroup(id: number, f: FormData) {
     const scored = await db.exam.findFirst({ where: { groupId: id, level: { not: null }, results: { some: {} } }, select: { id: true } });
     if (scored) throw new Error("Guruhda daraja imtihoni baholangan — bo'limni o'zgartirib bo'lmaydi");
   }
-  const target = data.price ?? section?.price ?? (await db.course.findUniqueOrThrow({ where: { id: data.courseId } })).price;
+  const coursePrice = (await db.course.findUniqueOrThrow({ where: { id: data.courseId } })).price;
+  const { own, target } = editedGroupPrice({ formPrice: data.price, sectionChanged: (section?.id ?? null) !== before.sectionId, sectionPrice: section?.price ?? null, coursePrice });
   const current = before.price ?? before.course.price;
   const start = await startPoint(section?.id ?? null, data.startSubjectId, data.startLevel);
   const changes: string[] = [];
@@ -497,7 +500,7 @@ export async function updateGroup(id: number, f: FormData) {
     // saved level exams are numbered within the old course's section: keep them as ordinary exams
     if (data.courseId !== before.courseId) await tx.exam.updateMany({ where: { groupId: id, level: { not: null } }, data: { level: null } });
     const priced = await schedulePrice(tx, id, target, current, user.id);
-    await tx.group.update({ where: { id }, data: { ...data, sectionId: section?.id ?? null, ...start } });
+    await tx.group.update({ where: { id }, data: { ...data, price: own, sectionId: section?.id ?? null, ...start } });
     return priced;
   });
   if (changes.length) await logAction(user, "group.teacher", `${before.name}: ${changes.join(" va ")} ${isoDate(from)} dan almashtirildi`);
@@ -1017,11 +1020,17 @@ export async function saveLevelExamScores(_: MemberActionState, f: FormData): Pr
     await assertGroupAccess(user, groupId);
     const group = await db.group.findUniqueOrThrow({
       where: { id: groupId },
-      include: { course: { include: { subjects: true } }, students: { where: { leftAt: null }, select: { studentId: true } } },
+      include: { section: { include: { subjects: true } }, students: { where: { leftAt: null }, select: { studentId: true } } },
     });
-    const auto = levelExams({ ...group, holidays: (await closedDaysOf())(group.id) }, group.course.subjects).find((e) => e.level === level);
-    if (!auto) throw new Error("Bu daraja imtihoni topilmadi");
-    if (auto.date > centreDay()) throw new Error("Imtihon kuni hali kelmagan");
+    // level numbers belong to the group's section, so its own lines decide the title and date
+    const saved = await db.exam.findUnique({ where: { groupId_level: { groupId, level } }, select: { date: true, _count: { select: { results: true } } } });
+    const auto = levelExamToSave(
+      levelExams({ ...group, holidays: (await closedDaysOf())(group.id) }, group.section?.subjects ?? []),
+      level,
+      saved ? { date: saved.date, scored: saved._count.results > 0 } : null,
+      centreDay(),
+    );
+    if ("error" in auto) throw new Error(auto.error);
     const maxScore = check(v.int("Maksimal ball", { min: 1, max: 10_000, fallback: 100 }), f.get("maxScore"));
     const score = v.int("Ball", { min: 0, max: maxScore });
     const highest = await db.examResult.findFirst({ where: { exam: { groupId, level } }, orderBy: { score: "desc" } });

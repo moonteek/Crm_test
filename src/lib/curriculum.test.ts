@@ -121,3 +121,23 @@ test("pass mark", () => {
   assert.equal(passed(60, 100, 60), true);
   assert.equal(passed(12, 20, 60), true);
 });
+
+test("saving a level exam: unscored exams follow the lessons, a scored one keeps its date", async () => {
+  const { levelExamToSave } = await import("./group-exams");
+  const exams = levelExams(group, [HTML, CSS]); // HTML exam 5 Oct, CSS exam 4 Nov
+  const today = d(2026, 10, 20);
+  assert.deepEqual(levelExamToSave(exams, 1, null, today), { title: "HTML imtihoni", date: d(2026, 10, 5) });
+  assert.deepEqual(levelExamToSave(exams, 2, null, today), { error: "Imtihon kuni hali kelmagan" });
+  assert.deepEqual(levelExamToSave(exams, 9, null, today), { error: "Bu daraja imtihoni topilmadi" });
+  // scored on 2 Oct; lessons changed since, the computed date is now later (even in the future): the stored date stays
+  assert.deepEqual(levelExamToSave(exams, 2, { date: d(2026, 10, 2), scored: true }, today), { title: "CSS imtihoni", date: d(2026, 10, 2) });
+  // a row without results yet follows the lessons like a new one
+  assert.deepEqual(levelExamToSave(exams, 1, { date: d(2026, 9, 1), scored: false }, today), { title: "HTML imtihoni", date: d(2026, 10, 5) });
+});
+
+test("course length in months comes from its levels: the longest section, 13 lessons ≈ a month", async () => {
+  const { courseMonths } = await import("./curriculum");
+  assert.equal(courseMonths([{ subjects: [HTML, CSS, line(3, "JS", 3, 13)] }, { subjects: [line(4, "Node.js", 3, 13)] }]), 5);
+  assert.equal(courseMonths([{ subjects: [line(1, "Scratch", 1, 8)] }]), 1); // never 0
+  assert.equal(courseMonths([{ subjects: [] }]), null); // no levels: the course's own "Davomiylik (oy)"
+});

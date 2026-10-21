@@ -15,3 +15,18 @@ export function examColumns<E extends SavedExam>(group: CurriculumGroup, subject
     ...exams.filter((e) => e.level === null || !autoLevels.has(e.level)).map((e) => ({ key: `E${e.id}`, id: e.id as number | null, level: null as number | null, title: e.title, date: e.date, maxScore: e.maxScore, results: e.results, upcoming: false })),
   ].sort((a, b) => a.date.getTime() - b.date.getTime());
 }
+
+type AutoExam = { level: number; title: string; date: Date };
+
+/**
+ * What saving a level exam's scores writes: the group's own (section) exam title and date. A level exam already scored
+ * keeps the date it was held on, even when cancellations or a changed lesson count moved the computed one; a new one
+ * can't be scored before its day.
+ */
+export function levelExamToSave(exams: AutoExam[], level: number, saved: { date: Date; scored: boolean } | null, today: Date): { title: string; date: Date } | { error: string } {
+  const auto = exams.find((e) => e.level === level);
+  if (!auto) return { error: "Bu daraja imtihoni topilmadi" };
+  if (saved?.scored) return { title: auto.title, date: saved.date };
+  if (auto.date > today) return { error: "Imtihon kuni hali kelmagan" };
+  return { title: auto.title, date: auto.date };
+}
