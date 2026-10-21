@@ -42,3 +42,7 @@ test("structure guard with a scored exam", () => {
   assert.equal(structureProblem(before, shape([1, 1, 1], [2, 2, 1], [3, 3, 3], [9, 4, 2]), true), null); // appended at the end
   assert.equal(structureProblem(before, before, true), null); // names / lessons changed only
 });
+
+test("structure guard: moving a line to another section counts as removing it here", () => {
+  assert.match(String(structureProblem(before, shape([1, 1, 1], [2, 2, 1]), true)), /baholangan/); // line 3 moved away
+});

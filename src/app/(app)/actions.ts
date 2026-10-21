@@ -40,6 +40,7 @@ import { imageProblem } from "@/lib/image";
 import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, fitsDay, groupClashes, needsClashCheck, teacherGrid, type DayType, type LessonLike } from "@/lib/availability";
 import { check, parseForm, v } from "@/lib/validation";
 import { errorText, tryAction, type ActionState } from "@/lib/action-result";
+import { structureProblem, type LineShape } from "@/lib/curriculum-convert";
 import { CONTACT_RESULTS, riskSettingsSchema } from "@/lib/risk";
 import { storeRiskSettings } from "@/lib/risk-db";
 import { phoneKey } from "@/lib/phone";
@@ -604,10 +605,22 @@ const courseSchema = z.object({
   color: v.oneOf(COURSE_COLORS, null),
 });
 
+/** The course picture field: "" keeps the stored one, "remove" clears it, else a new PNG/JPG data URL. */
+function courseImage(f: FormData): { image?: string | null } {
+  const upload = String(f.get("image") ?? "");
+  if (!upload) return {};
+  if (upload === "remove") return { image: null };
+  const problem = imageProblem(upload, "Rasm");
+  if (problem) throw new Error(problem);
+  return { image: upload };
+}
+
 export async function createCourse(_: ActionState, f: FormData): Promise<ActionState> {
   return tryAction(async () => {
     await requirePermission("courses.manage");
-    await db.course.create({ data: parseForm(courseSchema, f) });
+    const data = parseForm(courseSchema, f);
+    // every course starts with one section named after it (more can be added in "Bo'limlar va darajalar")
+    await db.course.create({ data: { ...data, ...courseImage(f), sections: { create: { name: data.name.slice(0, 60), position: 1 } } } });
     revalidatePath("/courses");
   });
 }
@@ -627,7 +640,7 @@ export async function updateCourse(id: number, _: ActionState, f: FormData): Pro
       });
       await logAction(user, "course.price", `${before.name} narxi ${isoDate(nextMonthStart())} dan: ${money(before.price)} → ${money(data.price)}`);
     }
-    await db.course.update({ where: { id }, data });
+    await db.course.update({ where: { id }, data: { ...data, ...courseImage(f) } });
     revalidatePath("/courses");
   });
 }
@@ -1648,69 +1661,115 @@ export async function toggleReason(id: number): Promise<ActionState> {
   });
 }
 
-// ---------- Course subjects (curriculum) ----------
-const subjectSchema = z.object({ name: v.text("Fan nomi", 60), months: v.int("Oylar soni", { min: 1, max: 24 }) });
+// ---------- Course sections and level lines (curriculum) ----------
+const sectionSchema = z.object({ name: v.text("Bo'lim nomi", 60), price: v.optInt("Bo'lim narxi") });
+const lineSchema = z.object({
+  name: v.text("Daraja nomi", 60),
+  levels: v.int("Darajalar soni", { min: 1, max: 24 }),
+  lessons: v.int("Darslar soni", { min: 1, max: 60, fallback: 13 }),
+});
 
-/** Keeps the course length equal to its subjects' months. */
-async function syncDuration(courseId: number) {
-  const subjects = await db.subject.findMany({ where: { courseId } });
-  if (subjects.length) await db.course.update({ where: { id: courseId }, data: { durationMon: subjects.reduce((s, x) => s + x.months, 0) } });
+/** Whether a group of the section has a scored level exam (then its level numbers must stay as they are). */
+async function sectionScored(sectionId: number) {
+  return Boolean(await db.exam.findFirst({ where: { level: { not: null }, results: { some: {} }, group: { sectionId } }, select: { id: true } }));
 }
 
-/** Level exams are numbered by course month, so once any are scored the order and lengths can't change. */
-async function assertStructureFree(courseId: number) {
-  const scored = await db.exam.findFirst({ where: { level: { not: null }, group: { courseId } }, include: { group: true } });
-  if (scored) throw new Error(`"${scored.group.name}" guruhida daraja imtihoni baholangan — fanlar tartibi va oylarini o'zgartirib bo'lmaydi (nomini o'zgartirish mumkin)`);
+/** Refuses a change of the section's lines that would renumber scored level exams. */
+async function guardLines(sectionId: number, after: (lines: LineShape[]) => LineShape[]) {
+  const before = (await db.subject.findMany({ where: { sectionId }, select: { id: true, position: true, levels: true } })).sort((a, b) => a.position - b.position);
+  const problem = structureProblem(before, after(before), await sectionScored(sectionId));
+  if (problem) throw new Error(problem);
 }
 
-/** One action for the subjects dialog: add, update, move up/down, delete. */
-export async function saveSubject(_: MemberActionState, f: FormData): Promise<MemberActionState> {
-  try {
+/** One action for the sections editor: add, update (name, price), move up/down, delete. */
+export async function saveSection(_: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
     const user = await requirePermission("courses.manage");
     const op = check(z.enum(["add", "update", "up", "down", "delete"]), f.get("op"));
     if (op === "add") {
       const courseId = check(v.id(), f.get("courseId"));
-      await assertStructureFree(courseId);
-      const d = parseForm(subjectSchema, f);
-      const last = await db.subject.findFirst({ where: { courseId }, orderBy: { position: "desc" } });
-      await db.subject.create({ data: { ...d, courseId, position: (last?.position ?? 0) + 1 } });
-      await syncDuration(courseId);
-      await logAction(user, "course.subject", `Fan qo'shildi: ${d.name} (${d.months} oy)`);
+      const d = parseForm(sectionSchema, f);
+      const last = await db.section.findFirst({ where: { courseId }, orderBy: { position: "desc" } });
+      await db.section.create({ data: { ...d, courseId, position: (last?.position ?? 0) + 1 } });
+      await logAction(user, "course.section", `Bo'lim qo'shildi: ${d.name}`);
     } else {
       const id = check(v.id(), f.get("id"));
-      const s = await db.subject.findUniqueOrThrow({ where: { id }, include: { startingGroups: true } });
+      const s = await db.section.findUniqueOrThrow({ where: { id }, include: { _count: { select: { groups: true } } } });
       if (op === "update") {
-        const d = parseForm(subjectSchema, f);
-        if (d.months !== s.months) await assertStructureFree(s.courseId);
-        await db.subject.update({ where: { id }, data: d });
-        await logAction(user, "course.subject", `Fan o'zgartirildi: ${s.name} → ${d.name} (${d.months} oy)`);
+        const d = parseForm(sectionSchema, f);
+        await db.section.update({ where: { id }, data: d });
+        await logAction(user, "course.section", `Bo'lim o'zgartirildi: ${s.name} → ${d.name}${d.price !== null ? ` (${money(d.price)})` : ""}`);
       } else if (op === "delete") {
-        await assertStructureFree(s.courseId);
-        if (s.startingGroups.length) throw new Error(`"${s.startingGroups[0].name}" guruhi shu fandan boshlangan — avval guruhning boshlanish fanini o'zgartiring`);
-        await db.subject.delete({ where: { id } });
-        await logAction(user, "course.subject", `Fan o'chirildi: ${s.name}`);
+        if (s._count.groups) throw new Error("Bu bo'limda guruhlar bor");
+        if ((await db.section.count({ where: { courseId: s.courseId } })) <= 1) throw new Error("Kursda kamida bitta bo'lim bo'lishi kerak");
+        if (await sectionScored(id)) throw new Error("Bu bo'limda daraja imtihoni baholangan — o'chirib bo'lmaydi");
+        await db.section.delete({ where: { id } });
+        await logAction(user, "course.section", `Bo'lim o'chirildi: ${s.name}`);
       } else {
-        await assertStructureFree(s.courseId);
-        const neighbour = await db.subject.findFirst({
+        // sections are independent (a group studies one), so their order is only how they are listed
+        const neighbour = await db.section.findFirst({
           where: { courseId: s.courseId, position: op === "up" ? { lt: s.position } : { gt: s.position } },
           orderBy: { position: op === "up" ? "desc" : "asc" },
         });
         if (neighbour) {
           await db.$transaction([
+            db.section.update({ where: { id: s.id }, data: { position: neighbour.position } }),
+            db.section.update({ where: { id: neighbour.id }, data: { position: s.position } }),
+          ]);
+        }
+      }
+    }
+    revalidatePath("/courses");
+  });
+}
+
+/** One action for a section's level lines: add, update (name, levels, lessons), move up/down, delete. */
+export async function saveLine(_: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("courses.manage");
+    const op = check(z.enum(["add", "update", "up", "down", "delete"]), f.get("op"));
+    if (op === "add") {
+      const sectionId = check(v.id(), f.get("sectionId"));
+      const section = await db.section.findUniqueOrThrow({ where: { id: sectionId } });
+      const d = parseForm(lineSchema, f);
+      const last = await db.subject.findFirst({ where: { sectionId }, orderBy: { position: "desc" } });
+      const position = (last?.position ?? 0) + 1;
+      await guardLines(sectionId, (lines) => [...lines, { id: -1, position, levels: d.levels }]);
+      await db.subject.create({ data: { ...d, months: d.levels, sectionId, courseId: section.courseId, position } });
+      await logAction(user, "course.subject", `Daraja qo'shildi: ${section.name} — ${d.name} ×${d.levels} (${d.lessons} dars)`);
+    } else {
+      const id = check(v.id(), f.get("id"));
+      const s = await db.subject.findUniqueOrThrow({ where: { id }, include: { startingGroups: { select: { name: true } } } });
+      const sectionId = s.sectionId;
+      if (sectionId === null) throw new Error("Bu daraja bo'limga biriktirilmagan — npm run db:curriculum-v2 ni ishga tushiring");
+      if (op === "update") {
+        const d = parseForm(lineSchema, f);
+        await guardLines(sectionId, (lines) => lines.map((l) => (l.id === id ? { ...l, levels: d.levels } : l)));
+        await db.subject.update({ where: { id }, data: { ...d, months: d.levels } });
+        await logAction(user, "course.subject", `Daraja o'zgartirildi: ${s.name} → ${d.name} ×${d.levels} (${d.lessons} dars)`);
+      } else if (op === "delete") {
+        await guardLines(sectionId, (lines) => lines.filter((l) => l.id !== id));
+        if (s.startingGroups.length) throw new Error(`"${s.startingGroups[0].name}" guruhi shu darajadan boshlangan — avval guruhning boshlanish darajasini o'zgartiring`);
+        await db.subject.delete({ where: { id } });
+        await logAction(user, "course.subject", `Daraja o'chirildi: ${s.name}`);
+      } else {
+        const neighbour = await db.subject.findFirst({
+          where: { sectionId, position: op === "up" ? { lt: s.position } : { gt: s.position } },
+          orderBy: { position: op === "up" ? "desc" : "asc" },
+        });
+        if (neighbour) {
+          await guardLines(sectionId, (lines) => lines.map((l) => (l.id === s.id ? { ...l, position: neighbour.position } : l.id === neighbour.id ? { ...l, position: s.position } : l)));
+          await db.$transaction([
             db.subject.update({ where: { id: s.id }, data: { position: neighbour.position } }),
             db.subject.update({ where: { id: neighbour.id }, data: { position: s.position } }),
           ]);
-          await logAction(user, "course.subject", `Fanlar tartibi: ${s.name} ${op === "up" ? "yuqoriga" : "pastga"}`);
+          await logAction(user, "course.subject", `Darajalar tartibi: ${s.name} ${op === "up" ? "yuqoriga" : "pastga"}`);
         }
       }
-      await syncDuration(s.courseId);
     }
     revalidatePath("/courses");
-    return { ok: true };
-  } catch (e) {
-    unstable_rethrow(e); // the login redirect of an expired session must reach the browser
-    return { error: errorText(e) };
-  }
+    revalidatePath("/groups");
+  });
 }
 
 // ---------- Receipts (Sozlamalar → Chek) ----------
