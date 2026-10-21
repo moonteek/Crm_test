@@ -54,7 +54,7 @@ export default async function GroupPage({
   const group = await db.group.findFirst({
     where: { id, ...groupScope(user) },
     include: {
-      course: { include: { subjects: { orderBy: { position: "asc" } } } }, teacher: true, assistant: true, room: true, prices: true,
+      course: { include: { _count: { select: { sections: true } } } }, section: { include: { subjects: { orderBy: { position: "asc" } } } }, teacher: true, assistant: true, room: true, prices: true,
       students: {
         where: { leftAt: null },
         include: { events: membershipInclude.events, discounts: membershipInclude.discounts, student: { include: { payments: { select: { amount: true } }, groups: { include: membershipInclude } } } },
@@ -70,7 +70,7 @@ export default async function GroupPage({
     db.attendance.findMany({ where: { groupId: id, date: range }, include: { reason: true } }),
     db.grade.findMany({ where: { groupId: id, date: range } }),
     db.exam.findMany({ where: { groupId: id }, include: { results: true }, orderBy: { date: "asc" } }),
-    db.course.findMany({ orderBy: { name: "asc" }, include: { subjects: { orderBy: { position: "asc" } } } }),
+    db.course.findMany({ orderBy: { name: "asc" }, include: { sections: { orderBy: { position: "asc" }, include: { subjects: { orderBy: { position: "asc" } } } } } }),
     db.user.findMany({ where: { isTeacher: true, active: true }, orderBy: { name: "asc" } }),
     db.room.findMany({ orderBy: { name: "asc" } }),
     db.student.findMany({ where: { groups: { none: { groupId: id, leftAt: null } } }, orderBy: { name: "asc" } }),
@@ -89,8 +89,11 @@ export default async function GroupPage({
   const closed = await closedDaysOf();
   const holidays = closed(id);
   const planGroup = { ...group, holidays };
+  // the group's section: its level lines, and its name when the course has several sections
+  const lines = group.section?.subjects ?? [];
+  const sectionName = group.course._count.sections > 1 ? group.section?.name ?? null : null;
   const off = new Set(holidays);
-  const cur = curriculumOn(planGroup, group.course.subjects, centreDay());
+  const cur = curriculumOn(planGroup, lines, centreDay());
   // just opened (?warn=1): hours its teacher / assistant marked as busy, worked out here — never text from the link
   const people = [group.teacher, group.assistant].filter((p): p is NonNullable<typeof p> => p !== null);
   const busyWarnings = warn && people.length
@@ -100,8 +103,8 @@ export default async function GroupPage({
         new Map(people.map((p) => [p.id, p.name])),
       )
     : [];
-  const autoExams = levelExams(planGroup, group.course.subjects);
-  const examCols = examColumns(planGroup, group.course.subjects, exams, centreDay());
+  const autoExams = levelExams(planGroup, lines);
+  const examCols = examColumns(planGroup, lines, exams, centreDay());
   // "Bugungi dars": on the group's lesson day (not a holiday) its current students with today's mark
   const todayIso = isoDate(centreDay());
   const todayRows = group.status === "ACTIVE" && group.startDate.getTime() <= Date.now() && lessonWeekdays(group.days).includes(centreDay().getUTCDay()) && !holidays.includes(todayIso)
@@ -142,7 +145,7 @@ export default async function GroupPage({
         </div>
         {cur.windows.length > 0 && (
           <div className="mt-5 border-t border-line pt-4">
-            <CurriculumBar windows={cur.windows} progress={cur.progress} />
+            <CurriculumBar windows={cur.windows} progress={cur.progress} sectionName={sectionName} />
             {cur.nextExam && <p className="label-mono mt-3">Keyingi imtihon: {cur.nextExam.title} · {date(cur.nextExam.date)}</p>}
           </div>
         )}

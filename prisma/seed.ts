@@ -52,10 +52,10 @@ async function main() {
   }
 
   const courses = await Promise.all([
-    db.course.create({ data: { name: "Frontend dasturlash", price: 600_000, durationMon: 8, description: "HTML, CSS, JavaScript, React" } }),
-    db.course.create({ data: { name: "Backend (Python)", price: 650_000, durationMon: 8, description: "Python, Django, PostgreSQL" } }),
-    db.course.create({ data: { name: "Kompyuter savodxonligi", price: 350_000, durationMon: 3, description: "Windows, Word, Excel, Internet" } }),
-    db.course.create({ data: { name: "Robototexnika (bolalar)", price: 450_000, durationMon: 6, description: "Arduino va Scratch" } }),
+    db.course.create({ data: { name: "Frontend dasturlash", price: 600_000, durationMon: 8, description: "HTML, CSS, JavaScript, React", sections: { create: { name: "Frontend dasturlash", position: 1 } } }, include: { sections: true } }),
+    db.course.create({ data: { name: "Backend (Python)", price: 650_000, durationMon: 8, description: "Python, Django, PostgreSQL", sections: { create: { name: "Backend (Python)", position: 1 } } }, include: { sections: true } }),
+    db.course.create({ data: { name: "Kompyuter savodxonligi", price: 350_000, durationMon: 3, description: "Windows, Word, Excel, Internet", sections: { create: { name: "Kompyuter savodxonligi", position: 1 } } }, include: { sections: true } }),
+    db.course.create({ data: { name: "Robototexnika (bolalar)", price: 450_000, durationMon: 6, description: "Arduino va Scratch", sections: { create: { name: "Robototexnika (bolalar)", position: 1 } } }, include: { sections: true } }),
   ]);
   const rooms = await Promise.all(["1-xona", "2-xona", "Kompyuter xonasi"].map((name) => db.room.create({ data: { name } })));
 
@@ -303,6 +303,9 @@ async function main() {
       await db.salaryPayment.create({ data: { userId: row.userId, month: key, amount: row.accrued, date, expenseId: expense.id } });
     }
   }
+
+  // every group studies its course's (only) section
+  for (const c of courses) await db.group.updateMany({ where: { courseId: c.id }, data: { sectionId: c.sections[0].id } });
 
   await db.auditLog.create({ data: { userId: admin.id, action: "auth.login", summary: "Direktor tizimga kirdi" } });
   console.log(`Seed done: ${await db.student.count()} o'quvchi, ${attendance.length} davomat, ${grades.length} baho.`);

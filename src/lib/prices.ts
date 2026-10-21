@@ -31,3 +31,13 @@ export function planPriceChange(history: PriceRow[], price: number, currentPrice
   if (price === before) return { baseline: null, action: "cancel" };
   return { baseline: history.length ? null : currentPrice, action: "set" };
 }
+
+/**
+ * An edited group's price: `own` is what the group stores (null = follows the course price), `target` what it should
+ * cost. A section's own price applies only when the group moves into that section — a rename or a teacher change
+ * never reprices a group that follows the course.
+ */
+export function editedGroupPrice(p: { formPrice: number | null; sectionChanged: boolean; sectionPrice: number | null; coursePrice: number }) {
+  const own = p.formPrice ?? (p.sectionChanged ? p.sectionPrice : null);
+  return { own, target: own ?? p.coursePrice };
+}

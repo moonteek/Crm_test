@@ -62,7 +62,7 @@ export function AlertsBell({ alerts, align = "left" }: { alerts: AlertItem[]; al
       </button>
       {open && (
         <div className={`absolute top-full z-50 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-2xl border border-line bg-raised p-2 shadow-xl ${align === "right" ? "right-0" : "left-0"}`}>
-          <p className="label-mono px-2 pt-1 pb-2">Kursi tugayotgan guruhlar</p>
+          <p className="label-mono px-2 pt-1 pb-2">Bo&apos;limi tugayotgan guruhlar</p>
           {shown.length === 0 && <p className="px-2 pb-2 text-sm text-muted">Yangi ogohlantirish yo&apos;q</p>}
           <ul className="space-y-0.5">
             {shown.map((a) => (
@@ -70,7 +70,7 @@ export function AlertsBell({ alerts, align = "left" }: { alerts: AlertItem[]; al
                 <Link href={`/groups/${a.groupId}`} onClick={() => setOpen(false)} className="min-w-0 flex-1 px-2 py-2">
                   <p className="truncate text-sm font-medium">{a.name}</p>
                   <p className={`text-xs ${a.state === "ended" ? "text-danger" : "text-muted"}`}>
-                    {a.state === "ended" ? `Kurs ${day(a.endsOn)} da tugagan — guruhni yakunlang` : `Kurs ${day(a.endsOn)} da tugaydi`}
+                    {a.state === "ended" ? `Bo'lim ${day(a.endsOn)} da tugagan — guruhni yakunlang` : `Bo'lim ${day(a.endsOn)} da tugaydi`}
                   </p>
                 </Link>
                 <button type="button" onClick={() => dismiss(a)} className="mr-1 rounded-full p-1.5 text-faint hover:text-ink" aria-label="Yashirish" title="Yashirish">

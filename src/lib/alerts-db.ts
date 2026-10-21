@@ -9,8 +9,8 @@ import { closedDaysOf } from "./holidays-db";
 export async function alertsFor(user: CurrentUser) {
   if (!can(user, "groups.view")) return [];
   const groups = await db.group.findMany({
-    where: { status: "ACTIVE", ...groupScope(user), course: { subjects: { some: {} } } },
-    select: { id: true, name: true, status: true, startDate: true, days: true, startSubjectId: true, startLevel: true, course: { select: { subjects: true } } },
+    where: { status: "ACTIVE", ...groupScope(user), section: { subjects: { some: {} } } },
+    select: { id: true, name: true, status: true, startDate: true, days: true, startSubjectId: true, startLevel: true, section: { select: { subjects: true } } },
   });
   const closed = await closedDaysOf();
   return courseEndAlerts(groups.map((g) => ({ ...g, holidays: closed(g.id) })), centreDay());

@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { courseMonths } from "../curriculum";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { balance, priceNow, withHolidays } from "@/lib/billing";
@@ -364,8 +365,8 @@ export function buildServer(user: CurrentUser) {
   });
 
   tool("courses.view", "list_courses", "Kurslar ro'yxati va oylik narxlari.", {}, async () => {
-    const courses = await db.course.findMany({ orderBy: { name: "asc" } });
-    return courses.map((c) => ({ id: c.id, name: c.name, monthly_price: c.price, duration_months: c.durationMon, description: c.description }));
+    const courses = await db.course.findMany({ orderBy: { name: "asc" }, include: { sections: { include: { subjects: true } } } });
+    return courses.map((c) => ({ id: c.id, name: c.name, monthly_price: c.price, duration_months: courseMonths(c.sections) ?? c.durationMon, description: c.description }));
   });
 
   tool("analytics.view", "get_analytics", "Butun markaz bo'yicha analitika: tushum, yig'ilish darajasi, o'quvchilar oqimi, davomat, baholar, o'qituvchilar samaradorligi, lidlar va moliya. Oldingi davr bilan solishtirish ham beriladi.", {

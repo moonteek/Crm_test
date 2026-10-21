@@ -29,7 +29,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const [groups, centreGroups, allRooms] = await Promise.all([
     db.group.findMany({
       where: { status: "ACTIVE", ...groupScope(user) },
-      include: { course: { include: { subjects: true } }, teacher: true, assistant: true, room: true, _count: { select: { students: { where: { leftAt: null } } } } },
+      include: { course: true, section: { include: { subjects: { orderBy: { position: "asc" } } } }, teacher: true, assistant: true, room: true, _count: { select: { students: { where: { leftAt: null } } } } },
       orderBy: { time: "asc" },
     }),
     // clashes are checked against every group, including ones this user can't see
@@ -55,7 +55,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const closed = holidays.includes(shown.toISOString().slice(0, 10));
   const shownIso = shown.toISOString().slice(0, 10);
   const lessons = (closed ? [] : perDay.get(day) ?? []).map(withTimes).map((l) => {
-    const cur = curriculumOn({ ...l, holidays: closedFor(l.id) }, l.course.subjects, shown);
+    const cur = curriculumOn({ ...l, holidays: closedFor(l.id) }, l.section?.subjects ?? [], shown);
     return {
       ...l, progress: cur.progress, exam: cur.nextExam !== null && cur.nextExam.date.getTime() === shown.getTime(),
       color: courseColor(l.course),

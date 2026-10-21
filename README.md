@@ -184,6 +184,13 @@ to'lov yonidagi 🧾 belgisi chekni istalgan vaqtda qayta ochadi; To'lovlar sahi
 Ko'rinishi Sozlamalar → Chek'da (markaz nomi, telefon, manzil, logotip, qaysi qatorlar). Yangilangandan keyin
 `npm install` va `npm run db:push`. Chop etishda printer sozlamasida qog'oz o'lchamini rulon (80/58 mm) qilib tanlang.
 
+**Kurslar, bo'limlar va darajalar:** kurs bir yoki bir nechta bo'limdan iborat (masalan, Web dasturlash → Frontend,
+Backend); bo'limda darajalar qatori bor — nomi, darajalar soni va har darajadagi darslar soni (odatda 13). Guruh bitta
+bo'limni o'qiydi: daraja shuncha dars o'tilgach tugaydi, imtihon oxirgi darsida; bayram va qoldirilgan darslar
+hisoblanmaydi. Kurslar → "Bo'limlar va darajalar". Bo'limning o'z narxi bo'lishi mumkin (yangi guruh shu narxni oladi).
+Yangilangandan keyin `npm run db:push`, so'ng bir marta `npm run db:curriculum-v2` (eski fan-oylarni 13 darslik darajalarga
+o'tkazadi; qayta ishga tushirish xavfsiz), keyin Web dasturlash / IT Kids ni bo'limlarga ajrating.
+
 **Xavfli o'quvchilar:** faol va sinovdagi o'quvchilar — ketma-ket darsga kelmagan, davomati yoki bahosi tushgan,
 daraja imtihonidan o'tmaganlar — sabablari bilan. "Bog'lanildi" tugmasi qo'ng'iroq natijasini yozadi (o'quvchi Tarixida
 ham ko'rinadi); yangi muammo chiqmaguncha o'quvchi "Bog'lanilgan"da turadi. Chegaralar Sozlamalar → Xavfli o'quvchilar'da.
