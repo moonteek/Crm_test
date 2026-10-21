@@ -8,8 +8,9 @@ import { can, groupScope, leadScope } from "@/lib/access";
 import { LEAD_SOURCES, LEAD_STATUSES } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { ActivityForm, LostForm } from "@/components/LeadForms";
-import { Field, PageHeader, SubmitRow } from "@/components/ui";
+import { Field, PageHeader } from "@/components/ui";
 import { convertLead, createLead, setLeadStatus } from "../actions";
+import { ActionButton, ActionForm } from "@/components/ActionForm";
 
 function when(d: Date) {
   const p = (n: number) => String(n).padStart(2, "0");
@@ -52,7 +53,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
       <PageHeader title={own ? "Mening lidlarim" : "Lidlar"} subtitle="Bo'lajak o'quvchilar bilan ishlash">
         <ExportButtons href="/leads/export" />
         {manage && <Modal title="Yangi lid" trigger={<><Plus className="h-4 w-4" /> Lid qo&apos;shish</>}>
-          <form action={createLead} className="space-y-3">
+          <ActionForm action={createLead} className="space-y-3">
             <Field label="Ism familiya"><input name="name" className="input" required /></Field>
             <Field label="Telefon"><input name="phone" className="input" required placeholder="+998 90 123 45 67" /></Field>
             <div className="grid grid-cols-2 gap-3">
@@ -78,8 +79,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
               </Field>
             )}
             <Field label="Izoh"><textarea name="note" className="input" rows={2} /></Field>
-            <SubmitRow />
-          </form>
+          </ActionForm>
         </Modal>}
       </PageHeader>
 
@@ -160,24 +160,21 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
                           <ActivityForm leadId={lead.id} />
                         </Modal>
                         {lead.status !== "TRIAL" && (
-                          <form action={setLeadStatus.bind(null, lead.id, "TRIAL")}>
-                            <button className="press badge bg-ink/5 text-ink hover:bg-ink/10">→ Sinov darsi</button>
-                          </form>
+                          <ActionButton action={setLeadStatus.bind(null, lead.id, "TRIAL")} className="press badge bg-ink/5 text-ink hover:bg-ink/10">→ Sinov darsi</ActionButton>
                         )}
                         <Modal title={`${lead.name} — rad etdi`} triggerClassName="press badge bg-ink/5 text-ink hover:bg-ink/10" trigger="→ Rad etdi">
                           <LostForm leadId={lead.id} />
                         </Modal>
                         {convert && (
                           <Modal title={`${lead.name} — o'quvchiga aylantirish`} triggerClassName="press badge bg-success-tint text-success" trigger="✓ Yozildi">
-                            <form action={convertLead.bind(null, lead.id)} className="space-y-3">
+                            <ActionForm action={convertLead.bind(null, lead.id)} className="space-y-3" submitText="O'quvchi qilish">
                               <Field label="Guruh">
                                 <select name="groupId" className="input">
                                   <option value="">Hozircha guruhsiz</option>
                                   {groups.map((g) => <option key={g.id} value={g.id}>{g.name} — {g.course.name} ({g.time})</option>)}
                                 </select>
                               </Field>
-                              <SubmitRow text="O'quvchi qilish" />
-                            </form>
+                            </ActionForm>
                           </Modal>
                         )}
                       </div>

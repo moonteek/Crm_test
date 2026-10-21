@@ -7,8 +7,9 @@ import { currentMonth, lessonBased, SALARY_TYPES } from "@/lib/salary";
 import { loadSalaries } from "@/lib/lists/salaries";
 import { ExportButtons } from "@/components/ExportButtons";
 import { Modal } from "@/components/Modal";
-import { Empty, Field, PageHeader, SubmitRow } from "@/components/ui";
+import { Empty, Field, PageHeader } from "@/components/ui";
 import { deleteSalaryPayment, paySalary, updateSalaryRule } from "../actions";
+import { ActionButton, ActionForm } from "@/components/ActionForm";
 
 function shift(month: string, delta: number) {
   const [y, m] = month.split("-").map(Number);
@@ -63,7 +64,7 @@ export default async function SalariesPage({ searchParams }: { searchParams: Pro
                     </span>
                     {manage && (
                       <Modal title={`Ish haqi qoidasi — ${r.name}`} triggerClassName="text-faint hover:text-ink" trigger={<Pencil className="h-4 w-4" />}>
-                        <form action={updateSalaryRule.bind(null, r.userId)} className="space-y-3">
+                        <ActionForm action={updateSalaryRule.bind(null, r.userId)} className="space-y-3">
                           <Field label="Turi">
                             <select name="salaryType" className="input" defaultValue={r.salaryType}>
                               {Object.entries(SALARY_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -77,8 +78,7 @@ export default async function SalariesPage({ searchParams }: { searchParams: Pro
                             <li><b>Tushumdan foiz</b> — o&apos;qituvchi guruhlaridan shu oyda tushgan to&apos;lovlarning foizi.</li>
                             <li><b>Har bir o&apos;quvchi uchun</b> — shu oyda guruhlarida o&apos;qigan har bir o&apos;quvchi uchun summa.</li>
                           </ul>
-                          <SubmitRow />
-                        </form>
+                        </ActionForm>
                       </Modal>
                     )}
                   </div>
@@ -93,7 +93,7 @@ export default async function SalariesPage({ searchParams }: { searchParams: Pro
                 <td>
                   {manage && (r.salaryType !== "NONE" || r.accrued > 0) && (
                     <Modal title={`Ish haqi to'lash — ${r.name}`} triggerClassName="text-sm text-accent-ink hover:underline" trigger="To'lash">
-                      <form action={paySalary} className="space-y-3">
+                      <ActionForm action={paySalary} className="space-y-3" submitText="To'lash">
                         <input type="hidden" name="userId" value={r.userId} />
                         <input type="hidden" name="month" value={month} />
                         <div className="grid grid-cols-2 gap-3">
@@ -102,8 +102,7 @@ export default async function SalariesPage({ searchParams }: { searchParams: Pro
                         </div>
                         <Field label="Izoh"><input name="note" className="input" placeholder="Avans, bonus..." /></Field>
                         <p className="text-xs text-muted">To&apos;lov Moliya bo&apos;limiga &quot;Ish haqi&quot; xarajati sifatida avtomatik yoziladi.</p>
-                        <SubmitRow text="To'lash" />
-                      </form>
+                      </ActionForm>
                     </Modal>
                   )}
                 </td>
@@ -127,9 +126,7 @@ export default async function SalariesPage({ searchParams }: { searchParams: Pro
                 <td className="text-muted">{p.note ?? ""}</td>
                 {manage && (
                   <td>
-                    <form action={deleteSalaryPayment.bind(null, p.id)}>
-                      <button className="text-faint hover:text-danger" aria-label="Bekor qilish"><Trash2 className="h-4 w-4" /></button>
-                    </form>
+                    <ActionButton action={deleteSalaryPayment.bind(null, p.id)} className="text-faint hover:text-danger" label="Bekor qilish"><Trash2 className="h-4 w-4" /></ActionButton>
                   </td>
                 )}
               </tr>

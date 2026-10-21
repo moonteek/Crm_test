@@ -39,6 +39,7 @@ import { teacherFormSchema } from "@/lib/teacher-profile";
 import { imageProblem } from "@/lib/image";
 import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, fitsDay, groupClashes, needsClashCheck, teacherGrid, type DayType, type LessonLike } from "@/lib/availability";
 import { check, parseForm, v } from "@/lib/validation";
+import { errorText, tryAction, type ActionState } from "@/lib/action-result";
 import { phoneKey } from "@/lib/phone";
 
 // ---------- Leads ----------
@@ -51,16 +52,18 @@ const leadSchema = z.object({
   assignedToId: z.union([z.literal("auto"), v.optId()]),
 });
 
-export async function createLead(f: FormData) {
-  const user = await requirePermission("leads.manage");
-  const d = parseForm(leadSchema, f);
-  // salespeople own the leads they add; others pick a salesperson or let the CRM choose
-  const assignedToId = can(user, "leads.own") ? user.id : d.assignedToId === "auto" ? await pickAssignee() : d.assignedToId;
-  const lead = await db.lead.create({
-    data: { name: d.name, phone: d.phone, source: d.source, courseId: d.courseId, note: d.note, assignedToId, nextActionAt: new Date() },
+export async function createLead(_: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("leads.manage");
+    const d = parseForm(leadSchema, f);
+    // salespeople own the leads they add; others pick a salesperson or let the CRM choose
+    const assignedToId = can(user, "leads.own") ? user.id : d.assignedToId === "auto" ? await pickAssignee() : d.assignedToId;
+    const lead = await db.lead.create({
+      data: { name: d.name, phone: d.phone, source: d.source, courseId: d.courseId, note: d.note, assignedToId, nextActionAt: new Date() },
+    });
+    await logAction(user, "lead.create", `Yangi lid: ${lead.name} (${lead.source ?? "manba yo'q"})`);
+    revalidatePath("/leads");
   });
-  await logAction(user, "lead.create", `Yangi lid: ${lead.name} (${lead.source ?? "manba yo'q"})`);
-  revalidatePath("/leads");
 }
 
 // WON is set only by convertLead, which also creates the student.
@@ -68,33 +71,37 @@ const settableStatus = z.enum(LEAD_STATUSES.map((s) => s.key).filter((k) => k !=
 const leadStatusSchema = z.object({ lostReason: v.optText(100), text: v.optText() });
 
 /** Changes a lead's status and records it in the lead's history. LOST needs a reason. */
-export async function setLeadStatus(id: number, status: string, f?: FormData) {
-  const user = await requirePermission("leads.manage");
-  await assertLeadAccess(user, id);
-  const newStatus = check(settableStatus, status);
-  const form = f ? parseForm(leadStatusSchema, f) : { lostReason: null, text: null };
-  const lostReason = newStatus === "LOST" ? form.lostReason ?? "Boshqa" : null;
-  const lead = await db.lead.update({
-    where: { id },
-    data: { status: newStatus, lostReason, ...(newStatus === "LOST" ? { nextActionAt: null } : {}) },
+export async function setLeadStatus(id: number, status: string, _?: ActionState, f?: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("leads.manage");
+    await assertLeadAccess(user, id);
+    const newStatus = check(settableStatus, status);
+    const form = f ? parseForm(leadStatusSchema, f) : { lostReason: null, text: null };
+    const lostReason = newStatus === "LOST" ? form.lostReason ?? "Boshqa" : null;
+    const lead = await db.lead.update({
+      where: { id },
+      data: { status: newStatus, lostReason, ...(newStatus === "LOST" ? { nextActionAt: null } : {}) },
+    });
+    await db.leadActivity.create({
+      data: { leadId: id, userId: user.id, type: "STATUS", result: newStatus, text: lostReason ?? form.text },
+    });
+    await logAction(user, "lead.status", `Lid "${lead.name}" holati: ${newStatus}${lostReason ? ` (${lostReason})` : ""}`);
+    revalidatePath("/leads");
+    revalidatePath(`/leads/${id}`);
   });
-  await db.leadActivity.create({
-    data: { leadId: id, userId: user.id, type: "STATUS", result: newStatus, text: lostReason ?? form.text },
-  });
-  await logAction(user, "lead.status", `Lid "${lead.name}" holati: ${newStatus}${lostReason ? ` (${lostReason})` : ""}`);
-  revalidatePath("/leads");
-  revalidatePath(`/leads/${id}`);
 }
 
-export async function assignLead(id: number, f: FormData) {
-  const user = await requirePermission("leads.manage");
-  if (can(user, "leads.own")) throw new ForbiddenError();
-  const { assignedToId } = parseForm(z.object({ assignedToId: v.optId() }), f);
-  const lead = await db.lead.update({ where: { id }, data: { assignedToId }, include: { assignedTo: true } });
-  await db.leadActivity.create({ data: { leadId: id, userId: user.id, type: "NOTE", text: `Biriktirildi: ${lead.assignedTo?.name ?? "hech kimga"}` } });
-  await logAction(user, "lead.assign", `Lid "${lead.name}" → ${lead.assignedTo?.name ?? "biriktirilmagan"}`);
-  revalidatePath("/leads");
-  revalidatePath(`/leads/${id}`);
+export async function assignLead(id: number, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("leads.manage");
+    if (can(user, "leads.own")) throw new ForbiddenError();
+    const { assignedToId } = parseForm(z.object({ assignedToId: v.optId() }), f);
+    const lead = await db.lead.update({ where: { id }, data: { assignedToId }, include: { assignedTo: true } });
+    await db.leadActivity.create({ data: { leadId: id, userId: user.id, type: "NOTE", text: `Biriktirildi: ${lead.assignedTo?.name ?? "hech kimga"}` } });
+    await logAction(user, "lead.assign", `Lid "${lead.name}" → ${lead.assignedTo?.name ?? "biriktirilmagan"}`);
+    revalidatePath("/leads");
+    revalidatePath(`/leads/${id}`);
+  });
 }
 
 const leadActivitySchema = z.object({
@@ -105,57 +112,63 @@ const leadActivitySchema = z.object({
 });
 
 /** Logs a call / message / meeting / note and sets (or clears) the next follow-up. */
-export async function addLeadActivity(id: number, f: FormData) {
-  const user = await requirePermission("leads.manage");
-  await assertLeadAccess(user, id);
-  const d = parseForm(leadActivitySchema, f);
-  const result = d.type === "CALL" ? d.result : null;
-  await db.leadActivity.create({ data: { leadId: id, userId: user.id, type: d.type, result, text: d.text } });
-  const lead = await db.lead.findUniqueOrThrow({ where: { id } });
-  const reached = d.type !== "NOTE" && !(d.type === "CALL" && result !== "ANSWERED");
-  await db.lead.update({
-    where: { id },
-    data: {
-      nextActionAt: d.nextActionAt,
-      // the first real contact moves a new lead forward automatically
-      ...(lead.status === "NEW" && reached ? { status: "CONTACTED" } : {}),
-    },
+export async function addLeadActivity(id: number, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("leads.manage");
+    await assertLeadAccess(user, id);
+    const d = parseForm(leadActivitySchema, f);
+    const result = d.type === "CALL" ? d.result : null;
+    await db.leadActivity.create({ data: { leadId: id, userId: user.id, type: d.type, result, text: d.text } });
+    const lead = await db.lead.findUniqueOrThrow({ where: { id } });
+    const reached = d.type !== "NOTE" && !(d.type === "CALL" && result !== "ANSWERED");
+    await db.lead.update({
+      where: { id },
+      data: {
+        nextActionAt: d.nextActionAt,
+        // the first real contact moves a new lead forward automatically
+        ...(lead.status === "NEW" && reached ? { status: "CONTACTED" } : {}),
+      },
+    });
+    if (lead.status === "NEW" && reached) {
+      await db.leadActivity.create({ data: { leadId: id, userId: user.id, type: "STATUS", result: "CONTACTED" } });
+    }
+    revalidatePath("/leads");
+    revalidatePath(`/leads/${id}`);
   });
-  if (lead.status === "NEW" && reached) {
-    await db.leadActivity.create({ data: { leadId: id, userId: user.id, type: "STATUS", result: "CONTACTED" } });
-  }
-  revalidatePath("/leads");
-  revalidatePath(`/leads/${id}`);
 }
 
-export async function deleteLead(id: number) {
-  const user = await requirePermission("leads.manage");
-  await assertLeadAccess(user, id);
-  const lead = await db.lead.delete({ where: { id } });
-  await logAction(user, "lead.delete", `Lid o'chirildi: ${lead.name} (${lead.phone})`);
-  revalidatePath("/leads");
+export async function deleteLead(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("leads.manage");
+    await assertLeadAccess(user, id);
+    const lead = await db.lead.delete({ where: { id } });
+    await logAction(user, "lead.delete", `Lid o'chirildi: ${lead.name} (${lead.phone})`);
+    revalidatePath("/leads");
+  });
 }
 
 /** Turns a lead into a student (optionally adding them to a group) and marks the lead as won. */
-export async function convertLead(id: number, f: FormData) {
-  const user = await requirePermission("leads.manage", "students.manage");
-  await assertLeadAccess(user, id);
-  const { groupId } = parseForm(z.object({ groupId: v.optId() }), f);
-  const lead = await db.lead.findUniqueOrThrow({ where: { id } });
-  const student = await db.student.create({
-    data: {
-      name: lead.name,
-      phone: lead.phone,
-      note: lead.note,
-      source: lead.source,
-    },
+export async function convertLead(id: number, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("leads.manage", "students.manage");
+    await assertLeadAccess(user, id);
+    const { groupId } = parseForm(z.object({ groupId: v.optId() }), f);
+    const lead = await db.lead.findUniqueOrThrow({ where: { id } });
+    const student = await db.student.create({
+      data: {
+        name: lead.name,
+        phone: lead.phone,
+        note: lead.note,
+        source: lead.source,
+      },
+    });
+    if (groupId) await db.$transaction((tx) => startMembership(tx, { groupId, studentId: student.id, mode: "TRIAL", date: centreDay(), userId: user.id }));
+    await db.lead.update({ where: { id }, data: { status: "WON", wonAt: new Date(), studentId: student.id, nextActionAt: null } });
+    await db.leadActivity.create({ data: { leadId: id, userId: user.id, type: "STATUS", result: "WON" } });
+    await logAction(user, "lead.convert", `Lid o'quvchiga aylantirildi: ${lead.name}`, { studentId: student.id });
+    revalidatePath("/leads");
+    redirect(`/students/${student.id}`);
   });
-  if (groupId) await db.$transaction((tx) => startMembership(tx, { groupId, studentId: student.id, mode: "TRIAL", date: centreDay(), userId: user.id }));
-  await db.lead.update({ where: { id }, data: { status: "WON", wonAt: new Date(), studentId: student.id, nextActionAt: null } });
-  await db.leadActivity.create({ data: { leadId: id, userId: user.id, type: "STATUS", result: "WON" } });
-  await logAction(user, "lead.convert", `Lid o'quvchiga aylantirildi: ${lead.name}`, { studentId: student.id });
-  revalidatePath("/leads");
-  redirect(`/students/${student.id}`);
 }
 
 // ---------- Sales KPI ----------
@@ -169,45 +182,49 @@ const kpiSchema = z.object(
   ),
 );
 
-export async function saveKpiTargets(userId: number, month: string, f: FormData) {
-  const me = await requirePermission("sales.manage");
-  check(v.month(), month);
-  const d = parseForm(kpiSchema, f) as Record<string, number>;
-  const u = await db.user.findUniqueOrThrow({ where: { id: userId } });
-  const parts: string[] = [];
-  for (const metric of Object.keys(KPI_METRICS)) {
-    const target = d[`target_${metric}`];
-    const key = { userId_month_metric: { userId, month, metric } };
-    if (target <= 0) {
-      await db.kpiTarget.deleteMany({ where: { userId, month, metric } });
-      continue;
+export async function saveKpiTargets(userId: number, month: string, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const me = await requirePermission("sales.manage");
+    check(v.month(), month);
+    const d = parseForm(kpiSchema, f) as Record<string, number>;
+    const u = await db.user.findUniqueOrThrow({ where: { id: userId } });
+    const parts: string[] = [];
+    for (const metric of Object.keys(KPI_METRICS)) {
+      const target = d[`target_${metric}`];
+      const key = { userId_month_metric: { userId, month, metric } };
+      if (target <= 0) {
+        await db.kpiTarget.deleteMany({ where: { userId, month, metric } });
+        continue;
+      }
+      const data = { target, bonus: d[`bonus_${metric}`], perExtra: d[`extra_${metric}`] };
+      await db.kpiTarget.upsert({ where: key, create: { userId, month, metric, ...data }, update: data });
+      parts.push(`${KPI_METRICS[metric].label} ${target}`);
     }
-    const data = { target, bonus: d[`bonus_${metric}`], perExtra: d[`extra_${metric}`] };
-    await db.kpiTarget.upsert({ where: key, create: { userId, month, metric, ...data }, update: data });
-    parts.push(`${KPI_METRICS[metric].label} ${target}`);
-  }
-  await logAction(me, "sales.kpi", `${u.name} KPI (${month}): ${parts.join(", ") || "o'chirildi"}`);
-  revalidatePath("/sales");
-  revalidatePath("/salaries");
+    await logAction(me, "sales.kpi", `${u.name} KPI (${month}): ${parts.join(", ") || "o'chirildi"}`);
+    revalidatePath("/sales");
+    revalidatePath("/salaries");
+  });
 }
 
 /** Copies last month's KPI targets to this month for everyone who has none yet. */
-export async function copyKpiFromPrevious(month: string) {
-  const me = await requirePermission("sales.manage");
-  check(v.month(), month);
-  const prev = shiftMonth(month, -1);
-  const [targets, existing] = await Promise.all([
-    db.kpiTarget.findMany({ where: { month: prev } }),
-    db.kpiTarget.findMany({ where: { month }, select: { userId: true } }),
-  ]);
-  // decided per user before copying, so every metric of a user is copied, not just the first
-  const alreadySet = new Set(existing.map((t) => t.userId));
-  const toCopy = targets.filter((t) => !alreadySet.has(t.userId));
-  await db.kpiTarget.createMany({
-    data: toCopy.map((t) => ({ userId: t.userId, month, metric: t.metric, target: t.target, bonus: t.bonus, perExtra: t.perExtra })),
+export async function copyKpiFromPrevious(month: string): Promise<ActionState> {
+  return tryAction(async () => {
+    const me = await requirePermission("sales.manage");
+    check(v.month(), month);
+    const prev = shiftMonth(month, -1);
+    const [targets, existing] = await Promise.all([
+      db.kpiTarget.findMany({ where: { month: prev } }),
+      db.kpiTarget.findMany({ where: { month }, select: { userId: true } }),
+    ]);
+    // decided per user before copying, so every metric of a user is copied, not just the first
+    const alreadySet = new Set(existing.map((t) => t.userId));
+    const toCopy = targets.filter((t) => !alreadySet.has(t.userId));
+    await db.kpiTarget.createMany({
+      data: toCopy.map((t) => ({ userId: t.userId, month, metric: t.metric, target: t.target, bonus: t.bonus, perExtra: t.perExtra })),
+    });
+    await logAction(me, "sales.kpi", `KPI ${prev} dan ${month} ga ko'chirildi (${toCopy.length} ta)`);
+    revalidatePath("/sales");
   });
-  await logAction(me, "sales.kpi", `KPI ${prev} dan ${month} ga ko'chirildi (${toCopy.length} ta)`);
-  revalidatePath("/sales");
 }
 
 // ---------- Students ----------
@@ -229,55 +246,63 @@ const studentSchema = z.object({
 /** How a student starts in a group: free trial or charged from the given date. */
 const MODES = { TRIAL: "Sinov darsi", ACTIVE: "Faol" };
 
-export async function createStudent(f: FormData) {
-  const user = await requirePermission("students.manage");
-  const { groupId, mode, joinedAt, ...data } = parseForm(studentSchema.extend({ groupId: v.optId(), mode: v.oneOf(MODES, "TRIAL"), joinedAt: v.optDate() }), f);
-  if (groupId) await assertGroupAccess(user, groupId);
-  const student = await db.student.create({
-    data,
+export async function createStudent(_: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("students.manage");
+    const { groupId, mode, joinedAt, ...data } = parseForm(studentSchema.extend({ groupId: v.optId(), mode: v.oneOf(MODES, "TRIAL"), joinedAt: v.optDate() }), f);
+    if (groupId) await assertGroupAccess(user, groupId);
+    const student = await db.student.create({
+      data,
+    });
+    if (groupId) {
+      await db.$transaction((tx) => startMembership(tx, { groupId, studentId: student.id, mode: mode as "TRIAL" | "ACTIVE", date: joinedAt ?? centreDay(), userId: user.id }));
+    }
+    await logAction(user, "student.create", `Yangi o'quvchi: ${student.name}`, { studentId: student.id });
+    redirect(`/students/${student.id}`);
   });
-  if (groupId) {
-    await db.$transaction((tx) => startMembership(tx, { groupId, studentId: student.id, mode: mode as "TRIAL" | "ACTIVE", date: joinedAt ?? centreDay(), userId: user.id }));
-  }
-  await logAction(user, "student.create", `Yangi o'quvchi: ${student.name}`, { studentId: student.id });
-  redirect(`/students/${student.id}`);
 }
 
-export async function updateStudent(id: number, f: FormData) {
-  const user = await requirePermission("students.manage");
-  await assertStudentAccess(user, id);
-  const student = await db.student.update({ where: { id }, data: parseForm(studentSchema, f) });
-  await logAction(user, "student.update", `Ma'lumotlari tahrirlandi: ${student.name}`, { studentId: id });
-  revalidatePath(`/students/${id}`);
+export async function updateStudent(id: number, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("students.manage");
+    await assertStudentAccess(user, id);
+    const student = await db.student.update({ where: { id }, data: parseForm(studentSchema, f) });
+    await logAction(user, "student.update", `Ma'lumotlari tahrirlandi: ${student.name}`, { studentId: id });
+    revalidatePath(`/students/${id}`);
+  });
 }
 
-export async function deleteStudent(id: number) {
-  const user = await requirePermission("students.delete");
-  // Payments are financial history (revenue, teacher salaries): a student who has paid is
-  // removed from their groups instead of being deleted. The schema enforces this too.
-  if (await db.payment.count({ where: { studentId: id } })) {
-    throw new Error("To'lovlari bor o'quvchini o'chirib bo'lmaydi. Uni guruhlardan chiqaring");
-  }
-  const student = await db.student.delete({ where: { id } });
-  await logAction(user, "student.delete", `O'quvchi o'chirildi: ${student.name} (${student.phone})`);
-  redirect("/students");
+export async function deleteStudent(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("students.delete");
+    // Payments are financial history (revenue, teacher salaries): a student who has paid is
+    // removed from their groups instead of being deleted. The schema enforces this too.
+    if (await db.payment.count({ where: { studentId: id } })) {
+      throw new Error("To'lovlari bor o'quvchini o'chirib bo'lmaydi. Uni guruhlardan chiqaring");
+    }
+    const student = await db.student.delete({ where: { id } });
+    await logAction(user, "student.delete", `O'quvchi o'chirildi: ${student.name} (${student.phone})`);
+    redirect("/students");
+  });
 }
 
 const joinSchema = z.object({ studentId: v.id("O'quvchi"), groupId: v.id("Guruh"), joinedAt: v.optDate(), mode: v.oneOf(MODES, "TRIAL") });
 
-export async function addStudentToGroup(f: FormData) {
-  const user = await requirePermission("students.manage");
-  const { studentId, groupId, joinedAt, mode } = parseForm(joinSchema, f);
-  await assertGroupAccess(user, groupId);
-  const date = joinedAt ?? centreDay();
-  await db.$transaction((tx) => startMembership(tx, { groupId, studentId, mode: mode as "TRIAL" | "ACTIVE", date, userId: user.id }));
-  const [student, group] = await Promise.all([db.student.findUniqueOrThrow({ where: { id: studentId } }), db.group.findUniqueOrThrow({ where: { id: groupId } })]);
-  await logAction(user, "student.join", `${student.name} → ${group.name} (${MODES[mode as keyof typeof MODES].toLowerCase()}, ${isoDate(date)})`, { studentId });
-  revalidatePath(`/students/${studentId}`);
-  revalidatePath(`/groups/${groupId}`);
+export async function addStudentToGroup(_: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("students.manage");
+    const { studentId, groupId, joinedAt, mode } = parseForm(joinSchema, f);
+    await assertGroupAccess(user, groupId);
+    const date = joinedAt ?? centreDay();
+    await db.$transaction((tx) => startMembership(tx, { groupId, studentId, mode: mode as "TRIAL" | "ACTIVE", date, userId: user.id }));
+    const [student, group] = await Promise.all([db.student.findUniqueOrThrow({ where: { id: studentId } }), db.group.findUniqueOrThrow({ where: { id: groupId } })]);
+    await logAction(user, "student.join", `${student.name} → ${group.name} (${MODES[mode as keyof typeof MODES].toLowerCase()}, ${isoDate(date)})`, { studentId });
+    revalidatePath(`/students/${studentId}`);
+    revalidatePath(`/groups/${groupId}`);
+  });
 }
 
-export type MemberActionState = { error?: string; ok?: boolean; warning?: string } | null;
+export type MemberActionState = ActionState;
 
 const MEMBER_ACTIONS = { ACTIVATE: "faollashtirildi", FREEZE: "muzlatildi", UNFREEZE: "muzlatishdan chiqarildi", BACK_TO_TRIAL: "sinov darsiga qaytarildi", LEAVE: "guruhdan chiqarildi" };
 const memberActionSchema = z.object({
@@ -307,7 +332,7 @@ export async function memberAction(_: MemberActionState, f: FormData): Promise<M
     return { ok: true };
   } catch (e) {
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser
-    return { error: (e as Error).message };
+    return { error: errorText(e) };
   }
 }
 
@@ -341,7 +366,7 @@ export async function transferStudent(_: MemberActionState, f: FormData): Promis
     return { ok: true };
   } catch (e) {
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser
-    return { error: (e as Error).message };
+    return { error: errorText(e) };
   }
 }
 
@@ -411,7 +436,7 @@ export async function saveNewGroup(_: MemberActionState, f: FormData): Promise<M
     to = await insertGroup(f);
   } catch (e) {
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser
-    return { error: (e as Error).message };
+    return { error: errorText(e) };
   }
   redirect(to);
 }
@@ -469,43 +494,49 @@ export async function saveGroup(_: MemberActionState, f: FormData): Promise<Memb
     return { ok: true, warning: warnings.join("; ") || undefined };
   } catch (e) {
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser
-    return { error: (e as Error).message };
+    return { error: errorText(e) };
   }
 }
 
 /** Brings an archived (finished) group back to active. Its students stay as they are — re-add them by hand. */
-export async function restoreGroup(id: number) {
-  const user = await requirePermission("groups.manage");
-  await assertGroupAccess(user, id);
-  const group = await db.group.update({ where: { id }, data: { status: "ACTIVE" } });
-  await logAction(user, "group.restore", `Guruh arxivdan qaytarildi: ${group.name}`);
-  revalidatePath("/groups");
-  revalidatePath(`/groups/${id}`);
+export async function restoreGroup(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("groups.manage");
+    await assertGroupAccess(user, id);
+    const group = await db.group.update({ where: { id }, data: { status: "ACTIVE" } });
+    await logAction(user, "group.restore", `Guruh arxivdan qaytarildi: ${group.name}`);
+    revalidatePath("/groups");
+    revalidatePath(`/groups/${id}`);
+  });
 }
 
-export async function deleteGroup(id: number) {
-  const user = await requirePermission("groups.delete");
-  const group = await db.group.delete({ where: { id } });
-  await logAction(user, "group.delete", `Guruh o'chirildi: ${group.name}`);
-  redirect("/groups");
+export async function deleteGroup(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("groups.delete");
+    const group = await db.group.delete({ where: { id } });
+    await logAction(user, "group.delete", `Guruh o'chirildi: ${group.name}`);
+    redirect("/groups");
+  });
 }
 
 /** Cycles a student's attendance on a lesson: none → present → absent → none. */
 /** The grid cell popover: keldi / kechikdi / kelmadi, or null to clear the mark ("Tozalash"). */
-export async function setAttendance(groupId: number, studentId: number, isoDay: string, mark: MarkKey | null) {
-  const user = await requirePermission("attendance.mark");
-  await assertGroupAccess(user, groupId);
-  const date = check(v.isoDay(), isoDay);
-  const key = mark === null ? null : check(z.enum(MARK_KEYS), mark);
-  await assertLessonOpen(groupId, date);
-  if (!(await db.groupStudent.findFirst({ where: { groupId, studentId } }))) throw new Error("O'quvchi bu guruhda emas");
-  const where = { groupId_studentId_date: { groupId, studentId, date } };
-  if (key === null) await db.attendance.deleteMany({ where: { groupId, studentId, date } });
-  else {
-    const value = markWrite(key);
-    await db.attendance.upsert({ where, create: { groupId, studentId, date, ...value }, update: value });
-  }
-  revalidatePath(`/groups/${groupId}`);
+export async function setAttendance(groupId: number, studentId: number, isoDay: string, mark: MarkKey | null): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("attendance.mark");
+    await assertGroupAccess(user, groupId);
+    const date = check(v.isoDay(), isoDay);
+    const key = mark === null ? null : check(z.enum(MARK_KEYS), mark);
+    await assertLessonOpen(groupId, date);
+    if (!(await db.groupStudent.findFirst({ where: { groupId, studentId } }))) throw new Error("O'quvchi bu guruhda emas");
+    const where = { groupId_studentId_date: { groupId, studentId, date } };
+    if (key === null) await db.attendance.deleteMany({ where: { groupId, studentId, date } });
+    else {
+      const value = markWrite(key);
+      await db.attendance.upsert({ where, create: { groupId, studentId, date, ...value }, update: value });
+    }
+    revalidatePath(`/groups/${groupId}`);
+  });
 }
 
 /** Today's lesson for the group (or a refusal): the day must be one of its lesson days and not a holiday. */
@@ -519,36 +550,40 @@ const todayLessonOf = (groupId: number) => lessonOf(groupId, centreDay());
 
 
 /** "Bugungi dars": one tap sets today's mark for a student (keldi / kechikdi / kelmadi). */
-export async function markToday(groupId: number, studentId: number, mark: MarkKey) {
-  const user = await requirePermission("attendance.mark");
-  await assertGroupAccess(user, groupId);
-  const { date } = await todayLessonOf(groupId);
-  const value = markWrite(check(z.enum(MARK_KEYS), mark));
-  if (!(await db.groupStudent.findFirst({ where: { groupId, studentId, leftAt: null } }))) throw new Error("O'quvchi bu guruhda emas");
-  await db.attendance.upsert({
-    where: { groupId_studentId_date: { groupId, studentId, date } },
-    create: { groupId, studentId, date, ...value },
-    update: value,
+export async function markToday(groupId: number, studentId: number, mark: MarkKey): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("attendance.mark");
+    await assertGroupAccess(user, groupId);
+    const { date } = await todayLessonOf(groupId);
+    const value = markWrite(check(z.enum(MARK_KEYS), mark));
+    if (!(await db.groupStudent.findFirst({ where: { groupId, studentId, leftAt: null } }))) throw new Error("O'quvchi bu guruhda emas");
+    await db.attendance.upsert({
+      where: { groupId_studentId_date: { groupId, studentId, date } },
+      create: { groupId, studentId, date, ...value },
+      update: value,
+    });
+    revalidatePath(`/groups/${groupId}`);
   });
-  revalidatePath(`/groups/${groupId}`);
 }
 
 /** "Hammasi keldi": everyone not marked yet today (and not frozen) becomes present; given marks are kept. */
-export async function markAllPresent(groupId: number, isoDay?: string) {
-  const user = await requirePermission("attendance.mark");
-  await assertGroupAccess(user, groupId);
-  const { group, date } = await lessonOf(groupId, isoDay ? check(v.isoDay(), isoDay) : centreDay());
-  const [all, marked] = await Promise.all([
-    db.groupStudent.findMany({ where: { groupId }, select: { studentId: true, status: true, leftAt: true, events: { select: { type: true, date: true }, orderBy: [{ date: "asc" }, { id: "asc" }] } } }),
-    db.attendance.findMany({ where: { groupId, date } }),
-  ]);
-  // only students who were in the group (active or on trial) on that day — the date may be in the past
-  // (a membership without history yet falls back to its current status)
-  const members = all.filter((m) => ["ACTIVE", "TRIAL"].includes((m.events.length ? statusOn(m.events as { type: EventType; date: Date }[], date) : m.leftAt ? null : m.status) ?? ""));
-  const todo = fillPresent(members.map((m) => m.studentId), new Map(marked.map((a) => [a.studentId, { present: a.present, late: a.late }])));
-  if (todo.length) await db.attendance.createMany({ data: todo.map((studentId) => ({ groupId, studentId, date, present: true })) });
-  await logAction(user, "group.attendance", `Davomat: ${group.name} — hammasi keldi (${todo.length} ta)`);
-  revalidatePath(`/groups/${groupId}`);
+export async function markAllPresent(groupId: number, isoDay?: string): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("attendance.mark");
+    await assertGroupAccess(user, groupId);
+    const { group, date } = await lessonOf(groupId, isoDay ? check(v.isoDay(), isoDay) : centreDay());
+    const [all, marked] = await Promise.all([
+      db.groupStudent.findMany({ where: { groupId }, select: { studentId: true, status: true, leftAt: true, events: { select: { type: true, date: true }, orderBy: [{ date: "asc" }, { id: "asc" }] } } }),
+      db.attendance.findMany({ where: { groupId, date } }),
+    ]);
+    // only students who were in the group (active or on trial) on that day — the date may be in the past
+    // (a membership without history yet falls back to its current status)
+    const members = all.filter((m) => ["ACTIVE", "TRIAL"].includes((m.events.length ? statusOn(m.events as { type: EventType; date: Date }[], date) : m.leftAt ? null : m.status) ?? ""));
+    const todo = fillPresent(members.map((m) => m.studentId), new Map(marked.map((a) => [a.studentId, { present: a.present, late: a.late }])));
+    if (todo.length) await db.attendance.createMany({ data: todo.map((studentId) => ({ groupId, studentId, date, present: true })) });
+    await logAction(user, "group.attendance", `Davomat: ${group.name} — hammasi keldi (${todo.length} ta)`);
+    revalidatePath(`/groups/${groupId}`);
+  });
 }
 
 // ---------- Courses / rooms ----------
@@ -563,43 +598,51 @@ const courseSchema = z.object({
   color: v.oneOf(COURSE_COLORS, null),
 });
 
-export async function createCourse(f: FormData) {
-  await requirePermission("courses.manage");
-  await db.course.create({ data: parseForm(courseSchema, f) });
-  revalidatePath("/courses");
+export async function createCourse(_: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    await requirePermission("courses.manage");
+    await db.course.create({ data: parseForm(courseSchema, f) });
+    revalidatePath("/courses");
+  });
 }
 
-export async function updateCourse(id: number, f: FormData) {
-  const user = await requirePermission("courses.manage");
-  const data = parseForm(courseSchema, f);
-  const before = await db.course.findUniqueOrThrow({ where: { id } });
-  if (before.price !== data.price) {
-    // groups that follow the course price get the new price from next month; groups with their own price don't
-    const following = await db.group.findMany({ where: { courseId: id, price: null } });
-    await db.$transaction(async (tx) => {
-      for (const g of following) {
-        await schedulePrice(tx, g.id, data.price, before.price, user.id);
-      }
-    });
-    await logAction(user, "course.price", `${before.name} narxi ${isoDate(nextMonthStart())} dan: ${money(before.price)} → ${money(data.price)}`);
-  }
-  await db.course.update({ where: { id }, data });
-  revalidatePath("/courses");
+export async function updateCourse(id: number, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("courses.manage");
+    const data = parseForm(courseSchema, f);
+    const before = await db.course.findUniqueOrThrow({ where: { id } });
+    if (before.price !== data.price) {
+      // groups that follow the course price get the new price from next month; groups with their own price don't
+      const following = await db.group.findMany({ where: { courseId: id, price: null } });
+      await db.$transaction(async (tx) => {
+        for (const g of following) {
+          await schedulePrice(tx, g.id, data.price, before.price, user.id);
+        }
+      });
+      await logAction(user, "course.price", `${before.name} narxi ${isoDate(nextMonthStart())} dan: ${money(before.price)} → ${money(data.price)}`);
+    }
+    await db.course.update({ where: { id }, data });
+    revalidatePath("/courses");
+  });
 }
 
 const roomSchema = z.object({ name: v.text("Xona nomi", 60), capacity: v.int("Sig'im", { min: 1, max: 1000, fallback: 15 }) });
 
-export async function createRoom(f: FormData) {
-  await requirePermission("rooms.manage");
-  await db.room.create({ data: parseForm(roomSchema, f) });
-  revalidatePath("/rooms");
+export async function createRoom(_: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    await requirePermission("rooms.manage");
+    await db.room.create({ data: parseForm(roomSchema, f) });
+    revalidatePath("/rooms");
+  });
 }
 
-export async function deleteRoom(id: number) {
-  await requirePermission("rooms.manage");
-  await db.group.updateMany({ where: { roomId: id }, data: { roomId: null } });
-  await db.room.delete({ where: { id } });
-  revalidatePath("/rooms");
+export async function deleteRoom(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    await requirePermission("rooms.manage");
+    await db.group.updateMany({ where: { roomId: id }, data: { roomId: null } });
+    await db.room.delete({ where: { id } });
+    revalidatePath("/rooms");
+  });
 }
 
 // ---------- Staff ----------
@@ -620,54 +663,60 @@ async function assertPhoneFree(phone: string, exceptUserId?: number) {
   if (taken) throw new Error(`Bu telefon raqam allaqachon ${taken.name} uchun ishlatilgan`);
 }
 
-export async function createUser(f: FormData) {
-  const me = await requirePermission("staff.manage");
-  const { password, ...data } = parseForm(staffSchema, f);
-  await assertPhoneFree(data.phone);
-  const created = await db.user.create({
-    data: { ...data, password: await bcrypt.hash(password, 10) },
-    include: { role: true },
+export async function createUser(_: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const me = await requirePermission("staff.manage");
+    const { password, ...data } = parseForm(staffSchema, f);
+    await assertPhoneFree(data.phone);
+    const created = await db.user.create({
+      data: { ...data, password: await bcrypt.hash(password, 10) },
+      include: { role: true },
+    });
+    await logAction(me, "staff.create", `Yangi xodim: ${created.name} (${created.role.name})`);
+    revalidatePath("/teachers");
+    revalidatePath("/settings");
   });
-  await logAction(me, "staff.create", `Yangi xodim: ${created.name} (${created.role.name})`);
-  revalidatePath("/teachers");
-  revalidatePath("/settings");
 }
 
-export async function updateUser(id: number, f: FormData) {
-  const me = await requirePermission("staff.manage");
-  // leaving the password blank keeps the current one
-  const { password, ...data } = parseForm(staffSchema.extend({ password: v.optPassword() }), f);
-  await assertPhoneFree(data.phone, id);
-  if (id === me.id) {
-    // Changing your own role could lock you out of this page.
-    const current = await db.user.findUniqueOrThrow({ where: { id } });
-    if (current.roleId !== data.roleId) throw new Error("O'z rolingizni o'zgartira olmaysiz");
-  } else {
-    await assertNotLastAdmin(id, data.roleId);
-  }
-  const before = await db.user.findUniqueOrThrow({ where: { id }, include: { role: true } });
-  const updated = await db.user.update({
-    where: { id },
-    data: { ...data, ...(password ? { password: await bcrypt.hash(password, 10) } : {}) },
-    include: { role: true },
+export async function updateUser(id: number, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const me = await requirePermission("staff.manage");
+    // leaving the password blank keeps the current one
+    const { password, ...data } = parseForm(staffSchema.extend({ password: v.optPassword() }), f);
+    await assertPhoneFree(data.phone, id);
+    if (id === me.id) {
+      // Changing your own role could lock you out of this page.
+      const current = await db.user.findUniqueOrThrow({ where: { id } });
+      if (current.roleId !== data.roleId) throw new Error("O'z rolingizni o'zgartira olmaysiz");
+    } else {
+      await assertNotLastAdmin(id, data.roleId);
+    }
+    const before = await db.user.findUniqueOrThrow({ where: { id }, include: { role: true } });
+    const updated = await db.user.update({
+      where: { id },
+      data: { ...data, ...(password ? { password: await bcrypt.hash(password, 10) } : {}) },
+      include: { role: true },
+    });
+    if (before.roleId !== updated.roleId) {
+      await logAction(me, "staff.role", `${updated.name}: rol ${before.role.name} → ${updated.role.name}`);
+    }
+    if (password) await logAction(me, "staff.password", `${updated.name} paroli o'zgartirildi`);
+    revalidatePath("/settings");
+    revalidatePath("/teachers");
   });
-  if (before.roleId !== updated.roleId) {
-    await logAction(me, "staff.role", `${updated.name}: rol ${before.role.name} → ${updated.role.name}`);
-  }
-  if (password) await logAction(me, "staff.password", `${updated.name} paroli o'zgartirildi`);
-  revalidatePath("/settings");
-  revalidatePath("/teachers");
 }
 
-export async function setUserActive(id: number, active: boolean) {
-  const me = await requirePermission("staff.manage");
-  check(z.boolean(), active);
-  if (id === me.id) throw new Error("O'zingizni bloklay olmaysiz");
-  if (!active) await assertNotLastAdmin(id, null);
-  const target = await db.user.update({ where: { id }, data: { active } });
-  await logAction(me, active ? "staff.unblock" : "staff.block", `${target.name} ${active ? "faollashtirildi" : "bloklandi"}`);
-  if (!active) await db.apiToken.deleteMany({ where: { userId: id } });
-  revalidatePath("/settings");
+export async function setUserActive(id: number, active: boolean): Promise<ActionState> {
+  return tryAction(async () => {
+    const me = await requirePermission("staff.manage");
+    check(z.boolean(), active);
+    if (id === me.id) throw new Error("O'zingizni bloklay olmaysiz");
+    if (!active) await assertNotLastAdmin(id, null);
+    const target = await db.user.update({ where: { id }, data: { active } });
+    await logAction(me, active ? "staff.unblock" : "staff.block", `${target.name} ${active ? "faollashtirildi" : "bloklandi"}`);
+    if (!active) await db.apiToken.deleteMany({ where: { userId: id } });
+    revalidatePath("/settings");
+  });
 }
 
 /** Keeps at least one active administrator so nobody gets locked out. */
@@ -686,39 +735,45 @@ function permissionsFrom(f: FormData) {
   return f.getAll("perm").map(String).filter((p) => ALL_PERMISSIONS.includes(p)).join(",");
 }
 
-export async function createRole(f: FormData) {
-  const user = await requirePermission("staff.manage");
-  const { name } = parseForm(roleSchema, f);
-  const role = await db.role.create({ data: { name, permissions: permissionsFrom(f) } });
-  await logAction(user, "role.create", `Yangi rol: ${role.name}`);
-  revalidatePath("/settings/roles");
+export async function createRole(_: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("staff.manage");
+    const { name } = parseForm(roleSchema, f);
+    const role = await db.role.create({ data: { name, permissions: permissionsFrom(f) } });
+    await logAction(user, "role.create", `Yangi rol: ${role.name}`);
+    revalidatePath("/settings/roles");
+  });
 }
 
-export async function updateRole(id: number, f: FormData) {
-  const user = await requirePermission("staff.manage");
-  const { name } = parseForm(roleSchema, f);
-  const role = await db.role.findUniqueOrThrow({ where: { id } });
-  if (role.isSystem) throw new ForbiddenError();
-  const perms = permissionsFrom(f);
-  await db.role.update({ where: { id }, data: { name, permissions: perms } });
-  const was = new Set(role.permissions.split(",").filter(Boolean));
-  const now = new Set(perms.split(",").filter(Boolean));
-  const added = [...now].filter((p) => !was.has(p));
-  const removed = [...was].filter((p) => !now.has(p));
-  if (added.length || removed.length) {
-    await logAction(user, "role.update", `"${role.name}" roli: ${[...added.map((p) => "+" + p), ...removed.map((p) => "−" + p)].join(", ")}`);
-  }
-  revalidatePath("/settings/roles");
+export async function updateRole(id: number, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("staff.manage");
+    const { name } = parseForm(roleSchema, f);
+    const role = await db.role.findUniqueOrThrow({ where: { id } });
+    if (role.isSystem) throw new ForbiddenError();
+    const perms = permissionsFrom(f);
+    await db.role.update({ where: { id }, data: { name, permissions: perms } });
+    const was = new Set(role.permissions.split(",").filter(Boolean));
+    const now = new Set(perms.split(",").filter(Boolean));
+    const added = [...now].filter((p) => !was.has(p));
+    const removed = [...was].filter((p) => !now.has(p));
+    if (added.length || removed.length) {
+      await logAction(user, "role.update", `"${role.name}" roli: ${[...added.map((p) => "+" + p), ...removed.map((p) => "−" + p)].join(", ")}`);
+    }
+    revalidatePath("/settings/roles");
+  });
 }
 
-export async function deleteRole(id: number) {
-  const user = await requirePermission("staff.manage");
-  const role = await db.role.findUniqueOrThrow({ where: { id }, include: { _count: { select: { users: true } } } });
-  if (role.isSystem) throw new ForbiddenError();
-  if (role._count.users > 0) throw new Error("Bu rolda xodimlar bor. Avval ularni boshqa rolga o'tkazing");
-  await db.role.delete({ where: { id } });
-  await logAction(user, "role.delete", `Rol o'chirildi: ${role.name}`);
-  revalidatePath("/settings/roles");
+export async function deleteRole(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("staff.manage");
+    const role = await db.role.findUniqueOrThrow({ where: { id }, include: { _count: { select: { users: true } } } });
+    if (role.isSystem) throw new ForbiddenError();
+    if (role._count.users > 0) throw new Error("Bu rolda xodimlar bor. Avval ularni boshqa rolga o'tkazing");
+    await db.role.delete({ where: { id } });
+    await logAction(user, "role.delete", `Rol o'chirildi: ${role.name}`);
+    revalidatePath("/settings/roles");
+  });
 }
 
 // ---------- MCP tokens ----------
@@ -741,13 +796,15 @@ export async function createApiToken(_: NewTokenState, f: FormData): Promise<New
   return { token };
 }
 
-export async function deleteApiToken(id: number) {
-  const user = await requireUser();
-  const token = await db.apiToken.findUniqueOrThrow({ where: { id } });
-  if (token.userId !== user.id && !can(user, "staff.manage")) throw new ForbiddenError();
-  await db.apiToken.delete({ where: { id } });
-  await logAction(user, "token.delete", `MCP token bekor qilindi: ${token.name}`);
-  revalidatePath("/settings/mcp");
+export async function deleteApiToken(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requireUser();
+    const token = await db.apiToken.findUniqueOrThrow({ where: { id } });
+    if (token.userId !== user.id && !can(user, "staff.manage")) throw new ForbiddenError();
+    await db.apiToken.delete({ where: { id } });
+    await logAction(user, "token.delete", `MCP token bekor qilindi: ${token.name}`);
+    revalidatePath("/settings/mcp");
+  });
 }
 
 // ---------- Money ----------
@@ -769,7 +826,7 @@ export async function createPayment(_: PaymentState, f: FormData): Promise<Payme
     return await takePayment(f);
   } catch (e) {
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser
-    return { error: (e as Error).message };
+    return { error: errorText(e) };
   }
 }
 
@@ -819,16 +876,18 @@ export async function editPayment(_: MemberActionState, f: FormData): Promise<Me
     return { ok: true };
   } catch (e) {
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser
-    return { error: (e as Error).message };
+    return { error: errorText(e) };
   }
 }
 
-export async function deletePayment(id: number) {
-  const user = await requirePermission("payments.delete");
-  const p = await db.payment.delete({ where: { id }, include: { student: true } });
-  await logAction(user, "payment.delete", `To'lov o'chirildi: ${p.student.name} — ${money(p.amount)} (${p.date.toISOString().slice(0, 10)})`, { studentId: p.studentId });
-  revalidatePath(`/students/${p.studentId}`);
-  revalidatePath("/payments");
+export async function deletePayment(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("payments.delete");
+    const p = await db.payment.delete({ where: { id }, include: { student: true } });
+    await logAction(user, "payment.delete", `To'lov o'chirildi: ${p.student.name} — ${money(p.amount)} (${p.date.toISOString().slice(0, 10)})`, { studentId: p.studentId });
+    revalidatePath(`/students/${p.studentId}`);
+    revalidatePath("/payments");
+  });
 }
 
 const expenseSchema = z.object({
@@ -838,40 +897,46 @@ const expenseSchema = z.object({
   date: v.optDate(),
 });
 
-export async function createExpense(f: FormData) {
-  const user = await requirePermission("finance.manage");
-  const { date, ...data } = parseForm(expenseSchema, f);
-  const e = await db.expense.create({ data: { ...data, date: date ?? new Date() } });
-  await logAction(user, "expense.create", `Xarajat: ${e.title} — ${money(e.amount)}`);
-  revalidatePath("/finance");
+export async function createExpense(_: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("finance.manage");
+    const { date, ...data } = parseForm(expenseSchema, f);
+    const e = await db.expense.create({ data: { ...data, date: date ?? new Date() } });
+    await logAction(user, "expense.create", `Xarajat: ${e.title} — ${money(e.amount)}`);
+    revalidatePath("/finance");
+  });
 }
 
-export async function deleteExpense(id: number) {
-  const user = await requirePermission("finance.manage");
-  const e = await db.expense.findUniqueOrThrow({ where: { id }, include: { salaryPayment: true } });
-  if (e.salaryPayment) throw new Error("Ish haqi xarajati Ish haqi bo'limidan o'chiriladi");
-  await db.expense.delete({ where: { id } });
-  await logAction(user, "expense.delete", `Xarajat o'chirildi: ${e.title} — ${money(e.amount)}`);
-  revalidatePath("/finance");
+export async function deleteExpense(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("finance.manage");
+    const e = await db.expense.findUniqueOrThrow({ where: { id }, include: { salaryPayment: true } });
+    if (e.salaryPayment) throw new Error("Ish haqi xarajati Ish haqi bo'limidan o'chiriladi");
+    await db.expense.delete({ where: { id } });
+    await logAction(user, "expense.delete", `Xarajat o'chirildi: ${e.title} — ${money(e.amount)}`);
+    revalidatePath("/finance");
+  });
 }
 
 // ---------- Grades & exams ----------
 const gradeScore = z.number().int().min(1, "Baho 1 dan 5 gacha bo'lishi kerak").max(5, "Baho 1 dan 5 gacha bo'lishi kerak").nullable();
 
 /** Sets (or clears, when score is empty) a student's 1–5 lesson grade for a date. */
-export async function setGrade(groupId: number, studentId: number, isoDay: string, score: number | null) {
-  const user = await requirePermission("grades.manage");
-  await assertGroupAccess(user, groupId);
-  const date = check(v.isoDay(), isoDay);
-  await assertLessonOpen(groupId, date);
-  const value = check(gradeScore, score);
-  const key = { groupId_studentId_date: { groupId, studentId, date } };
-  if (value === null) {
-    await db.grade.deleteMany({ where: { groupId, studentId, date } });
-  } else {
-    await db.grade.upsert({ where: key, create: { groupId, studentId, date, score: value }, update: { score: value } });
-  }
-  revalidatePath(`/groups/${groupId}`);
+export async function setGrade(groupId: number, studentId: number, isoDay: string, score: number | null): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("grades.manage");
+    await assertGroupAccess(user, groupId);
+    const date = check(v.isoDay(), isoDay);
+    await assertLessonOpen(groupId, date);
+    const value = check(gradeScore, score);
+    const key = { groupId_studentId_date: { groupId, studentId, date } };
+    if (value === null) {
+      await db.grade.deleteMany({ where: { groupId, studentId, date } });
+    } else {
+      await db.grade.upsert({ where: key, create: { groupId, studentId, date, score: value }, update: { score: value } });
+    }
+    revalidatePath(`/groups/${groupId}`);
+  });
 }
 
 const examSchema = z.object({
@@ -880,20 +945,22 @@ const examSchema = z.object({
   maxScore: v.int("Maksimal ball", { min: 1, max: 10_000, fallback: 100 }),
 });
 
-export async function createExam(groupId: number, f: FormData) {
-  const user = await requirePermission("grades.manage");
-  await assertGroupAccess(user, groupId);
-  const { title, date, maxScore } = parseForm(examSchema, f);
-  const score = v.int("Ball", { min: 0, max: maxScore });
-  const scores = [...f.entries()]
-    .filter(([k, val]) => k.startsWith("score_") && String(val).trim() !== "")
-    .map(([k, val]) => ({ studentId: check(v.id("O'quvchi"), k.slice(6)), score: check(score, val) }));
-  const exam = await db.exam.create({
-    data: { groupId, title, date: date ?? new Date(), maxScore, results: { create: scores } },
-    include: { group: true },
+export async function createExam(groupId: number, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("grades.manage");
+    await assertGroupAccess(user, groupId);
+    const { title, date, maxScore } = parseForm(examSchema, f);
+    const score = v.int("Ball", { min: 0, max: maxScore });
+    const scores = [...f.entries()]
+      .filter(([k, val]) => k.startsWith("score_") && String(val).trim() !== "")
+      .map(([k, val]) => ({ studentId: check(v.id("O'quvchi"), k.slice(6)), score: check(score, val) }));
+    const exam = await db.exam.create({
+      data: { groupId, title, date: date ?? new Date(), maxScore, results: { create: scores } },
+      include: { group: true },
+    });
+    await logAction(user, "exam.create", `Imtihon: ${exam.group.name} — ${exam.title} (${scores.length} natija)`);
+    revalidatePath(`/groups/${groupId}`);
   });
-  await logAction(user, "exam.create", `Imtihon: ${exam.group.name} — ${exam.title} (${scores.length} natija)`);
-  revalidatePath(`/groups/${groupId}`);
 }
 
 /**
@@ -943,17 +1010,19 @@ export async function saveLevelExamScores(_: MemberActionState, f: FormData): Pr
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser
     // two people saving the same exam for the first time at once: the second hits the (group, level) unique
     if ((e as { code?: string }).code === "P2002") return { error: "Natijalar hozirgina boshqa foydalanuvchi tomonidan saqlandi — qayta urinib ko'ring" };
-    return { error: (e as Error).message };
+    return { error: errorText(e) };
   }
 }
 
-export async function deleteExam(id: number) {
-  const user = await requirePermission("grades.manage");
-  const exam = await db.exam.findUniqueOrThrow({ where: { id }, include: { group: true } });
-  await assertGroupAccess(user, exam.groupId);
-  await db.exam.delete({ where: { id } });
-  await logAction(user, "exam.delete", `Imtihon o'chirildi: ${exam.group.name} — ${exam.title}`);
-  revalidatePath(`/groups/${exam.groupId}`);
+export async function deleteExam(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("grades.manage");
+    const exam = await db.exam.findUniqueOrThrow({ where: { id }, include: { group: true } });
+    await assertGroupAccess(user, exam.groupId);
+    await db.exam.delete({ where: { id } });
+    await logAction(user, "exam.delete", `Imtihon o'chirildi: ${exam.group.name} — ${exam.title}`);
+    revalidatePath(`/groups/${exam.groupId}`);
+  });
 }
 
 // ---------- Student notes and tags ----------
@@ -962,85 +1031,99 @@ async function noteStudent(user: Awaited<ReturnType<typeof requirePermission>>, 
   return db.student.findUniqueOrThrow({ where: { id: studentId }, select: { id: true, name: true } });
 }
 
-export async function addNote(studentId: number, f: FormData) {
-  const user = await requirePermission("students.manage");
-  const student = await noteStudent(user, studentId);
-  const { text } = parseForm(z.object({ text: v.text("Eslatma", 2000) }), f);
-  await db.studentNote.create({ data: { studentId, text, userId: user.id } });
-  await logAction(user, "student.note", `Eslatma qo'shildi: ${text.slice(0, 80)}`, { studentId: student.id });
-  revalidatePath(`/students/${studentId}`);
+export async function addNote(studentId: number, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("students.manage");
+    const student = await noteStudent(user, studentId);
+    const { text } = parseForm(z.object({ text: v.text("Eslatma", 2000) }), f);
+    await db.studentNote.create({ data: { studentId, text, userId: user.id } });
+    await logAction(user, "student.note", `Eslatma qo'shildi: ${text.slice(0, 80)}`, { studentId: student.id });
+    revalidatePath(`/students/${studentId}`);
+  });
 }
 
 /** Pins a note to the profile card (the previously pinned one is unpinned), or unpins it. */
-export async function pinNote(id: number) {
-  const user = await requirePermission("students.manage");
-  const note = await db.studentNote.findUniqueOrThrow({ where: { id } });
-  await noteStudent(user, note.studentId);
-  await db.$transaction([
-    db.studentNote.updateMany({ where: { studentId: note.studentId, pinned: true }, data: { pinned: false } }),
-    ...(note.pinned ? [] : [db.studentNote.update({ where: { id }, data: { pinned: true } })]),
-  ]);
-  await logAction(user, "student.note", note.pinned ? "Eslatma qadalgan joyidan olindi" : `Eslatma qadaldi: ${note.text.slice(0, 80)}`, { studentId: note.studentId });
-  revalidatePath(`/students/${note.studentId}`);
+export async function pinNote(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("students.manage");
+    const note = await db.studentNote.findUniqueOrThrow({ where: { id } });
+    await noteStudent(user, note.studentId);
+    await db.$transaction([
+      db.studentNote.updateMany({ where: { studentId: note.studentId, pinned: true }, data: { pinned: false } }),
+      ...(note.pinned ? [] : [db.studentNote.update({ where: { id }, data: { pinned: true } })]),
+    ]);
+    await logAction(user, "student.note", note.pinned ? "Eslatma qadalgan joyidan olindi" : `Eslatma qadaldi: ${note.text.slice(0, 80)}`, { studentId: note.studentId });
+    revalidatePath(`/students/${note.studentId}`);
+  });
 }
 
 /** Its author or an admin may delete a note. */
-export async function deleteNote(id: number) {
-  const user = await requirePermission("students.manage");
-  const note = await db.studentNote.findUniqueOrThrow({ where: { id } });
-  await noteStudent(user, note.studentId);
-  if (note.userId !== user.id && !user.isAdmin) throw new Error("Faqat eslatma muallifi yoki administrator o'chira oladi");
-  await db.studentNote.delete({ where: { id } });
-  await logAction(user, "student.note", `Eslatma o'chirildi: ${note.text.slice(0, 80)}`, { studentId: note.studentId });
-  revalidatePath(`/students/${note.studentId}`);
+export async function deleteNote(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("students.manage");
+    const note = await db.studentNote.findUniqueOrThrow({ where: { id } });
+    await noteStudent(user, note.studentId);
+    if (note.userId !== user.id && !user.isAdmin) throw new Error("Faqat eslatma muallifi yoki administrator o'chira oladi");
+    await db.studentNote.delete({ where: { id } });
+    await logAction(user, "student.note", `Eslatma o'chirildi: ${note.text.slice(0, 80)}`, { studentId: note.studentId });
+    revalidatePath(`/students/${note.studentId}`);
+  });
 }
 
 /** The student's tags become exactly the ticked ones; a switched-off tag can stay but can't be newly added. */
-export async function setStudentTags(studentId: number, f: FormData) {
-  const user = await requirePermission("students.manage");
-  const student = await noteStudent(user, studentId);
-  const wanted = f.getAll("tagId").map((x) => check(v.id("Teg"), x));
-  const [current, tags] = await Promise.all([db.studentTag.findMany({ where: { studentId } }), db.tag.findMany()]);
-  const has = new Set(current.map((t) => t.tagId));
-  const added = wanted.filter((id) => !has.has(id) && tags.find((t) => t.id === id)?.active);
-  const removed = current.map((t) => t.tagId).filter((id) => !wanted.includes(id));
-  await db.$transaction([
-    db.studentTag.deleteMany({ where: { studentId, tagId: { in: removed } } }),
-    ...added.map((tagId) => db.studentTag.create({ data: { studentId, tagId } })),
-  ]);
-  const name = (id: number) => tags.find((t) => t.id === id)?.name;
-  const change = [...added.map((id) => `+${name(id)}`), ...removed.map((id) => `−${name(id)}`)].join(", ");
-  if (change) await logAction(user, "student.tag", `Teglar: ${change}`, { studentId: student.id });
-  revalidatePath(`/students/${studentId}`);
+export async function setStudentTags(studentId: number, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("students.manage");
+    const student = await noteStudent(user, studentId);
+    const wanted = f.getAll("tagId").map((x) => check(v.id("Teg"), x));
+    const [current, tags] = await Promise.all([db.studentTag.findMany({ where: { studentId } }), db.tag.findMany()]);
+    const has = new Set(current.map((t) => t.tagId));
+    const added = wanted.filter((id) => !has.has(id) && tags.find((t) => t.id === id)?.active);
+    const removed = current.map((t) => t.tagId).filter((id) => !wanted.includes(id));
+    await db.$transaction([
+      db.studentTag.deleteMany({ where: { studentId, tagId: { in: removed } } }),
+      ...added.map((tagId) => db.studentTag.create({ data: { studentId, tagId } })),
+    ]);
+    const name = (id: number) => tags.find((t) => t.id === id)?.name;
+    const change = [...added.map((id) => `+${name(id)}`), ...removed.map((id) => `−${name(id)}`)].join(", ");
+    if (change) await logAction(user, "student.tag", `Teglar: ${change}`, { studentId: student.id });
+    revalidatePath(`/students/${studentId}`);
+  });
 }
 
 const tagSchema = z.object({ name: v.text("Teg nomi", 40), color: v.oneOf(TAG_COLORS, "amber") });
 
-export async function createTag(f: FormData) {
-  const user = await requirePermission("students.tags");
-  const d = parseForm(tagSchema, f);
-  if (await db.tag.findUnique({ where: { name: d.name } })) throw new Error("Bunday teg bor");
-  await db.tag.create({ data: d });
-  await logAction(user, "tag.manage", `Teg qo'shildi: ${d.name}`);
-  revalidatePath("/settings/tags");
+export async function createTag(_: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("students.tags");
+    const d = parseForm(tagSchema, f);
+    if (await db.tag.findUnique({ where: { name: d.name } })) throw new Error("Bunday teg bor");
+    await db.tag.create({ data: d });
+    await logAction(user, "tag.manage", `Teg qo'shildi: ${d.name}`);
+    revalidatePath("/settings/tags");
+  });
 }
 
-export async function updateTag(id: number, f: FormData) {
-  const user = await requirePermission("students.tags");
-  const d = parseForm(tagSchema, f);
-  const before = await db.tag.findUniqueOrThrow({ where: { id } });
-  if (d.name !== before.name && (await db.tag.findUnique({ where: { name: d.name } }))) throw new Error("Bunday teg bor");
-  await db.tag.update({ where: { id }, data: d });
-  await logAction(user, "tag.manage", `Teg o'zgartirildi: ${before.name} → ${d.name}`);
-  revalidatePath("/settings/tags");
+export async function updateTag(id: number, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("students.tags");
+    const d = parseForm(tagSchema, f);
+    const before = await db.tag.findUniqueOrThrow({ where: { id } });
+    if (d.name !== before.name && (await db.tag.findUnique({ where: { name: d.name } }))) throw new Error("Bunday teg bor");
+    await db.tag.update({ where: { id }, data: d });
+    await logAction(user, "tag.manage", `Teg o'zgartirildi: ${before.name} → ${d.name}`);
+    revalidatePath("/settings/tags");
+  });
 }
 
-export async function toggleTag(id: number) {
-  const user = await requirePermission("students.tags");
-  const t = await db.tag.findUniqueOrThrow({ where: { id } });
-  await db.tag.update({ where: { id }, data: { active: !t.active } });
-  await logAction(user, "tag.manage", `Teg ${t.active ? "o'chirildi" : "yoqildi"}: ${t.name}`);
-  revalidatePath("/settings/tags");
+export async function toggleTag(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("students.tags");
+    const t = await db.tag.findUniqueOrThrow({ where: { id } });
+    await db.tag.update({ where: { id }, data: { active: !t.active } });
+    await logAction(user, "tag.manage", `Teg ${t.active ? "o'chirildi" : "yoqildi"}: ${t.name}`);
+    revalidatePath("/settings/tags");
+  });
 }
 
 // ---------- Discounts (Chegirma) ----------
@@ -1070,7 +1153,7 @@ export async function saveDiscount(_: MemberActionState, f: FormData): Promise<M
     return { ok: true };
   } catch (e) {
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser
-    return { error: (e as Error).message };
+    return { error: errorText(e) };
   }
 }
 
@@ -1082,23 +1165,27 @@ async function discountFor(id: number) {
 }
 
 /** Only while nothing of it falls in a past month. */
-export async function deleteDiscount(id: number) {
-  const { user, d } = await discountFor(id);
-  if (!canDelete(d, new Date())) throw new Error("Boshlangan chegirmani o'chirib bo'lmaydi — tugating");
-  await db.discount.delete({ where: { id } });
-  await logAction(user, "student.discount", `Chegirma o'chirildi: ${d.groupStudent.group.name} — ${money(d.amount)}/oy, ${monthName(d.from)} – ${monthName(d.to)}`, { studentId: d.groupStudent.studentId });
-  revalidatePath(`/students/${d.groupStudent.studentId}`);
+export async function deleteDiscount(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const { user, d } = await discountFor(id);
+    if (!canDelete(d, new Date())) throw new Error("Boshlangan chegirmani o'chirib bo'lmaydi — tugating");
+    await db.discount.delete({ where: { id } });
+    await logAction(user, "student.discount", `Chegirma o'chirildi: ${d.groupStudent.group.name} — ${money(d.amount)}/oy, ${monthName(d.from)} – ${monthName(d.to)}`, { studentId: d.groupStudent.studentId });
+    revalidatePath(`/students/${d.groupStudent.studentId}`);
+  });
 }
 
 /** A running discount stops from this month: last month becomes its final one; past months stay as charged. */
-export async function endDiscount(id: number) {
-  const { user, d } = await discountFor(id);
-  const today = new Date();
-  if (!canEnd(d, today)) throw new Error("Chegirma tugagan");
-  const to = lastMonth(today);
-  await db.discount.update({ where: { id }, data: { to } });
-  await logAction(user, "student.discount", `Chegirma tugatildi: ${d.groupStudent.group.name} — ${monthName(to)} oxirgi oy`, { studentId: d.groupStudent.studentId });
-  revalidatePath(`/students/${d.groupStudent.studentId}`);
+export async function endDiscount(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const { user, d } = await discountFor(id);
+    const today = new Date();
+    if (!canEnd(d, today)) throw new Error("Chegirma tugagan");
+    const to = lastMonth(today);
+    await db.discount.update({ where: { id }, data: { to } });
+    await logAction(user, "student.discount", `Chegirma tugatildi: ${d.groupStudent.group.name} — ${monthName(to)} oxirgi oy`, { studentId: d.groupStudent.studentId });
+    revalidatePath(`/students/${d.groupStudent.studentId}`);
+  });
 }
 
 // ---------- Holidays (Bayram kunlari) ----------
@@ -1116,31 +1203,35 @@ export async function createHolidays(_: MemberActionState, f: FormData): Promise
     return { ok: true };
   } catch (e) {
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser
-    return { error: (e as Error).message };
+    return { error: errorText(e) };
   }
 }
 
 /** Only future ones: a past or today's holiday was already charged and paid for. */
-export async function deleteHoliday(id: number) {
-  const user = await requirePermission("holidays.manage");
-  const h = await db.holiday.findUniqueOrThrow({ where: { id } });
-  if (!canDeleteHoliday(h.date, new Date())) throw new Error("O'tgan yoki bugungi bayramni o'chirib bo'lmaydi");
-  await db.holiday.delete({ where: { id } });
-  await logAction(user, "holiday.manage", `Bayram o'chirildi: ${h.name} — ${h.date.toISOString().slice(0, 10)}`);
-  revalidatePath("/settings/holidays");
+export async function deleteHoliday(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("holidays.manage");
+    const h = await db.holiday.findUniqueOrThrow({ where: { id } });
+    if (!canDeleteHoliday(h.date, new Date())) throw new Error("O'tgan yoki bugungi bayramni o'chirib bo'lmaydi");
+    await db.holiday.delete({ where: { id } });
+    await logAction(user, "holiday.manage", `Bayram o'chirildi: ${h.name} — ${h.date.toISOString().slice(0, 10)}`);
+    revalidatePath("/settings/holidays");
+  });
 }
 
 // ---------- Lesson tools: absence reasons, cancelled lessons, substitutes ----------
 /** Why an absent student missed the lesson (or clear it). Only for an absence that is already marked. */
-export async function setAbsenceReason(groupId: number, studentId: number, isoDay: string, reasonId: number | null) {
-  const user = await requirePermission("attendance.mark");
-  await assertGroupAccess(user, groupId);
-  const date = check(v.isoDay(), isoDay);
-  const mark = await db.attendance.findUnique({ where: { groupId_studentId_date: { groupId, studentId, date } } });
-  if (!mark || mark.present) throw new Error("Avval \"kelmadi\" deb belgilang");
-  if (reasonId !== null && !(await db.absenceReason.findFirst({ where: { id: reasonId, active: true } }))) throw new Error("Sabab topilmadi");
-  await db.attendance.update({ where: { id: mark.id }, data: { reasonId } });
-  revalidatePath(`/groups/${groupId}`);
+export async function setAbsenceReason(groupId: number, studentId: number, isoDay: string, reasonId: number | null): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("attendance.mark");
+    await assertGroupAccess(user, groupId);
+    const date = check(v.isoDay(), isoDay);
+    const mark = await db.attendance.findUnique({ where: { groupId_studentId_date: { groupId, studentId, date } } });
+    if (!mark || mark.present) throw new Error("Avval \"kelmadi\" deb belgilang");
+    if (reasonId !== null && !(await db.absenceReason.findFirst({ where: { id: reasonId, active: true } }))) throw new Error("Sabab topilmadi");
+    await db.attendance.update({ where: { id: mark.id }, data: { reasonId } });
+    revalidatePath(`/groups/${groupId}`);
+  });
 }
 
 const lessonChangeSchema = z.object({
@@ -1190,22 +1281,24 @@ export async function cancelLesson(_: MemberActionState, f: FormData): Promise<M
   } catch (e) {
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser
     if ((e as { code?: string }).code === "P2002") return { error: "Bu dars allaqachon bekor qilingan" };
-    return { error: (e as Error).message };
+    return { error: errorText(e) };
   }
 }
 
 /** Undoes a cancellation (this month onward). */
-export async function restoreLesson(groupId: number, isoDay: string) {
-  const user = await requirePermission("lessons.manage");
-  const date = check(v.isoDay(), isoDay);
-  const { group } = await lessonChangeContext(user, groupId);
-  if (!lessonChangeOpen(date, new Date())) throw new Error("Faqat shu oydan boshlab");
-  const cancels = await db.lessonChange.findMany({ where: { groupId, date, kind: "CANCEL" } });
-  const { count } = await db.lessonChange.deleteMany({ where: { groupId, date, kind: "CANCEL" } });
-  if (!count) throw new Error("Bu dars bekor qilinmagan");
-  tell(peopleOn(group, date).map((id) => ({ key: `restore:${cancels[0].id}:${id}`, userId: id, text: restoreText(group.name, date) })));
-  await logAction(user, "lesson.change", `Dars qayta tiklandi: ${group.name}, ${isoOf(date)}`);
-  revalidatePath(`/groups/${groupId}`);
+export async function restoreLesson(groupId: number, isoDay: string): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("lessons.manage");
+    const date = check(v.isoDay(), isoDay);
+    const { group } = await lessonChangeContext(user, groupId);
+    if (!lessonChangeOpen(date, new Date())) throw new Error("Faqat shu oydan boshlab");
+    const cancels = await db.lessonChange.findMany({ where: { groupId, date, kind: "CANCEL" } });
+    const { count } = await db.lessonChange.deleteMany({ where: { groupId, date, kind: "CANCEL" } });
+    if (!count) throw new Error("Bu dars bekor qilinmagan");
+    tell(peopleOn(group, date).map((id) => ({ key: `restore:${cancels[0].id}:${id}`, userId: id, text: restoreText(group.name, date) })));
+    await logAction(user, "lesson.change", `Dars qayta tiklandi: ${group.name}, ${isoOf(date)}`);
+    revalidatePath(`/groups/${groupId}`);
+  });
 }
 
 /** "O'qituvchini almashtirish": someone else teaches this one lesson and is paid for it by their own rule. */
@@ -1236,35 +1329,39 @@ export async function substituteLesson(_: MemberActionState, f: FormData): Promi
     return { ok: true };
   } catch (e) {
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser
-    return { error: (e as Error).message };
+    return { error: errorText(e) };
   }
 }
 
-export async function removeSubstitute(groupId: number, isoDay: string, role: string) {
-  const user = await requirePermission("lessons.manage");
-  const date = check(v.isoDay(), isoDay);
-  check(z.enum(["TEACHER", "ASSISTANT"]), role);
-  const { group } = await lessonChangeContext(user, groupId);
-  if (!lessonChangeOpen(date, new Date())) throw new Error("Faqat shu oydan boshlab");
-  const subs = await db.lessonChange.findMany({ where: { groupId, date, kind: "SUBSTITUTE", role } });
-  const { count } = await db.lessonChange.deleteMany({ where: { groupId, date, kind: "SUBSTITUTE", role } });
-  if (!count) throw new Error("Bu darsda o'rinbosar yo'q");
-  const absentId = teacherOn(group.teachers, group, date, role as "TEACHER" | "ASSISTANT");
-  tell(subs.flatMap((c) => [c.substituteId, absentId].filter((id): id is number => id !== null).map((id) => ({ key: `subundo:${c.id}:${id}`, userId: id, text: substituteUndoText(group.name, date) }))));
-  await logAction(user, "lesson.change", `O'rinbosar bekor qilindi: ${group.name}, ${isoOf(date)}`);
-  revalidatePath(`/groups/${groupId}`);
+export async function removeSubstitute(groupId: number, isoDay: string, role: string): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("lessons.manage");
+    const date = check(v.isoDay(), isoDay);
+    check(z.enum(["TEACHER", "ASSISTANT"]), role);
+    const { group } = await lessonChangeContext(user, groupId);
+    if (!lessonChangeOpen(date, new Date())) throw new Error("Faqat shu oydan boshlab");
+    const subs = await db.lessonChange.findMany({ where: { groupId, date, kind: "SUBSTITUTE", role } });
+    const { count } = await db.lessonChange.deleteMany({ where: { groupId, date, kind: "SUBSTITUTE", role } });
+    if (!count) throw new Error("Bu darsda o'rinbosar yo'q");
+    const absentId = teacherOn(group.teachers, group, date, role as "TEACHER" | "ASSISTANT");
+    tell(subs.flatMap((c) => [c.substituteId, absentId].filter((id): id is number => id !== null).map((id) => ({ key: `subundo:${c.id}:${id}`, userId: id, text: substituteUndoText(group.name, date) }))));
+    await logAction(user, "lesson.change", `O'rinbosar bekor qilindi: ${group.name}, ${isoOf(date)}`);
+    revalidatePath(`/groups/${groupId}`);
+  });
 }
 
 // Absence reasons list (Settings → Sabablar)
 const absenceReasonSchema = z.object({ name: v.text("Sabab", 60), color: v.oneOf(TAG_COLORS, "grey") });
 
-export async function createAbsenceReason(f: FormData) {
-  const user = await requirePermission("staff.manage");
-  const d = parseForm(absenceReasonSchema, f);
-  if (await db.absenceReason.findUnique({ where: { name: d.name } })) throw new Error("Bunday sabab bor");
-  await db.absenceReason.create({ data: d });
-  await logAction(user, "reason.create", `Kelmaganlik sababi: ${d.name}`);
-  revalidatePath("/settings/reasons");
+export async function createAbsenceReason(_: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("staff.manage");
+    const d = parseForm(absenceReasonSchema, f);
+    if (await db.absenceReason.findUnique({ where: { name: d.name } })) throw new Error("Bunday sabab bor");
+    await db.absenceReason.create({ data: d });
+    await logAction(user, "reason.create", `Kelmaganlik sababi: ${d.name}`);
+    revalidatePath("/settings/reasons");
+  });
 }
 
 export async function updateAbsenceReason(id: number, _: MemberActionState, f: FormData): Promise<MemberActionState> {
@@ -1278,16 +1375,18 @@ export async function updateAbsenceReason(id: number, _: MemberActionState, f: F
     return { ok: true };
   } catch (e) {
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser
-    return { error: (e as Error).message };
+    return { error: errorText(e) };
   }
 }
 
-export async function toggleAbsenceReason(id: number) {
-  const user = await requirePermission("staff.manage");
-  const r = await db.absenceReason.findUniqueOrThrow({ where: { id } });
-  await db.absenceReason.update({ where: { id }, data: { active: !r.active } });
-  await logAction(user, "reason.toggle", `Kelmaganlik sababi ${r.active ? "o'chirildi" : "yoqildi"}: ${r.name}`);
-  revalidatePath("/settings/reasons");
+export async function toggleAbsenceReason(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("staff.manage");
+    const r = await db.absenceReason.findUniqueOrThrow({ where: { id } });
+    await db.absenceReason.update({ where: { id }, data: { active: !r.active } });
+    await logAction(user, "reason.toggle", `Kelmaganlik sababi ${r.active ? "o'chirildi" : "yoqildi"}: ${r.name}`);
+    revalidatePath("/settings/reasons");
+  });
 }
 
 // ---------- Teacher availability ----------
@@ -1314,7 +1413,7 @@ export async function setSlot(userId: number, dayType: DayType, hour: number, st
     return { ok: true };
   } catch (e) {
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser
-    return { error: (e as Error).message };
+    return { error: errorText(e) };
   }
 }
 
@@ -1323,12 +1422,14 @@ const salaryRuleSchema = z
   .object({ salaryType: v.oneOf(SALARY_TYPES), salaryAmount: v.int("Summa", { fallback: 0 }) })
   .refine((d) => d.salaryType !== "PERCENT" || d.salaryAmount <= 100, "Foiz 0–100 oralig'ida bo'lishi kerak");
 
-export async function updateSalaryRule(userId: number, f: FormData) {
-  const me = await requirePermission("salaries.manage");
-  const { salaryType: type, salaryAmount: amount } = parseForm(salaryRuleSchema, f);
-  const u = await db.user.update({ where: { id: userId }, data: { salaryType: type, salaryAmount: type === "NONE" ? 0 : amount } });
-  await logAction(me, "salary.rule", `${u.name} ish haqi qoidasi: ${SALARY_TYPES[type].label}${type === "NONE" ? "" : ` — ${amount} ${SALARY_TYPES[type].unit}`}`);
-  revalidatePath("/salaries");
+export async function updateSalaryRule(userId: number, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const me = await requirePermission("salaries.manage");
+    const { salaryType: type, salaryAmount: amount } = parseForm(salaryRuleSchema, f);
+    const u = await db.user.update({ where: { id: userId }, data: { salaryType: type, salaryAmount: type === "NONE" ? 0 : amount } });
+    await logAction(me, "salary.rule", `${u.name} ish haqi qoidasi: ${SALARY_TYPES[type].label}${type === "NONE" ? "" : ` — ${amount} ${SALARY_TYPES[type].unit}`}`);
+    revalidatePath("/salaries");
+  });
 }
 
 const salaryPaymentSchema = z.object({
@@ -1339,27 +1440,31 @@ const salaryPaymentSchema = z.object({
   note: v.optText(500),
 });
 
-export async function paySalary(f: FormData) {
-  const me = await requirePermission("salaries.manage");
-  const { userId, month, amount, date: picked, note } = parseForm(salaryPaymentSchema, f);
-  const u = await db.user.findUniqueOrThrow({ where: { id: userId } });
-  const date = picked ?? new Date();
-  const expense = await db.expense.create({ data: { title: `Ish haqi — ${u.name} (${month})`, category: "SALARY", amount, date } });
-  const payout = await db.salaryPayment.create({ data: { userId, month, amount, note, date, expenseId: expense.id } });
-  await logAction(me, "salary.pay", `Ish haqi to'landi: ${u.name} — ${money(amount)} (${month})`);
-  tell([{ key: `salary:${payout.id}`, userId, text: salaryText(month, amount) }]);
-  revalidatePath("/salaries");
-  revalidatePath("/finance");
+export async function paySalary(_: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const me = await requirePermission("salaries.manage");
+    const { userId, month, amount, date: picked, note } = parseForm(salaryPaymentSchema, f);
+    const u = await db.user.findUniqueOrThrow({ where: { id: userId } });
+    const date = picked ?? new Date();
+    const expense = await db.expense.create({ data: { title: `Ish haqi — ${u.name} (${month})`, category: "SALARY", amount, date } });
+    const payout = await db.salaryPayment.create({ data: { userId, month, amount, note, date, expenseId: expense.id } });
+    await logAction(me, "salary.pay", `Ish haqi to'landi: ${u.name} — ${money(amount)} (${month})`);
+    tell([{ key: `salary:${payout.id}`, userId, text: salaryText(month, amount) }]);
+    revalidatePath("/salaries");
+    revalidatePath("/finance");
+  });
 }
 
-export async function deleteSalaryPayment(id: number) {
-  const me = await requirePermission("salaries.manage");
-  const p = await db.salaryPayment.findUniqueOrThrow({ where: { id }, include: { user: true } });
-  await db.salaryPayment.delete({ where: { id } });
-  if (p.expenseId) await db.expense.delete({ where: { id: p.expenseId } });
-  await logAction(me, "salary.delete", `Ish haqi to'lovi bekor qilindi: ${p.user.name} — ${money(p.amount)} (${p.month})`);
-  revalidatePath("/salaries");
-  revalidatePath("/finance");
+export async function deleteSalaryPayment(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const me = await requirePermission("salaries.manage");
+    const p = await db.salaryPayment.findUniqueOrThrow({ where: { id }, include: { user: true } });
+    await db.salaryPayment.delete({ where: { id } });
+    if (p.expenseId) await db.expense.delete({ where: { id: p.expenseId } });
+    await logAction(me, "salary.delete", `Ish haqi to'lovi bekor qilindi: ${p.user.name} — ${money(p.amount)} (${p.month})`);
+    revalidatePath("/salaries");
+    revalidatePath("/finance");
+  });
 }
 
 // ---------- Shop ----------
@@ -1372,20 +1477,22 @@ const productSchema = z.object({
   stock: v.int("Boshlang'ich qoldiq", { fallback: 0 }),
 });
 
-export async function saveProduct(id: number | null, f: FormData) {
-  const user = await requirePermission("shop.manage");
-  const { stock, ...form } = parseForm(productSchema, f);
-  const data = { ...form, active: id === null ? true : form.active };
-  if (id === null) {
-    const p = await db.product.create({ data: { ...data, stock } });
-    if (stock > 0) await db.stockMove.create({ data: { productId: p.id, type: "IN", qty: stock, note: "Boshlang'ich qoldiq" } });
-    await logAction(user, "shop.product", `Yangi mahsulot: ${p.name} — ${money(p.price)}`);
-  } else {
-    const before = await db.product.findUniqueOrThrow({ where: { id } });
-    await db.product.update({ where: { id }, data });
-    if (before.price !== data.price) await logAction(user, "shop.price", `${before.name} narxi: ${money(before.price)} → ${money(data.price)}`);
-  }
-  revalidatePath("/shop");
+export async function saveProduct(id: number | null, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("shop.manage");
+    const { stock, ...form } = parseForm(productSchema, f);
+    const data = { ...form, active: id === null ? true : form.active };
+    if (id === null) {
+      const p = await db.product.create({ data: { ...data, stock } });
+      if (stock > 0) await db.stockMove.create({ data: { productId: p.id, type: "IN", qty: stock, note: "Boshlang'ich qoldiq" } });
+      await logAction(user, "shop.product", `Yangi mahsulot: ${p.name} — ${money(p.price)}`);
+    } else {
+      const before = await db.product.findUniqueOrThrow({ where: { id } });
+      await db.product.update({ where: { id }, data });
+      if (before.price !== data.price) await logAction(user, "shop.price", `${before.name} narxi: ${money(before.price)} → ${money(data.price)}`);
+    }
+    revalidatePath("/shop");
+  });
 }
 
 const restockSchema = z.object({
@@ -1396,34 +1503,38 @@ const restockSchema = z.object({
 });
 
 /** Adds stock (purchase). Optionally records the purchase as a GOODS expense. */
-export async function restockProduct(id: number, f: FormData) {
-  const user = await requirePermission("shop.manage");
-  const { qty, cost: unitCost, note, asExpense } = parseForm(restockSchema, f);
-  const p = await db.product.update({
-    where: { id },
-    data: { stock: { increment: qty }, ...(unitCost > 0 ? { cost: unitCost } : {}) },
+export async function restockProduct(id: number, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("shop.manage");
+    const { qty, cost: unitCost, note, asExpense } = parseForm(restockSchema, f);
+    const p = await db.product.update({
+      where: { id },
+      data: { stock: { increment: qty }, ...(unitCost > 0 ? { cost: unitCost } : {}) },
+    });
+    await db.stockMove.create({ data: { productId: id, type: "IN", qty, note } });
+    if (unitCost > 0 && asExpense) {
+      await db.expense.create({ data: { title: `Tovar xaridi — ${p.name} × ${qty}`, category: "GOODS", amount: unitCost * qty } });
+    }
+    await logAction(user, "shop.restock", `Kirim: ${p.name} +${qty} (qoldiq ${p.stock})`);
+    revalidatePath("/shop");
+    revalidatePath("/finance");
   });
-  await db.stockMove.create({ data: { productId: id, type: "IN", qty, note } });
-  if (unitCost > 0 && asExpense) {
-    await db.expense.create({ data: { title: `Tovar xaridi — ${p.name} × ${qty}`, category: "GOODS", amount: unitCost * qty } });
-  }
-  await logAction(user, "shop.restock", `Kirim: ${p.name} +${qty} (qoldiq ${p.stock})`);
-  revalidatePath("/shop");
-  revalidatePath("/finance");
 }
 
 const adjustSchema = z.object({ counted: v.int("Sanalgan miqdor"), note: v.optText(500) });
 
 /** Sets stock to the counted amount (inventory check). */
-export async function adjustStock(id: number, f: FormData) {
-  const user = await requirePermission("shop.manage");
-  const { counted, note } = parseForm(adjustSchema, f);
-  const p = await db.product.findUniqueOrThrow({ where: { id } });
-  if (counted === p.stock) return;
-  await db.product.update({ where: { id }, data: { stock: counted } });
-  await db.stockMove.create({ data: { productId: id, type: "ADJUST", qty: counted - p.stock, note: note ?? "Inventarizatsiya" } });
-  await logAction(user, "shop.adjust", `Inventarizatsiya: ${p.name} ${p.stock} → ${counted}`);
-  revalidatePath("/shop");
+export async function adjustStock(id: number, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("shop.manage");
+    const { counted, note } = parseForm(adjustSchema, f);
+    const p = await db.product.findUniqueOrThrow({ where: { id } });
+    if (counted === p.stock) return;
+    await db.product.update({ where: { id }, data: { stock: counted } });
+    await db.stockMove.create({ data: { productId: id, type: "ADJUST", qty: counted - p.stock, note: note ?? "Inventarizatsiya" } });
+    await logAction(user, "shop.adjust", `Inventarizatsiya: ${p.name} ${p.stock} → ${counted}`);
+    revalidatePath("/shop");
+  });
 }
 
 export type SaleState = { error?: string; ok?: boolean } | null;
@@ -1443,7 +1554,7 @@ export async function createSale(_: SaleState, f: FormData): Promise<SaleState> 
       .filter((x) => x.qty > 0);
   } catch (e) {
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser
-    return { error: (e as Error).message };
+    return { error: errorText(e) };
   }
   if (!wanted.length) return { error: "Kamida bitta mahsulot tanlang" };
   const products = await db.product.findMany({ where: { id: { in: wanted.map((w) => w.productId) }, active: true } });
@@ -1481,46 +1592,54 @@ export async function createSale(_: SaleState, f: FormData): Promise<SaleState> 
   return { ok: true };
 }
 
-export async function deleteSale(id: number) {
-  const user = await requirePermission("shop.manage");
-  const sale = await db.sale.findUniqueOrThrow({ where: { id }, include: { items: true, student: true } });
-  await db.$transaction(async (tx) => {
-    for (const i of sale.items) {
-      await tx.product.update({ where: { id: i.productId }, data: { stock: { increment: i.qty } } });
-      await tx.stockMove.create({ data: { productId: i.productId, type: "IN", qty: i.qty, note: `Sotuv #${id} bekor qilindi` } });
-    }
-    await tx.sale.delete({ where: { id } });
+export async function deleteSale(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("shop.manage");
+    const sale = await db.sale.findUniqueOrThrow({ where: { id }, include: { items: true, student: true } });
+    await db.$transaction(async (tx) => {
+      for (const i of sale.items) {
+        await tx.product.update({ where: { id: i.productId }, data: { stock: { increment: i.qty } } });
+        await tx.stockMove.create({ data: { productId: i.productId, type: "IN", qty: i.qty, note: `Sotuv #${id} bekor qilindi` } });
+      }
+      await tx.sale.delete({ where: { id } });
+    });
+    await logAction(user, "shop.sale_delete", `Sotuv bekor qilindi: ${sale.student?.name ?? sale.buyerName ?? "mijoz"} — ${money(sale.total)}`);
+    revalidatePath("/shop");
   });
-  await logAction(user, "shop.sale_delete", `Sotuv bekor qilindi: ${sale.student?.name ?? sale.buyerName ?? "mijoz"} — ${money(sale.total)}`);
-  revalidatePath("/shop");
 }
 
 // ---------- Reasons (why a student froze or left) ----------
 const reasonSchema = z.object({ name: v.text("Sabab", 80) });
 
-export async function createReason(f: FormData) {
-  const user = await requirePermission("staff.manage");
-  const { name } = parseForm(reasonSchema, f);
-  await db.reason.create({ data: { name } });
-  await logAction(user, "reason.create", `Yangi sabab: ${name}`);
-  revalidatePath("/settings/reasons");
+export async function createReason(_: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("staff.manage");
+    const { name } = parseForm(reasonSchema, f);
+    await db.reason.create({ data: { name } });
+    await logAction(user, "reason.create", `Yangi sabab: ${name}`);
+    revalidatePath("/settings/reasons");
+  });
 }
 
-export async function renameReason(id: number, f: FormData) {
-  const user = await requirePermission("staff.manage");
-  const { name } = parseForm(reasonSchema, f);
-  const before = await db.reason.update({ where: { id }, data: { name } });
-  await logAction(user, "reason.rename", `Sabab nomi o'zgardi: ${before.name}`);
-  revalidatePath("/settings/reasons");
+export async function renameReason(id: number, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("staff.manage");
+    const { name } = parseForm(reasonSchema, f);
+    const before = await db.reason.update({ where: { id }, data: { name } });
+    await logAction(user, "reason.rename", `Sabab nomi o'zgardi: ${before.name}`);
+    revalidatePath("/settings/reasons");
+  });
 }
 
 /** Hidden reasons stay on old records but are no longer offered in dialogs. */
-export async function toggleReason(id: number) {
-  const user = await requirePermission("staff.manage");
-  const r = await db.reason.findUniqueOrThrow({ where: { id } });
-  await db.reason.update({ where: { id }, data: { active: !r.active } });
-  await logAction(user, "reason.toggle", `Sabab ${r.active ? "yashirildi" : "qayta yoqildi"}: ${r.name}`);
-  revalidatePath("/settings/reasons");
+export async function toggleReason(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("staff.manage");
+    const r = await db.reason.findUniqueOrThrow({ where: { id } });
+    await db.reason.update({ where: { id }, data: { active: !r.active } });
+    await logAction(user, "reason.toggle", `Sabab ${r.active ? "yashirildi" : "qayta yoqildi"}: ${r.name}`);
+    revalidatePath("/settings/reasons");
+  });
 }
 
 // ---------- Course subjects (curriculum) ----------
@@ -1584,7 +1703,7 @@ export async function saveSubject(_: MemberActionState, f: FormData): Promise<Me
     return { ok: true };
   } catch (e) {
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser
-    return { error: (e as Error).message };
+    return { error: errorText(e) };
   }
 }
 
@@ -1620,7 +1739,7 @@ export async function saveReceipt(_: MemberActionState, f: FormData): Promise<Me
     return { ok: true };
   } catch (e) {
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser
-    return { error: (e as Error).message };
+    return { error: errorText(e) };
   }
 }
 
@@ -1670,17 +1789,19 @@ export async function saveTeacher(_: MemberActionState, f: FormData): Promise<Me
     return { ok: true };
   } catch (e) {
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser
-    return { error: (e as Error).message };
+    return { error: errorText(e) };
   }
 }
 
 // ---------- Telegram (Sozlamalar → Telegram) ----------
-export async function unlinkTelegram(userId: number) {
-  const me = await requirePermission("staff.manage");
-  const u = await db.user.update({ where: { id: userId }, data: { telegramChatId: null } });
-  await logAction(me, "telegram.unlink", `Telegram uzildi: ${u.name}`);
-  revalidatePath("/settings/telegram");
-  revalidatePath("/teachers");
+export async function unlinkTelegram(userId: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const me = await requirePermission("staff.manage");
+    const u = await db.user.update({ where: { id: userId }, data: { telegramChatId: null } });
+    await logAction(me, "telegram.unlink", `Telegram uzildi: ${u.name}`);
+    revalidatePath("/settings/telegram");
+    revalidatePath("/teachers");
+  });
 }
 
 /** "Sinov xabari": a message to the admin's own linked chat, sent right away so the answer shows here. */
@@ -1695,6 +1816,6 @@ export async function sendTelegramTest(_: MemberActionState): Promise<MemberActi
     return { ok: true };
   } catch (e) {
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser
-    return { error: (e as Error).message };
+    return { error: errorText(e) };
   }
 }

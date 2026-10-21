@@ -16,7 +16,7 @@ import { studentHistory } from "@/lib/student-history";
 import { Modal } from "@/components/Modal";
 import { StudentFields } from "@/components/forms";
 import { PaymentForm } from "@/components/PaymentForm";
-import { Empty, Field, SubmitRow } from "@/components/ui";
+import { Empty, Field } from "@/components/ui";
 import { MemberMenu } from "@/components/members/MemberMenu";
 import { StatusBadge } from "@/components/members/StatusBadge";
 import { toMemberData, toMemberGroup } from "@/components/members/types";
@@ -28,6 +28,7 @@ import { DiscountList } from "@/components/students/DiscountList";
 import { PER_LESSON_FROM } from "@/lib/billing";
 import { centreToday } from "@/lib/schedule";
 import { addStudentToGroup, deletePayment, deleteStudent, setStudentTags, updateStudent } from "../../actions";
+import { ActionButton, ActionForm } from "@/components/ActionForm";
 
 const TABS = [
   { key: "groups", label: "Guruhlar" },
@@ -132,7 +133,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
               {student.tags.map(({ tag }) => <TagChip key={tag.id} name={tag.name} color={tag.color} />)}
               {allow.manage && allTags.length > 0 && (
                 <Modal title="Teglar" triggerClassName="btn-ghost px-2 py-1 text-xs" trigger={<><Tags className="h-3.5 w-3.5" /> {student.tags.length ? "Teglar" : "Teg qo'shish"}</>}>
-                  <form action={setStudentTags.bind(null, student.id)} className="space-y-3">
+                  <ActionForm action={setStudentTags.bind(null, student.id)} className="space-y-3">
                     <div className="space-y-2">
                       {allTags.filter((t) => t.active || student.tags.some((x) => x.tagId === t.id)).map((t) => (
                         <label key={t.id} className="flex items-center gap-3 text-sm">
@@ -142,17 +143,15 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
                         </label>
                       ))}
                     </div>
-                    <SubmitRow />
-                  </form>
+                  </ActionForm>
                 </Modal>
               )}
             </div>
             <div className="mt-5 flex flex-wrap gap-2">
               {allow.manage && <Modal title="Ma'lumotlarni tahrirlash" triggerClassName="btn-secondary" trigger={<><Pencil className="h-4 w-4" /> Tahrirlash</>}>
-                <form action={updateStudent.bind(null, student.id)} className="space-y-3">
+                <ActionForm action={updateStudent.bind(null, student.id)} className="space-y-3">
                   <StudentFields s={student} canManage={allow.manage} />
-                  <SubmitRow />
-                </form>
+                </ActionForm>
               </Modal>}
               {allow.remove && (student.payments.length ? (
                 // payments are financial history and can't be deleted with the student
@@ -160,9 +159,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
                   <Trash2 className="h-4 w-4" /> O&apos;chirish
                 </button>
               ) : (
-                <form action={deleteStudent.bind(null, student.id)}>
-                  <button className="btn-danger"><Trash2 className="h-4 w-4" /> O&apos;chirish</button>
-                </form>
+                <ActionButton action={deleteStudent.bind(null, student.id)} className="btn-danger"><Trash2 className="h-4 w-4" /> O&apos;chirish</ActionButton>
               ))}
             </div>
           </div>
@@ -206,7 +203,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
             <div className="flex items-center justify-between px-5 py-4">
               <h2 className="font-semibold">Guruhlar</h2>
               {allow.manage && <Modal title="Guruhga qo'shish" triggerClassName="btn-secondary" trigger={<><Plus className="h-4 w-4" /> Guruhga qo&apos;shish</>}>
-                <form action={addStudentToGroup} className="space-y-3">
+                <ActionForm action={addStudentToGroup} className="space-y-3">
                   <input type="hidden" name="studentId" value={student.id} />
                   <Field label="Guruh">
                     <select name="groupId" className="input" required>
@@ -222,8 +219,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
                     </Field>
                     <Field label="Qaysi kundan"><input type="date" name="joinedAt" className="input" defaultValue={isoDate(centreDay())} /></Field>
                   </div>
-                  <SubmitRow />
-                </form>
+                </ActionForm>
               </Modal>}
             </div>
             <div className="grid grid-cols-1 gap-3 px-4 pb-4 md:grid-cols-2 md:px-5 md:pb-5">
@@ -309,9 +305,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
                           <div className="flex items-center gap-2">
                             <Link href={`/payments/${r.paymentId}/receipt`} target="_blank" className="text-faint hover:text-ink" title={`Chek № ${r.paymentId}`} aria-label={`Chek № ${r.paymentId}`}><ReceiptText className="h-4 w-4" /></Link>
                             {allow.deletePayment && (
-                              <form action={deletePayment.bind(null, r.paymentId)}>
-                                <button className="text-faint hover:text-danger" aria-label="To'lovni o'chirish"><Trash2 className="h-4 w-4" /></button>
-                              </form>
+                              <ActionButton action={deletePayment.bind(null, r.paymentId)} className="text-faint hover:text-danger" label="To'lovni o'chirish"><Trash2 className="h-4 w-4" /></ActionButton>
                             )}
                           </div>
                         )}

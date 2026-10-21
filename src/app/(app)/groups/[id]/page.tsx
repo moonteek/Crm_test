@@ -12,7 +12,7 @@ import { membershipInclude } from "@/lib/billing-include";
 import { date, GROUP_DAYS, isoDate, lessonDates, lessonWeekdays, money, MONTHS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { EditGroupDialog } from "@/components/EditGroupDialog";
-import { BalanceBadge, Empty, Field, SubmitRow } from "@/components/ui";
+import { BalanceBadge, Empty, Field } from "@/components/ui";
 import { CurriculumBadge, CurriculumBar } from "@/components/CurriculumBar";
 import { curriculumOn, levelExams, passed } from "@/lib/curriculum";
 import { LevelExamDialog } from "@/components/LevelExamDialog";
@@ -30,6 +30,7 @@ import { MemberMenu } from "@/components/members/MemberMenu";
 import { StatusBadge, StatusLegend } from "@/components/members/StatusBadge";
 import { toMemberData, toMemberGroup } from "@/components/members/types";
 import { addStudentToGroup, createExam, deleteExam, deleteGroup } from "../../actions";
+import { ActionButton, ActionForm } from "@/components/ActionForm";
 
 export default async function GroupPage({
   params, searchParams,
@@ -183,7 +184,7 @@ export default async function GroupPage({
             )}
             {tab === "exams" && allow.grades && group.students.length > 0 && (
               <Modal title="Imtihon natijalari" trigger={<><Plus className="h-4 w-4" /> Imtihon</>}>
-                <form action={createExam.bind(null, id)} className="space-y-3">
+                <ActionForm action={createExam.bind(null, id)} className="space-y-3">
                   <Field label="Imtihon nomi"><input name="title" className="input" required placeholder="1-modul yakuniy imtihoni" /></Field>
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Sana"><input name="date" type="date" className="input" defaultValue={isoDate(new Date())} /></Field>
@@ -197,12 +198,11 @@ export default async function GroupPage({
                       </label>
                     ))}
                   </div>
-                  <SubmitRow />
-                </form>
+                </ActionForm>
               </Modal>
             )}
             {allow.students && <Modal title="O'quvchi qo'shish" trigger={<><Plus className="h-4 w-4" /> O&apos;quvchi</>}>
-              <form action={addStudentToGroup} className="space-y-3">
+              <ActionForm action={addStudentToGroup} className="space-y-3">
                 <input type="hidden" name="groupId" value={id} />
                 <Field label="O'quvchi">
                   <select name="studentId" className="input" required>
@@ -218,8 +218,7 @@ export default async function GroupPage({
                   </Field>
                   <Field label="Qaysi kundan"><input type="date" name="joinedAt" className="input" defaultValue={isoDate(centreDay())} /></Field>
                 </div>
-                <SubmitRow />
-              </form>
+              </ActionForm>
             </Modal>}
           </div>
         </div>
@@ -346,9 +345,7 @@ export default async function GroupPage({
                           />
                         )}
                         {allow.grades && e.id !== null && (
-                          <form action={deleteExam.bind(null, e.id)}>
-                            <button className="text-faint hover:text-danger" aria-label="Imtihonni o'chirish"><Trash2 className="h-3.5 w-3.5" /></button>
-                          </form>
+                          <ActionButton action={deleteExam.bind(null, e.id)} className="text-faint hover:text-danger" label="Imtihonni o'chirish"><Trash2 className="h-3.5 w-3.5" /></ActionButton>
                         )}
                       </div>
                       <div className="font-normal text-faint">{date(e.date)}{e.upcoming ? " · kutilmoqda" : ` · ${e.maxScore} ball`}</div>

@@ -8,8 +8,9 @@ import { salesStats, type SellerStats } from "@/lib/sales";
 import { fmt } from "@/components/charts/format";
 import { BarList } from "@/components/charts/BarList";
 import { Modal } from "@/components/Modal";
-import { Empty, PageHeader, SubmitRow } from "@/components/ui";
+import { Empty, PageHeader } from "@/components/ui";
 import { copyKpiFromPrevious, saveKpiTargets } from "../actions";
+import { ActionButton, ActionForm } from "@/components/ActionForm";
 
 const metricValue = (metric: string, v: number) => (metric === "REVENUE" ? fmt(v, "money") : metric === "CONVERSION" ? `${v}%` : `${v} ta`);
 
@@ -32,9 +33,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
           <Link href={`/sales?m=${shiftMonth(month, 1)}`} className="btn-secondary px-2"><ChevronRight className="h-4 w-4" /></Link>
         </div>
         {manage && (
-          <form action={copyKpiFromPrevious.bind(null, month)}>
-            <button className="btn-secondary"><Copy className="h-4 w-4" /> O&apos;tgan oy KPI sini ko&apos;chirish</button>
-          </form>
+          <ActionButton action={copyKpiFromPrevious.bind(null, month)} className="btn-secondary"><Copy className="h-4 w-4" /> O&apos;tgan oy KPI sini ko&apos;chirish</ActionButton>
         )}
       </PageHeader>
 
@@ -86,7 +85,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
               </div>
               {manage && (
                 <Modal wide title={`KPI — ${r.name} (${MONTHS[mm - 1]} ${y})`} triggerClassName="btn-secondary" trigger={<><Target className="h-4 w-4" /> KPI</>}>
-                  <form action={saveKpiTargets.bind(null, r.userId, month)} className="space-y-3">
+                  <ActionForm action={saveKpiTargets.bind(null, r.userId, month)} className="space-y-3">
                     <p className="text-xs text-muted">Maqsad 0 bo&apos;lsa, o&apos;sha ko&apos;rsatkich o&apos;chiriladi. Bonus maqsadga yetganda beriladi; &quot;har bir ortiqcha uchun&quot; — maqsaddan oshgan har bir birlik uchun qo&apos;shimcha.</p>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
@@ -106,8 +105,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                         </tbody>
                       </table>
                     </div>
-                    <SubmitRow />
-                  </form>
+                  </ActionForm>
                 </Modal>
               )}
             </div>

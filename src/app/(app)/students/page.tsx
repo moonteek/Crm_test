@@ -11,8 +11,9 @@ import { Modal } from "@/components/Modal";
 import { StudentFields } from "@/components/forms";
 import { ExportButtons } from "@/components/ExportButtons";
 import { TagChip } from "@/components/students/TagChip";
-import { BalanceBadge, Empty, Field, PageHeader, SubmitRow } from "@/components/ui";
+import { BalanceBadge, Empty, Field, PageHeader } from "@/components/ui";
 import { createStudent } from "../actions";
+import { ActionForm } from "@/components/ActionForm";
 
 export default async function StudentsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await requirePage("students.view");
@@ -39,7 +40,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
       <PageHeader title="O'quvchilar" subtitle={`Jami: ${list.total}`}>
         <ExportButtons href="/students/export" />
         {can(user, "students.manage") && <Modal title="Yangi o'quvchi" trigger={<><Plus className="h-4 w-4" /> O&apos;quvchi qo&apos;shish</>}>
-          <form action={createStudent} className="space-y-3">
+          <ActionForm action={createStudent} className="space-y-3">
             <StudentFields />
             <Field label="Guruhga qo'shish">
               <select name="groupId" className="input">
@@ -56,8 +57,7 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
               </Field>
               <Field label="Qaysi kundan"><input type="date" name="joinedAt" className="input" defaultValue={isoDate(centreDay())} /></Field>
             </div>
-            <SubmitRow />
-          </form>
+          </ActionForm>
         </Modal>}
       </PageHeader>
 

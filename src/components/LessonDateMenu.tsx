@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import { ArrowLeftRight, Ban, Check, ListChecks, RotateCcw } from "lucide-react";
 import { markAllPresent, removeSubstitute, restoreLesson, setAbsenceReason } from "@/app/(app)/actions";
 import { DialogFrame } from "./Modal";
+import { answer } from "./ActionForm";
+import type { ActionState } from "@/lib/action-result";
 import { LessonChangeDialog, PopoverPanel, useLessonGrid, usePopover } from "./lesson-grid";
 import { lessonChangeOpen } from "@/lib/lesson-changes";
 
@@ -28,9 +30,10 @@ export function LessonDateMenu({
   const popover = usePopover(WIDTH);
   const [dialog, setDialog] = useState<"reasons" | "cancel" | "substitute" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const run = (fn: () => Promise<unknown>) => startTransition(async () => {
+  const run = (fn: () => Promise<ActionState>) => startTransition(async () => {
     setError(null);
-    try { await fn(); popover.close(); } catch (e) { setError((e as Error).message); }
+    const problem = await answer(fn());
+    if (problem) setError(problem); else popover.close();
   });
   const show = (d: typeof dialog) => { popover.close(); setDialog(d); };
   const item = "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm hover:bg-ink/5";

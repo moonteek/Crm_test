@@ -9,9 +9,10 @@ import { currentMonth, monthBounds, shiftMonth } from "@/lib/month";
 import { fmt } from "@/components/charts/format";
 import { BarList } from "@/components/charts/BarList";
 import { Modal } from "@/components/Modal";
-import { Empty, Field, PageHeader, SubmitRow } from "@/components/ui";
+import { Empty, Field, PageHeader } from "@/components/ui";
 import { adjustStock, deleteSale, restockProduct, saveProduct } from "../actions";
 import { SaleForm } from "./SaleForm";
+import { ActionButton, ActionForm } from "@/components/ActionForm";
 
 const LOW_STOCK = 5;
 type Prod = { id: number; name: string; category: string; price: number; cost: number; stock: number; active: boolean };
@@ -80,7 +81,7 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
         </div>
         {manage && (
           <Modal title="Yangi mahsulot" trigger={<><Plus className="h-4 w-4" /> Mahsulot</>}>
-            <form action={saveProduct.bind(null, null)} className="space-y-3"><ProductFields /><SubmitRow /></form>
+            <ActionForm action={saveProduct.bind(null, null)} className="space-y-3"><ProductFields /></ActionForm>
           </Modal>
         )}
       </PageHeader>
@@ -130,26 +131,24 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
                     <td>
                       <div className="flex items-center justify-end gap-3">
                         <Modal title={`Kirim — ${p.name}`} triggerClassName="text-faint hover:text-ink" trigger={<PackagePlus className="h-4 w-4" />}>
-                          <form action={restockProduct.bind(null, p.id)} className="space-y-3">
+                          <ActionForm action={restockProduct.bind(null, p.id)} className="space-y-3" submitText="Kirim qilish">
                             <div className="grid grid-cols-2 gap-3">
                               <Field label="Miqdor"><input name="qty" type="number" min={1} className="input" required /></Field>
                               <Field label="Tannarx (bitta)"><input name="cost" type="number" min={0} className="input" defaultValue={p.cost} /></Field>
                             </div>
                             <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="asExpense" defaultChecked className="h-4 w-4 accent-ink" /> Xarajat sifatida yozish (Tovar xaridi)</label>
                             <Field label="Izoh"><input name="note" className="input" placeholder="Yetkazib beruvchi, hujjat raqami..." /></Field>
-                            <SubmitRow text="Kirim qilish" />
-                          </form>
+                          </ActionForm>
                         </Modal>
                         <Modal title={`Inventarizatsiya — ${p.name}`} triggerClassName="text-faint hover:text-ink" trigger={<ClipboardCheck className="h-4 w-4" />}>
-                          <form action={adjustStock.bind(null, p.id)} className="space-y-3">
+                          <ActionForm action={adjustStock.bind(null, p.id)} className="space-y-3">
                             <p className="text-sm text-muted">Tizimda: <b>{p.stock} ta</b>. Sanab chiqilgan haqiqiy sonni kiriting.</p>
                             <Field label="Haqiqiy qoldiq"><input name="counted" type="number" min={0} className="input" required defaultValue={p.stock} /></Field>
                             <Field label="Sabab"><input name="note" className="input" placeholder="Shikastlangan, yo'qolgan..." /></Field>
-                            <SubmitRow />
-                          </form>
+                          </ActionForm>
                         </Modal>
                         <Modal title="Mahsulotni tahrirlash" triggerClassName="text-faint hover:text-ink" trigger={<Pencil className="h-4 w-4" />}>
-                          <form action={saveProduct.bind(null, p.id)} className="space-y-3"><ProductFields p={p} /><SubmitRow /></form>
+                          <ActionForm action={saveProduct.bind(null, p.id)} className="space-y-3"><ProductFields p={p} /></ActionForm>
                         </Modal>
                       </div>
                     </td>
@@ -201,9 +200,7 @@ function SalesTable({ sales, manage }: { sales: SaleRow[]; manage: boolean }) {
               <td className="text-muted">{s.user?.name ?? "—"}</td>
               {manage && (
                 <td>
-                  <form action={deleteSale.bind(null, s.id)}>
-                    <button className="text-faint hover:text-danger" aria-label="Bekor qilish"><Trash2 className="h-4 w-4" /></button>
-                  </form>
+                  <ActionButton action={deleteSale.bind(null, s.id)} className="text-faint hover:text-danger" label="Bekor qilish"><Trash2 className="h-4 w-4" /></ActionButton>
                 </td>
               )}
             </tr>

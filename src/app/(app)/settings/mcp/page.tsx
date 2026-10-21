@@ -7,6 +7,7 @@ import { date } from "@/lib/format";
 import { Empty } from "@/components/ui";
 import { deleteApiToken } from "../../actions";
 import { CopyBox, NewTokenForm } from "./NewTokenForm";
+import { ActionButton } from "@/components/ActionForm";
 
 export default async function McpPage() {
   const user = await requirePage("mcp.use");
@@ -81,9 +82,7 @@ export default async function McpPage() {
                 <td>{date(t.createdAt)}</td>
                 <td>{t.lastUsedAt ? date(t.lastUsedAt) : "—"}</td>
                 <td>
-                  <form action={deleteApiToken.bind(null, t.id)}>
-                    <button className="flex items-center gap-1 text-xs text-danger hover:underline"><Trash2 className="h-3.5 w-3.5" /> Bekor qilish</button>
-                  </form>
+                  <ActionButton action={deleteApiToken.bind(null, t.id)} className="flex items-center gap-1 text-xs text-danger hover:underline"><Trash2 className="h-3.5 w-3.5" /> Bekor qilish</ActionButton>
                 </td>
               </tr>
             ))}

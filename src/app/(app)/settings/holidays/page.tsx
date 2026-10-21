@@ -6,6 +6,7 @@ import { centreToday } from "@/lib/schedule";
 import { Empty } from "@/components/ui";
 import { HolidayForm } from "@/components/HolidayForm";
 import { deleteHoliday } from "../../actions";
+import { ActionButton } from "@/components/ActionForm";
 
 const WEEKDAY = ["Yakshanba", "Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"];
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -27,9 +28,7 @@ export default async function HolidaysPage() {
         <p className="label-mono">{day(h.date)} · {WEEKDAY[h.date.getUTCDay()]}{h.user ? ` · ${h.user.name}` : ""}</p>
       </div>
       {canDeleteHoliday(h.date, now) && (
-        <form action={deleteHoliday.bind(null, h.id)}>
-          <button className="btn-ghost px-2 hover:text-danger" aria-label="O'chirish" title="O'chirish"><Trash2 className="h-4 w-4" /></button>
-        </form>
+        <ActionButton action={deleteHoliday.bind(null, h.id)} className="btn-ghost px-2 hover:text-danger" label="O'chirish" title="O'chirish"><Trash2 className="h-4 w-4" /></ActionButton>
       )}
     </li>
   );

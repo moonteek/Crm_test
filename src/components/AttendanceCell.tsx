@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import { ArrowLeftRight, Ban, Check, Clock, Flag, Minus, RotateCcw, X } from "lucide-react";
 import { removeSubstitute, restoreLesson, setAbsenceReason, setAttendance } from "@/app/(app)/actions";
 import type { MarkKey } from "@/lib/attendance";
+import type { ActionState } from "@/lib/action-result";
+import { answer } from "./ActionForm";
 import { LessonChangeDialog, PopoverPanel, REASON_TONE, useLessonGrid, usePopover } from "./lesson-grid";
 import { lessonChangeOpen } from "@/lib/lesson-changes";
 
@@ -43,9 +45,10 @@ export function AttendanceCell({
   const manage = canManage && lessonChangeOpen(new Date(day), new Date());
   if (cancelled && !manage) return <span className="label-mono text-faint" title="Dars bekor qilingan">—</span>;
 
-  const run = (fn: () => Promise<unknown>, after: () => void) => start(async () => {
+  const run = (fn: () => Promise<ActionState>, after: () => void) => start(async () => {
     setError(null);
-    try { await fn(); after(); } catch (e) { setChosen(null); setError((e as Error).message); }
+    const problem = await answer(fn());
+    if (problem) { setChosen(null); setError(problem); } else after();
   });
   const choose = (key: MarkKey | null) => {
     setChosen({ key, reasonId: key === "absent" ? current.reasonId : null });
