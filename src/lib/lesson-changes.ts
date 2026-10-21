@@ -124,3 +124,8 @@ export function coverAllowed(p: {
     || p.makeups.some((m) => m.groupId === p.groupId && m.makeupTeacherId === p.userId && m.makeupDate !== null && iso(m.makeupDate) === p.day)
   );
 }
+
+/** A make-up that already has marks or grades stays: undo or move would lose them. */
+export function makeupLocked(marks: number, grades: number): string | null {
+  return marks > 0 || grades > 0 ? "Qo'shimcha darsda davomat bor — avval uni o'chiring" : null;
+}

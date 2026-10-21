@@ -105,3 +105,10 @@ test("cover access: that group, that day, only on the day", async () => {
   assert.equal(ok(9, 1, "2026-11-21", "2026-11-21"), true);
   assert.equal(ok(9, 1, "2026-11-16", "2026-11-16"), false); // the original day isn't theirs
 });
+
+test("a make-up with marks or grades can't be undone or moved", async () => {
+  const { makeupLocked } = await import("./lesson-changes");
+  assert.equal(makeupLocked(0, 0), null);
+  assert.equal(makeupLocked(1, 0), "Qo'shimcha darsda davomat bor — avval uni o'chiring");
+  assert.equal(makeupLocked(0, 2), "Qo'shimcha darsda davomat bor — avval uni o'chiring");
+});

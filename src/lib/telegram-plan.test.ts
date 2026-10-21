@@ -97,3 +97,17 @@ test("admins get one list per lesson start time, even as teachers mark during th
   const keys = dueMessages([a, c], ctx(at("09:20"))).filter((m) => m.key.startsWith("admin-unmarked:")).map((m) => m.key).sort();
   assert.deepEqual(keys, ["admin-unmarked:2026-10-15:09:00:1", "admin-unmarked:2026-10-15:09:05:1"]);
 });
+
+test("make-up texts: moved lesson for the group's people, an own line for a different make-up teacher", async () => {
+  const { makeupTexts, makeupUndoText } = await import("./telegram-plan");
+  const day = (m: number, x: number) => new Date(Date.UTC(2026, m - 1, x));
+  assert.deepEqual(makeupTexts("FE-12", day(10, 23), day(10, 25), "14:00", "2-xona"), {
+    regular: "FE-12: 23.10 dagi dars 25.10 14:00 ga ko'chirildi (2-xona)",
+    cover: "Siz FE-12 guruhining 25.10 14:00 dagi qo'shimcha darsini o'tasiz (2-xona)",
+  });
+  assert.deepEqual(makeupTexts("FE-12", day(10, 23), day(10, 25), "14:00", null), {
+    regular: "FE-12: 23.10 dagi dars 25.10 14:00 ga ko'chirildi",
+    cover: "Siz FE-12 guruhining 25.10 14:00 dagi qo'shimcha darsini o'tasiz",
+  });
+  assert.equal(makeupUndoText("FE-12", day(10, 25)), "FE-12: 25.10 dagi qo'shimcha dars bekor qilindi");
+});

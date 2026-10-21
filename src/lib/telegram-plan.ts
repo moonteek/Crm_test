@@ -82,6 +82,15 @@ export const substituteTexts = (group: string, day: Date, time: string, substitu
   toSubstitute: `🔁 ${ddmm(day)} ${time} ${group} darsini siz o'tasiz${absent ? ` (${absent} o'rniga)` : ""}`,
   toAbsent: `🔁 ${ddmm(day)} ${group} darsingizni ${substitute} o'tadi`,
 });
+/** A moved lesson: `regular` for the group's teacher and assistant, `cover` for a different make-up teacher. */
+export function makeupTexts(group: string, original: Date, makeup: Date, time: string, room: string | null) {
+  const where = room ? ` (${room})` : "";
+  return {
+    regular: `${group}: ${ddmm(original)} dagi dars ${ddmm(makeup)} ${time} ga ko'chirildi${where}`,
+    cover: `Siz ${group} guruhining ${ddmm(makeup)} ${time} dagi qo'shimcha darsini o'tasiz${where}`,
+  };
+}
+export const makeupUndoText = (group: string, makeup: Date) => `${group}: ${ddmm(makeup)} dagi qo'shimcha dars bekor qilindi`;
 export const substituteUndoText = (group: string, day: Date) => `↩️ ${ddmm(day)} ${group}: o'rinbosar bekor qilindi`;
 /** `month` as YYYY-MM */
 export function salaryText(month: string, amount: number) {

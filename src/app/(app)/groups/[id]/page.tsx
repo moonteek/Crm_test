@@ -238,6 +238,9 @@ export default async function GroupPage({
             teachers: teachers.filter((t) => t.id !== group.teacherId && t.id !== group.assistantId).map((t) => ({ id: t.id, name: t.name })),
             hasAssistant: group.assistantId !== null,
             reasons: absenceReasons.map((r) => ({ id: r.id, name: r.name, color: r.color })),
+            allTeachers: teachers.map((t) => ({ id: t.id, name: t.name })),
+            rooms: rooms.map((r) => ({ id: r.id, name: r.name })),
+            groupTime: group.time, groupRoomId: group.roomId,
           }}>
           <div className="overflow-x-auto pt-2">
             <table className="table">
