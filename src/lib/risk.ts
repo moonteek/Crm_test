@@ -49,16 +49,17 @@ const LABELS: Record<keyof RiskSettings, string> = {
   minGrades: "Kamida baholar soni",
 };
 
+const field = (k: keyof RiskSettings) => {
+  const [min, max, decimal] = RANGES[k];
+  const range = `${LABELS[k]}: ${min} dan ${max} gacha${decimal ? "" : " butun son"}`;
+  return z.coerce.number({ error: range }).refine((x) => fits(k, x), range);
+};
+
 /** The settings form (Sozlamalar → Xavfli o'quvchilar). */
-export const riskSettingsSchema = z.object(
-  Object.fromEntries(
-    (Object.keys(RANGES) as (keyof RiskSettings)[]).map((k) => {
-      const [min, max, decimal] = RANGES[k];
-      const range = `${LABELS[k]}: ${min} dan ${max} gacha${decimal ? "" : " butun son"}`;
-      return [k, z.coerce.number({ error: range }).refine((x) => fits(k, x), range)];
-    }),
-  ) as Record<keyof RiskSettings, z.ZodType<number>>,
-);
+export const riskSettingsSchema = z.object({
+  streak: field("streak"), ratePercent: field("ratePercent"), days: field("days"), minLessons: field("minLessons"),
+  lowGrade: field("lowGrade"), gradeDrop: field("gradeDrop"), minGrades: field("minGrades"),
+});
 
 export type RiskKind = "streak" | "attendance" | "grades" | "exam";
 export const RISK_KINDS: Record<RiskKind, string> = { streak: "Ketma-ket", attendance: "Davomat", grades: "Baho", exam: "Imtihon" };
