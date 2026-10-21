@@ -10,7 +10,7 @@ export function examColumns<E extends SavedExam>(group: CurriculumGroup, subject
   return [
     ...auto.map((a) => {
       const saved = exams.find((e) => e.level === a.level);
-      return { key: `L${a.level}`, id: saved?.id ?? null, level: a.level as number | null, title: a.title, date: a.date, maxScore: saved?.maxScore ?? 100, results: saved?.results ?? [], upcoming: a.date > today };
+      return { key: `L${a.level}`, id: saved?.id ?? null, level: a.level as number | null, title: a.title, date: saved?.results.length ? saved.date : a.date, maxScore: saved?.maxScore ?? 100, results: saved?.results ?? [], upcoming: !saved?.results.length && a.date > today };
     }),
     ...exams.filter((e) => e.level === null || !autoLevels.has(e.level)).map((e) => ({ key: `E${e.id}`, id: e.id as number | null, level: null as number | null, title: e.title, date: e.date, maxScore: e.maxScore, results: e.results, upcoming: false })),
   ].sort((a, b) => a.date.getTime() - b.date.getTime());
