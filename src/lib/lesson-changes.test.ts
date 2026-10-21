@@ -51,3 +51,57 @@ test("lesson changes are open from this month on (centre time), for the menus an
   assert.equal(lessonChangeOpen(new Date("2026-12-20T00:00:00Z"), today), true);
   assert.equal(lessonChangeOpen(new Date("2026-10-31T00:00:00Z"), today), false);
 });
+
+test("day sets: plain cancel, charged cancel, moved lesson", async () => {
+  const { unchargedDays, makeupDays } = await import("./lesson-changes");
+  const cancels = [
+    { date: d(2026, 11, 12), charged: false, makeupDate: null },
+    { date: d(2026, 11, 14), charged: true, makeupDate: null },
+    { date: d(2026, 11, 17), charged: false, makeupDate: d(2026, 11, 21) },
+  ];
+  const holidays = ["2026-11-10"];
+  assert.deepEqual(closedDays(holidays, cancels.map((c) => c.date)).sort(), ["2026-11-10", "2026-11-12", "2026-11-14", "2026-11-17"]);
+  assert.deepEqual(unchargedDays(holidays, cancels).sort(), ["2026-11-10", "2026-11-12"]);
+  assert.deepEqual(makeupDays(cancels), ["2026-11-21"]);
+});
+
+test("make-up date rules", async () => {
+  const { makeupProblem } = await import("./lesson-changes");
+  const p = { original: d(2026, 11, 16), today: d(2026, 11, 16), days: "ODD", holidays: ["2026-11-28"], noLesson: ["2026-11-24"] };
+  assert.equal(makeupProblem({ ...p, date: d(2026, 11, 21) }), null);
+  assert.equal(makeupProblem({ ...p, date: d(2026, 11, 18) }), "Guruhning shu kuni darsi bor");
+  assert.equal(makeupProblem({ ...p, date: d(2026, 11, 28) }), "Bayram kuni");
+  assert.equal(makeupProblem({ ...p, date: d(2026, 11, 24) }), "Bu kun ham bekor qilingan");
+  assert.equal(makeupProblem({ ...p, date: d(2026, 11, 15) }), "Sana bugundan 60 kungacha bo'lishi kerak");
+  assert.equal(makeupProblem({ ...p, date: d(2027, 1, 16) }), "Sana bugundan 60 kungacha bo'lishi kerak");
+  assert.equal(makeupProblem({ ...p, date: d(2027, 1, 14) }), null); // 59 days ahead, a Thursday
+});
+
+test("date clash: teacher (or as assistant) and room", async () => {
+  const { clashesOn } = await import("./lesson-changes");
+  const cand = { start: "14:00", minutes: 120, teacherId: 5, roomId: 2 };
+  const other = (o: object) => ({ name: "PY-07", start: "15:00", minutes: 120, teacherId: null, assistantId: null, roomId: null, ...o });
+  assert.deepEqual(clashesOn(cand, [other({ teacherId: 5 })]), ["O'qituvchi band: PY-07 15:00–17:00"]);
+  assert.deepEqual(clashesOn(cand, [other({ assistantId: 5 })]), ["O'qituvchi band: PY-07 15:00–17:00"]);
+  assert.deepEqual(clashesOn(cand, [other({ roomId: 2 })]), ["Xona band: PY-07 15:00–17:00"]);
+  assert.deepEqual(clashesOn(cand, [other({ roomId: 2, start: "16:00" })]), []); // ends as the other starts
+});
+
+test("a make-up teacher is paid like a substitute only when it isn't the group's teacher", async () => {
+  const { makeupSubstitutes } = await import("./lesson-changes");
+  const row = (makeupTeacherId: number | null) => ({ groupId: 1, date: d(2026, 11, 16), charged: false, makeupDate: d(2026, 11, 21), makeupTime: "14:00", makeupRoomId: null, makeupTeacherId });
+  assert.deepEqual(makeupSubstitutes([row(7), row(5), row(null)], () => 5), [{ groupId: 1, date: d(2026, 11, 16), role: "TEACHER", substituteId: 7 }]);
+});
+
+test("cover access: that group, that day, only on the day", async () => {
+  const { coverAllowed } = await import("./lesson-changes");
+  const subs = [{ groupId: 1, date: d(2026, 11, 21), substituteId: 7 }];
+  const makeups = [{ groupId: 1, date: d(2026, 11, 16), charged: false, makeupDate: d(2026, 11, 21), makeupTime: "14:00", makeupRoomId: null, makeupTeacherId: 9 }];
+  const ok = (userId: number, groupId: number, day: string, today: string) => coverAllowed({ userId, groupId, day, today, subs, makeups });
+  assert.equal(ok(7, 1, "2026-11-21", "2026-11-21"), true);
+  assert.equal(ok(7, 1, "2026-11-21", "2026-11-22"), false);
+  assert.equal(ok(7, 2, "2026-11-21", "2026-11-21"), false);
+  assert.equal(ok(8, 1, "2026-11-21", "2026-11-21"), false);
+  assert.equal(ok(9, 1, "2026-11-21", "2026-11-21"), true);
+  assert.equal(ok(9, 1, "2026-11-16", "2026-11-16"), false); // the original day isn't theirs
+});
