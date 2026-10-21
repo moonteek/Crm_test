@@ -40,6 +40,8 @@ import { imageProblem } from "@/lib/image";
 import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, fitsDay, groupClashes, needsClashCheck, teacherGrid, type DayType, type LessonLike } from "@/lib/availability";
 import { check, parseForm, v } from "@/lib/validation";
 import { errorText, tryAction, type ActionState } from "@/lib/action-result";
+import { riskSettingsSchema } from "@/lib/risk";
+import { storeRiskSettings } from "@/lib/risk-db";
 import { phoneKey } from "@/lib/phone";
 
 // ---------- Leads ----------
@@ -1822,4 +1824,16 @@ export async function sendTelegramTest(_: MemberActionState): Promise<MemberActi
     unstable_rethrow(e); // the login redirect of an expired session must reach the browser
     return { error: errorText(e) };
   }
+}
+
+// ---------- Xavfli o'quvchilar ----------
+/** Sozlamalar → Xavfli o'quvchilar: the limits behind the report. */
+export async function saveRiskSettings(_: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("staff.manage");
+    await storeRiskSettings(parseForm(riskSettingsSchema, f));
+    await logAction(user, "risk.settings", "Xavfli o'quvchilar chegaralari o'zgartirildi");
+    revalidatePath("/risk");
+    revalidatePath("/settings/risk");
+  });
 }

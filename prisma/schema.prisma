@@ -60,6 +60,7 @@ model User {
   substitutions LessonChange[] @relation("Substitutions")
   lessonChanges LessonChange[] @relation("LessonChangeAuthor")
   telegramMessages TelegramMessage[]
+  riskContacts RiskContact[]
 }
 
 // Personal access tokens used by MCP clients. Only a SHA-256 hash is stored.
@@ -191,6 +192,7 @@ model Student {
   createdAt DateTime       @default(now())
   tags      StudentTag[]
   notes     StudentNote[]
+  riskContacts RiskContact[]
   auditLogs AuditLog[]
   groups    GroupStudent[]
   attendance Attendance[]
@@ -595,4 +597,19 @@ model TelegramMessage {
   sentAt    DateTime?
 
   @@index([status])
+}
+
+// "Xavfli o'quvchilar": a call to a risky student or parent and its result (src/lib/risk.ts CONTACT_RESULTS)
+model RiskContact {
+  id        Int      @id @default(autoincrement())
+  studentId Int
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  // RETURNING | LEAVING | NO_ANSWER | OTHER
+  result    String
+  comment   String?
+  createdAt DateTime @default(now())
+
+  @@index([studentId])
 }

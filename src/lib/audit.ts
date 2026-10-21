@@ -28,4 +28,5 @@ export const AUDIT_AREAS: Record<string, string> = {
   shop: "Do'kon",
   reason: "Sabablar",
   tag: "Teglar",
+  risk: "Xavfli o'quvchilar",
 };

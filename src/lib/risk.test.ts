@@ -81,3 +81,8 @@ test("settings: defaults, per-field fallback for junk and out-of-range values", 
   assert.equal(s.lowGrade, 3.5);
   assert.deepEqual(parseRiskSettings("not json"), RISK_DEFAULTS);
 });
+
+test("the risk permission exists for roles", async () => {
+  const { ALL_PERMISSIONS } = await import("./permissions");
+  assert.ok(ALL_PERMISSIONS.includes("risk.view"));
+});
