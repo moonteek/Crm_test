@@ -32,3 +32,10 @@ test("unmarked today ignores groups that haven't started or have nobody to mark"
   const g = (id: number, extra: Partial<{ startDate: Date; members: number }> = {}) => ({ id, days: "ODD", time: "10:00", status: "ACTIVE", startDate: new Date("2026-09-01T00:00:00Z"), members: 5, ...extra });
   assert.deepEqual(unmarkedToday([g(1), g(2, { startDate: new Date("2026-10-19T00:00:00Z") }), g(3, { members: 0 })], new Set(), now, []), [1]);
 });
+
+test("unmarked today includes a make-up lesson held today off the group's usual days", () => {
+  const now = new Date("2026-10-12T06:00:00Z"); // Monday 11:00 Tashkent
+  const g = { id: 1, days: "EVEN", time: "10:00", status: "ACTIVE", startDate: new Date("2026-09-01T00:00:00Z"), members: 5 };
+  assert.deepEqual(unmarkedToday([g], new Set(), now, []), []);
+  assert.deepEqual(unmarkedToday([{ ...g, makeupToday: true }], new Set(), now, []), [1]);
+});

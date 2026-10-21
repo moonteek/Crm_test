@@ -15,6 +15,8 @@ export type PlanGroup = {
   students: number;
   /** lessons held up to today, today included (lessonsPassed) */
   passed: number;
+  /** a moved lesson (make-up) is held today at `time`, whatever the group's usual days */
+  makeupToday?: boolean;
 };
 
 export type PlanContext = {
@@ -54,8 +56,8 @@ export function dueMessages(groups: PlanGroup[], ctx: PlanContext): Outgoing[] {
   const unmarked: PlanGroup[] = [];
 
   for (const g of groups) {
-    if (!lessonWeekdays(g.days).includes(t.weekday) || g.startDate.getTime() > day.getTime() || g.students === 0) continue;
-    if (ctx.closed(g.id).includes(iso)) continue;
+    if (!(g.makeupToday || lessonWeekdays(g.days).includes(t.weekday)) || g.startDate.getTime() > day.getTime() || g.students === 0) continue;
+    if (!g.makeupToday && ctx.closed(g.id).includes(iso)) continue;
     const start = toMinutes(g.time);
     const people = teachersOn(g, day, ctx.subs).filter((id) => ctx.linked.has(id));
     if (inWindow(start - REMIND_BEFORE)) {

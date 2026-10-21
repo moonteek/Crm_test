@@ -111,3 +111,10 @@ test("make-up texts: moved lesson for the group's people, an own line for a diff
   });
   assert.equal(makeupUndoText("FE-12", day(10, 25)), "FE-12: 25.10 dagi qo'shimcha dars bekor qilindi");
 });
+
+test("a make-up lesson today gets its reminder and nudge, even off the group's usual days", () => {
+  const odd = { ...group, days: "ODD" }; // 15 Oct 2026 is a Thursday: not an ODD day
+  assert.deepEqual(to(dueMessages([odd], ctx(at("08:30"))), "reminder:"), []);
+  assert.deepEqual(to(dueMessages([{ ...odd, makeupToday: true }], ctx(at("08:30"))), "reminder:"), [7, 10]);
+  assert.deepEqual(to(dueMessages([{ ...odd, makeupToday: true }], ctx(at("09:15"))), "unmarked:"), [7, 10]);
+});

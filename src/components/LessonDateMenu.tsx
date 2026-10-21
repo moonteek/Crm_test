@@ -75,7 +75,9 @@ export function LessonDateMenu({
         {makeup && canManage && (
           <>
             <button type="button" className={item} onClick={() => show("move")}><ArrowLeftRight className="h-4 w-4" /> Qo&apos;shimcha darsni ko&apos;chirish</button>
-            <button type="button" className={`${item} text-danger`} onClick={() => show("unmake")}><Ban className="h-4 w-4" /> Qo&apos;shimcha darsni bekor qilish</button>
+            {lessonChangeOpen(new Date(makeup.original), new Date()) && (
+              <button type="button" className={`${item} text-danger`} onClick={() => show("unmake")}><Ban className="h-4 w-4" /> Qo&apos;shimcha darsni bekor qilish</button>
+            )}
           </>
         )}
         {manage && !makeup && (cancelled === null ? (

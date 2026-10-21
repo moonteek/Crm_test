@@ -75,12 +75,14 @@ export const makeupDays = (cancels: Pick<CancelRow, "makeupDate">[]) => cancels.
 const DAY = 86_400_000;
 
 /** Where a moved lesson may go: today … 60 days ahead, not a holiday, not a day without lessons, not a usual lesson day. */
-export function makeupProblem(p: { date: Date; original: Date; today: Date; days: string; holidays: string[]; noLesson: string[] }): string | null {
+export function makeupProblem(p: { date: Date; original: Date; today: Date; days: string; holidays: string[]; noLesson: string[]; taken?: string[] }): string | null {
   const today = Date.UTC(p.today.getUTCFullYear(), p.today.getUTCMonth(), p.today.getUTCDate());
   if (p.date.getTime() < today || p.date.getTime() > today + 60 * DAY) return "Sana bugundan 60 kungacha bo'lishi kerak";
   if (p.holidays.includes(iso(p.date))) return "Bayram kuni";
   if (p.noLesson.includes(iso(p.date)) || iso(p.date) === iso(p.original)) return "Bu kun ham bekor qilingan";
   if (lessonWeekdays(p.days).includes(p.date.getUTCDay())) return "Guruhning shu kuni darsi bor";
+  // the group's other moved lessons already use that day
+  if (p.taken?.includes(iso(p.date))) return "Bu kunga boshqa dars ko'chirilgan";
   return null;
 }
 
@@ -133,4 +135,26 @@ export function makeupLocked(marks: number, grades: number): string | null {
 /** Whether a group has a lesson on `day` (ISO): a make-up day, or a usual lesson day that isn't a holiday or cancelled. */
 export function lessonOpenOn(day: string, s: { noLesson: string[]; extra: string[]; weekdayLesson: boolean }) {
   return s.extra.includes(day) || (s.weekdayLesson && !s.noLesson.includes(day));
+}
+
+const PAST_MONTH = "O'tgan oy darsi: faqat kuni, vaqti va xonasini o'zgartirish mumkin";
+
+/**
+ * Changing a moved lesson. Its money sits on the original day, so once that month is over only the make-up's day,
+ * time and room may change (same teacher — no money effect); cancelling the make-up or undoing the cancel would
+ * change a closed month.
+ */
+export function makeupEditProblem(op: "move" | "cancel" | "restore", original: Date, today: Date, teacherChanged: boolean): string | null {
+  if (lessonChangeOpen(original, today)) return null;
+  return op === "move" && !teacherChanged ? null : PAST_MONTH;
+}
+
+/**
+ * Who must hear that a make-up is off. Undo / cancel (`moved` false): the group's people and the make-up teacher.
+ * A move to another teacher (`moved` true): only the replaced make-up teacher, unless they are one of the group's
+ * people (who get the new "ko'chirildi" message anyway).
+ */
+export function makeupOffRecipients(people: number[], oldTeacher: number | null, newTeacher: number | null, moved = false): number[] {
+  if (!moved) return [...new Set([...people, ...(oldTeacher !== null ? [oldTeacher] : [])])];
+  return oldTeacher !== null && oldTeacher !== newTeacher && !people.includes(oldTeacher) ? [oldTeacher] : [];
 }

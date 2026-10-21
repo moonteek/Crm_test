@@ -29,7 +29,7 @@ import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
 import { levelExamToSave } from "@/lib/group-exams";
 import { assertLessonOpen, closedDaysOf, holidayDays, makeupDaysOf } from "@/lib/holidays-db";
-import { clashesOn, lessonChangeOpen, lessonOpenOn, lessonChangeProblem, makeupLocked, makeupProblem } from "@/lib/lesson-changes";
+import { clashesOn, lessonChangeOpen, lessonOpenOn, makeupEditProblem, makeupOffRecipients, lessonChangeProblem, makeupLocked, makeupProblem } from "@/lib/lesson-changes";
 import { canDeleteHoliday, expandRange, holidayProblem } from "@/lib/holidays";
 import { canDelete, canEnd, discountProblem, lastMonth } from "@/lib/discounts";
 import { editDiff } from "@/lib/payments";
@@ -1327,7 +1327,10 @@ async function checkMakeup(group: MakeupGroup, original: Date, f: FormData): Pro
   const m = parseForm(makeupSchema, f);
   const teacherId = m.makeupTeacherId ?? teacherOn(group.teachers, group, original, "TEACHER");
   const [holidays, closed] = await Promise.all([holidayDays(), closedDaysOf()]);
-  const problem = makeupProblem({ date: m.makeupDate, original, today: centreDay(), days: group.days, holidays, noLesson: closed(group.id) });
+  // the group's other make-ups (not the one being moved) already take their days
+  const taken = (await db.lessonChange.findMany({ where: { groupId: group.id, kind: "CANCEL", makeupDate: { not: null }, NOT: { date: original } }, select: { makeupDate: true } }))
+    .map((c) => c.makeupDate!.toISOString().slice(0, 10));
+  const problem = makeupProblem({ date: m.makeupDate, original, today: centreDay(), days: group.days, holidays, noLesson: closed(group.id), taken });
   if (problem) throw new Error(problem);
   const minutes = group.course.lessonMin;
   if (!fitsDay(m.makeupTime, minutes)) throw new Error("Dars 08:00–20:00 oralig'ida bo'lishi kerak");
@@ -1371,7 +1374,7 @@ const makeupTarget = z.object({ groupId: v.id("Guruh"), date: v.isoDay() });
 async function movedLesson(user: Awaited<ReturnType<typeof requirePermission>>, f: FormData) {
   const t = parseForm(makeupTarget, f);
   const { group } = await lessonChangeContext(user, t.groupId);
-  if (!lessonChangeOpen(t.date, new Date())) throw new Error("Faqat shu oydan boshlab");
+  // the original month's lock (makeupEditProblem) is checked by each action: moving may still be allowed
   const change = await db.lessonChange.findFirst({ where: { groupId: group.id, date: t.date, kind: "CANCEL" } });
   if (!change?.makeupDate) throw new Error("Bu darsning qo'shimcha darsi yo'q");
   await assertMakeupFree(group.id, change.makeupDate);
@@ -1384,9 +1387,13 @@ export async function moveMakeup(_: ActionState, f: FormData): Promise<ActionSta
     const user = await requirePermission("lessons.manage");
     const { group, change, original, oldMakeup } = await movedLesson(user, f);
     const m = await checkMakeup(group, original, f);
+    const locked = makeupEditProblem("move", original, new Date(), m.makeupTeacherId !== change.makeupTeacherId);
+    if (locked) throw new Error(locked);
     await db.lessonChange.update({ where: { id: change.id }, data: m });
     await logAction(user, "lesson.change", `Qo'shimcha dars ko'chirildi: ${group.name}, ${isoOf(oldMakeup)} → ${isoOf(m.makeupDate)} ${m.makeupTime}`);
     await tellMakeup(group, original, m, change.id);
+    // a replaced make-up teacher who isn't on the group hears the lesson is no longer theirs
+    tell(makeupOffRecipients(peopleOn(group, original), change.makeupTeacherId, m.makeupTeacherId, true).map((id) => ({ key: `makeup-undo:${change.id}:${id}:${oldMakeup.toISOString().slice(0, 10)}`, userId: id, text: makeupUndoText(group.name, oldMakeup) })));
     revalidatePath(`/groups/${group.id}`);
   });
 }
@@ -1396,10 +1403,12 @@ export async function cancelMakeup(_: ActionState, f: FormData): Promise<ActionS
   return tryAction(async () => {
     const user = await requirePermission("lessons.manage");
     const { group, change, original, oldMakeup } = await movedLesson(user, f);
+    const locked = makeupEditProblem("cancel", original, new Date(), false);
+    if (locked) throw new Error(locked);
     const charged = f.get("charged") === "1";
     await db.lessonChange.update({ where: { id: change.id }, data: { makeupDate: null, makeupTime: null, makeupRoomId: null, makeupTeacherId: null, charged } });
     await logAction(user, "lesson.change", `Qo'shimcha dars bekor qilindi: ${group.name}, ${isoOf(oldMakeup)}${charged ? " (to'lov saqlanadi)" : ""}`);
-    const people = [...new Set([...peopleOn(group, original), ...(change.makeupTeacherId ? [change.makeupTeacherId] : [])])];
+    const people = makeupOffRecipients(peopleOn(group, original), change.makeupTeacherId, null);
     tell(people.map((id) => ({ key: `makeup-undo:${change.id}:${id}:${oldMakeup.toISOString().slice(0, 10)}`, userId: id, text: makeupUndoText(group.name, oldMakeup) })));
     revalidatePath(`/groups/${group.id}`);
   });
@@ -1447,6 +1456,9 @@ export async function restoreLesson(groupId: number, isoDay: string): Promise<Ac
     const { count } = await db.lessonChange.deleteMany({ where: { groupId, date, kind: "CANCEL" } });
     if (!count) throw new Error("Bu dars bekor qilinmagan");
     tell(peopleOn(group, date).map((id) => ({ key: `restore:${cancels[0].id}:${id}`, userId: id, text: restoreText(group.name, date) })));
+    // a moved lesson's make-up is gone too: tell everyone who was to hold it
+    const made = cancels[0]?.makeupDate;
+    if (made) tell(makeupOffRecipients(peopleOn(group, date), cancels[0].makeupTeacherId, null).map((id) => ({ key: `makeup-undo:${cancels[0].id}:${id}:${made.toISOString().slice(0, 10)}`, userId: id, text: makeupUndoText(group.name, made) })));
     await logAction(user, "lesson.change", `Dars qayta tiklandi: ${group.name}, ${isoOf(date)}`);
     revalidatePath(`/groups/${groupId}`);
   });

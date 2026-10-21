@@ -122,3 +122,33 @@ test("a make-up day can be marked; the original day and holidays can't", async (
   assert.equal(lessonOpenOn("2026-11-18", { ...sets, weekdayLesson: true }), true);
   assert.equal(lessonOpenOn("2026-11-19", { ...sets, weekdayLesson: false }), false);
 });
+
+test("two lessons can't be moved to the same day", async () => {
+  const { makeupProblem } = await import("./lesson-changes");
+  const p = { original: d(2026, 11, 16), today: d(2026, 11, 16), days: "ODD", holidays: [], noLesson: [] };
+  assert.equal(makeupProblem({ ...p, date: d(2026, 11, 21), taken: ["2026-11-21"] }), "Bu kunga boshqa dars ko'chirilgan");
+  assert.equal(makeupProblem({ ...p, date: d(2026, 11, 21), taken: ["2026-11-28"] }), null);
+});
+
+test("a make-up whose original lesson is in a past month: it can still be moved (same teacher), not cancelled or undone", async () => {
+  const { makeupEditProblem } = await import("./lesson-changes");
+  const original = d(2026, 10, 30); // moved to 2 Nov; now it's November
+  const nowNov = new Date("2026-11-02T06:00:00Z");
+  assert.equal(makeupEditProblem("move", original, nowNov, false), null);
+  assert.equal(makeupEditProblem("move", original, nowNov, true), "O'tgan oy darsi: faqat kuni, vaqti va xonasini o'zgartirish mumkin");
+  assert.equal(makeupEditProblem("cancel", original, nowNov, false), "O'tgan oy darsi: faqat kuni, vaqti va xonasini o'zgartirish mumkin");
+  assert.equal(makeupEditProblem("restore", original, nowNov, false), "O'tgan oy darsi: faqat kuni, vaqti va xonasini o'zgartirish mumkin");
+  const nowOct = new Date("2026-10-30T06:00:00Z");
+  assert.equal(makeupEditProblem("cancel", original, nowOct, true), null);
+});
+
+test("who hears that a make-up is off: on undo everyone involved, on a move the replaced teacher", async () => {
+  const { makeupOffRecipients } = await import("./lesson-changes");
+  // undo / cancel: the group's people and the make-up teacher, once each
+  assert.deepEqual(makeupOffRecipients([10, 7], 8, null), [10, 7, 8]);
+  assert.deepEqual(makeupOffRecipients([10, 7], 10, null), [10, 7]);
+  // moved to another teacher: only the replaced make-up teacher (the group's people get the new "ko'chirildi" text)
+  assert.deepEqual(makeupOffRecipients([10, 7], 8, 9, true), [8]);
+  assert.deepEqual(makeupOffRecipients([10, 7], 8, 8, true), []); // same teacher: nothing extra
+  assert.deepEqual(makeupOffRecipients([10, 7], 10, 9, true), []); // the old one is the group's teacher: told by the new text
+});

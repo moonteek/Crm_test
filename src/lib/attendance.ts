@@ -28,7 +28,7 @@ export const fillPresent = (studentIds: number[], existing: Map<number, Mark>) =
  * "davomat qilinmagan".
  */
 export function unmarkedToday(
-  groups: { id: number; days: string; time: string; status: string; startDate?: Date; members?: number }[],
+  groups: { id: number; days: string; time: string; status: string; startDate?: Date; members?: number; makeupToday?: boolean }[],
   marked: Set<number>,
   now: Date,
   holidays: string[],
@@ -41,6 +41,6 @@ export function unmarkedToday(
     // a group that hasn't started yet, or has nobody to mark, can't be "not marked"
     .filter((g) => !g.startDate || g.startDate.getTime() <= Date.UTC(t.year, t.month - 1, t.day, 23, 59))
     .filter((g) => g.members === undefined || g.members > 0)
-    .filter((g) => g.status === "ACTIVE" && lessonWeekdays(g.days).includes(t.weekday) && toMinutes(g.time) <= minutes && !marked.has(g.id))
+    .filter((g) => g.status === "ACTIVE" && (g.makeupToday || lessonWeekdays(g.days).includes(t.weekday)) && toMinutes(g.time) <= minutes && !marked.has(g.id))
     .map((g) => g.id);
 }
