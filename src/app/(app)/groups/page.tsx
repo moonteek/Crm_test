@@ -8,6 +8,7 @@ import { date, GROUP_DAYS, money } from "@/lib/format";
 import { loadGroups, PROGRESS, type GroupFilters } from "@/lib/lists/groups";
 import { ExportButtons } from "@/components/ExportButtons";
 import { CurriculumBadge, CurriculumBar } from "@/components/CurriculumBar";
+import { CoverLessons } from "@/components/CoverLessons";
 import { Empty, PageHeader, Segmented } from "@/components/ui";
 import { restoreGroup } from "../actions";
 import { NewGroupDialog } from "@/components/NewGroupDialog";
@@ -34,6 +35,7 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
           <NewGroupDialog courses={courses} teachers={teachers} rooms={rooms} />
         )}
       </PageHeader>
+      <CoverLessons user={user} />
 
       {can(user, "groups.manage") && courses.length === 0 && (
         <p className="card mb-4 p-4 text-sm text-warning">Guruh ochish uchun avval <Link href="/courses" className="underline">kurs qo&apos;shing</Link>.</p>

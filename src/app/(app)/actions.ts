@@ -29,7 +29,7 @@ import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
 import { levelExamToSave } from "@/lib/group-exams";
 import { assertLessonOpen, closedDaysOf, holidayDays, makeupDaysOf } from "@/lib/holidays-db";
-import { clashesOn, lessonChangeOpen, lessonChangeProblem, makeupLocked, makeupProblem } from "@/lib/lesson-changes";
+import { clashesOn, lessonChangeOpen, lessonOpenOn, lessonChangeProblem, makeupLocked, makeupProblem } from "@/lib/lesson-changes";
 import { canDeleteHoliday, expandRange, holidayProblem } from "@/lib/holidays";
 import { canDelete, canEnd, discountProblem, lastMonth } from "@/lib/discounts";
 import { editDiff } from "@/lib/payments";
@@ -43,6 +43,7 @@ import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY
 import { check, parseForm, v } from "@/lib/validation";
 import { errorText, tryAction, type ActionState } from "@/lib/action-result";
 import { structureProblem, type LineShape } from "@/lib/curriculum-convert";
+import { assertMarkAccess } from "@/lib/cover-db";
 import { CONTACT_RESULTS, riskSettingsSchema } from "@/lib/risk";
 import { storeRiskSettings } from "@/lib/risk-db";
 import { phoneKey } from "@/lib/phone";
@@ -556,8 +557,8 @@ export async function deleteGroup(id: number): Promise<ActionState> {
 export async function setAttendance(groupId: number, studentId: number, isoDay: string, mark: MarkKey | null): Promise<ActionState> {
   return tryAction(async () => {
     const user = await requirePermission("attendance.mark");
-    await assertGroupAccess(user, groupId);
     const date = check(v.isoDay(), isoDay);
+    await assertMarkAccess(user, groupId, isoDate(date));
     const key = mark === null ? null : check(z.enum(MARK_KEYS), mark);
     await assertLessonOpen(groupId, date);
     if (!(await db.groupStudent.findFirst({ where: { groupId, studentId } }))) throw new Error("O'quvchi bu guruhda emas");
@@ -571,10 +572,11 @@ export async function setAttendance(groupId: number, studentId: number, isoDay: 
   });
 }
 
-/** Today's lesson for the group (or a refusal): the day must be one of its lesson days and not a holiday. */
+/** Today's lesson for the group (or a refusal): one of its lesson days or a make-up day, not a holiday or cancelled. */
 async function lessonOf(groupId: number, date: Date) {
   const group = await db.group.findUniqueOrThrow({ where: { id: groupId } });
-  if (!lessonWeekdays(group.days).includes(date.getUTCDay())) throw new Error("Bu kunda guruhda dars yo'q");
+  const open = lessonOpenOn(isoDate(date), { noLesson: [], extra: (await makeupDaysOf())(groupId), weekdayLesson: lessonWeekdays(group.days).includes(date.getUTCDay()) });
+  if (!open) throw new Error("Bu kunda guruhda dars yo'q");
   await assertLessonOpen(groupId, date);
   return { group, date };
 }
@@ -585,7 +587,7 @@ const todayLessonOf = (groupId: number) => lessonOf(groupId, centreDay());
 export async function markToday(groupId: number, studentId: number, mark: MarkKey): Promise<ActionState> {
   return tryAction(async () => {
     const user = await requirePermission("attendance.mark");
-    await assertGroupAccess(user, groupId);
+    await assertMarkAccess(user, groupId, isoDate(centreDay()));
     const { date } = await todayLessonOf(groupId);
     const value = markWrite(check(z.enum(MARK_KEYS), mark));
     if (!(await db.groupStudent.findFirst({ where: { groupId, studentId, leftAt: null } }))) throw new Error("O'quvchi bu guruhda emas");
@@ -602,8 +604,9 @@ export async function markToday(groupId: number, studentId: number, mark: MarkKe
 export async function markAllPresent(groupId: number, isoDay?: string): Promise<ActionState> {
   return tryAction(async () => {
     const user = await requirePermission("attendance.mark");
-    await assertGroupAccess(user, groupId);
-    const { group, date } = await lessonOf(groupId, isoDay ? check(v.isoDay(), isoDay) : centreDay());
+    const day = isoDay ? check(v.isoDay(), isoDay) : centreDay();
+    await assertMarkAccess(user, groupId, isoDate(day));
+    const { group, date } = await lessonOf(groupId, day);
     const [all, marked] = await Promise.all([
       db.groupStudent.findMany({ where: { groupId }, select: { studentId: true, status: true, leftAt: true, events: { select: { type: true, date: true }, orderBy: [{ date: "asc" }, { id: "asc" }] } } }),
       db.attendance.findMany({ where: { groupId, date } }),
@@ -969,8 +972,8 @@ const gradeScore = z.number().int().min(1, "Baho 1 dan 5 gacha bo'lishi kerak").
 export async function setGrade(groupId: number, studentId: number, isoDay: string, score: number | null): Promise<ActionState> {
   return tryAction(async () => {
     const user = await requirePermission("grades.manage");
-    await assertGroupAccess(user, groupId);
     const date = check(v.isoDay(), isoDay);
+    await assertMarkAccess(user, groupId, isoDate(date));
     await assertLessonOpen(groupId, date);
     const value = check(gradeScore, score);
     const key = { groupId_studentId_date: { groupId, studentId, date } };
@@ -1274,8 +1277,8 @@ export async function deleteHoliday(id: number): Promise<ActionState> {
 export async function setAbsenceReason(groupId: number, studentId: number, isoDay: string, reasonId: number | null): Promise<ActionState> {
   return tryAction(async () => {
     const user = await requirePermission("attendance.mark");
-    await assertGroupAccess(user, groupId);
     const date = check(v.isoDay(), isoDay);
+    await assertMarkAccess(user, groupId, isoDate(date));
     const mark = await db.attendance.findUnique({ where: { groupId_studentId_date: { groupId, studentId, date } } });
     if (!mark || mark.present) throw new Error("Avval \"kelmadi\" deb belgilang");
     if (reasonId !== null && !(await db.absenceReason.findFirst({ where: { id: reasonId, active: true } }))) throw new Error("Sabab topilmadi");

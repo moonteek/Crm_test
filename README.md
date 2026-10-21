@@ -191,6 +191,12 @@ hisoblanmaydi. Kurslar → "Bo'limlar va darajalar". Bo'limning o'z narxi bo'lis
 Yangilangandan keyin `npm run db:push`, so'ng bir marta `npm run db:curriculum-v2` (eski fan-oylarni 13 darslik darajalarga
 o'tkazadi; qayta ishga tushirish xavfsiz), keyin Web dasturlash / IT Kids ni bo'limlarga ajrating.
 
+**Darsni qoldirish va qo'shimcha dars:** dars sanasi menyusi → "Darsni qoldirish". "Boshqa sanada darsni o'tasizmi?" — Ha:
+qo'shimcha dars kuni, vaqti, xonasi va o'qituvchisi (to'lov va ish haqi o'zgarmaydi; davomat qo'shimcha kunda olinadi,
+jadvalda "Qo'shimcha dars"). Yo'q: "Talabalar va o'qituvchi balansiga ta'sir qilsin" — yoqilgan bo'lsa bayram kabi (to'lov
+olinmaydi), o'chirilgan bo'lsa to'lov saqlanadi. O'rinbosar yoki qo'shimcha dars o'qituvchisi faqat o'sha kuni, faqat o'sha
+dars uchun davomat va baho qo'ya oladi ("O'rinbosar darslaringiz"). Yangilangandan keyin `npm run db:push`.
+
 **Xavfli o'quvchilar:** faol va sinovdagi o'quvchilar — ketma-ket darsga kelmagan, davomati yoki bahosi tushgan,
 daraja imtihonidan o'tmaganlar — sabablari bilan. "Bog'lanildi" tugmasi qo'ng'iroq natijasini yozadi (o'quvchi Tarixida
 ham ko'rinadi); yangi muammo chiqmaguncha o'quvchi "Bog'lanilgan"da turadi. Chegaralar Sozlamalar → Xavfli o'quvchilar'da.

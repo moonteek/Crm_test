@@ -112,3 +112,13 @@ test("a make-up with marks or grades can't be undone or moved", async () => {
   assert.equal(makeupLocked(1, 0), "Qo'shimcha darsda davomat bor — avval uni o'chiring");
   assert.equal(makeupLocked(0, 2), "Qo'shimcha darsda davomat bor — avval uni o'chiring");
 });
+
+test("a make-up day can be marked; the original day and holidays can't", async () => {
+  const { lessonOpenOn } = await import("./lesson-changes");
+  const sets = { noLesson: ["2026-11-16", "2026-11-10"], extra: ["2026-11-21"] };
+  assert.equal(lessonOpenOn("2026-11-21", { ...sets, weekdayLesson: false }), true); // Saturday make-up
+  assert.equal(lessonOpenOn("2026-11-16", { ...sets, weekdayLesson: true }), false); // moved away
+  assert.equal(lessonOpenOn("2026-11-10", { ...sets, weekdayLesson: true }), false); // holiday
+  assert.equal(lessonOpenOn("2026-11-18", { ...sets, weekdayLesson: true }), true);
+  assert.equal(lessonOpenOn("2026-11-19", { ...sets, weekdayLesson: false }), false);
+});

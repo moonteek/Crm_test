@@ -129,3 +129,8 @@ export function coverAllowed(p: {
 export function makeupLocked(marks: number, grades: number): string | null {
   return marks > 0 || grades > 0 ? "Qo'shimcha darsda davomat bor — avval uni o'chiring" : null;
 }
+
+/** Whether a group has a lesson on `day` (ISO): a make-up day, or a usual lesson day that isn't a holiday or cancelled. */
+export function lessonOpenOn(day: string, s: { noLesson: string[]; extra: string[]; weekdayLesson: boolean }) {
+  return s.extra.includes(day) || (s.weekdayLesson && !s.noLesson.includes(day));
+}
