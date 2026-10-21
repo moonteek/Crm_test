@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LogOut, Menu, X } from "lucide-react";
+import { NavBadge } from "./NavBadge";
 import { logout } from "@/app/login/actions";
 import { allowedNav, isActive, navSections, phoneTabs } from "@/lib/nav";
 import type { Theme } from "@/lib/theme";
@@ -13,10 +14,10 @@ import { AlertsBell } from "../AlertsBell";
 import { SearchDialog } from "../SearchDialog";
 import type { AlertItem } from "@/lib/alerts";
 
-type Props = { name: string; roleName: string; permissions: string[]; theme: Theme; alerts: AlertItem[]; canSeeAlerts: boolean };
+type Props = { name: string; roleName: string; permissions: string[]; theme: Theme; alerts: AlertItem[]; canSeeAlerts: boolean; badges?: Record<string, number> };
 
 /** Phones: a slim top bar, a floating pill tab bar, and a bottom sheet with the full menu. */
-export function PhoneNav({ name, roleName, permissions, theme, alerts, canSeeAlerts }: Props) {
+export function PhoneNav({ name, roleName, permissions, theme, alerts, canSeeAlerts, badges = {} }: Props) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const items = allowedNav(permissions);
@@ -112,12 +113,13 @@ export function PhoneNav({ name, roleName, permissions, theme, alerts, canSeeAle
                   <Link
                     key={href}
                     href={href}
-                    className={`press flex flex-col items-center gap-1.5 rounded-2xl border px-2 py-3 text-center text-xs font-medium ${
+                    className={`press relative flex flex-col items-center gap-1.5 rounded-2xl border px-2 py-3 text-center text-xs font-medium ${
                       active ? "border-transparent bg-nav-active text-nav-active-ink" : "border-line bg-raised"
                     }`}
                   >
                     <Icon className="h-5 w-5" strokeWidth={1.75} />
                     <span className="line-clamp-2">{label}</span>
+                    <NavBadge n={badges[href]} className="absolute top-1.5 right-1.5" />
                   </Link>
                 );
               })}

@@ -1,6 +1,6 @@
 import {
   AlertCircle, Banknote, Clock, BarChart3, BookOpen, CalendarDays, DoorOpen, GraduationCap, History, LayoutDashboard,
-  Receipt, Settings, ShoppingBag, Target, UserPlus, Users, UsersRound, Wallet, type LucideIcon,
+  Receipt, Settings, ShieldAlert, ShoppingBag, Target, UserPlus, Users, UsersRound, Wallet, type LucideIcon,
 } from "lucide-react";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon; perm: string | string[] };
@@ -11,6 +11,7 @@ export const NAV: NavItem[] = [
   { href: "/leads", label: "Lidlar", icon: UserPlus, perm: "leads.view" },
   { href: "/sales", label: "Sotuv va KPI", icon: Target, perm: "sales.view" },
   { href: "/students", label: "O'quvchilar", icon: Users, perm: "students.view" },
+  { href: "/risk", label: "Xavfli o'quvchilar", icon: ShieldAlert, perm: "risk.view" },
   { href: "/groups", label: "Guruhlar", icon: UsersRound, perm: "groups.view" },
   { href: "/schedule", label: "Dars jadvali", icon: CalendarDays, perm: "groups.view" },
   { href: "/teachers", label: "O'qituvchilar", icon: GraduationCap, perm: "teachers.view" },
@@ -46,7 +47,7 @@ export const isActive = (href: string, pathname: string) => (href === "/" ? path
 /** The sidebar's groups, in order; the first has no title (Bosh sahifa, Analitika). */
 export const NAV_SECTIONS: { title: string | null; hrefs: string[] }[] = [
   { title: null, hrefs: ["/", "/analytics"] },
-  { title: "O'quv", hrefs: ["/students", "/groups", "/schedule", "/teachers", "/availability", "/courses", "/rooms"] },
+  { title: "O'quv", hrefs: ["/students", "/risk", "/groups", "/schedule", "/teachers", "/availability", "/courses", "/rooms"] },
   { title: "Sotuv", hrefs: ["/leads", "/sales"] },
   { title: "Moliya", hrefs: ["/payments", "/debtors", "/finance", "/salaries", "/shop"] },
   { title: "Tizim", hrefs: ["/activity", "/settings"] },

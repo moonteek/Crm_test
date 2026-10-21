@@ -9,20 +9,21 @@ import type { Theme } from "@/lib/theme";
 import { Logo, LogoMark } from "./brand/Logo";
 import { ThemeToggle } from "./ThemeToggle";
 import { PhoneNav } from "./nav/PhoneNav";
+import { NavBadge } from "./nav/NavBadge";
 import { AlertsBell } from "./AlertsBell";
 import { SearchDialog } from "./SearchDialog";
 import type { AlertItem } from "@/lib/alerts";
 
-type Props = { name: string; roleName: string; permissions: string[]; theme: Theme; alerts: AlertItem[]; canSeeAlerts: boolean };
+type Props = { name: string; roleName: string; permissions: string[]; theme: Theme; alerts: AlertItem[]; canSeeAlerts: boolean; badges?: Record<string, number> };
 
 /** Desktop sidebar (icon rail on tablets) plus the phone navigation. */
-export function Sidebar({ name, roleName, permissions, theme, alerts, canSeeAlerts }: Props) {
+export function Sidebar({ name, roleName, permissions, theme, alerts, canSeeAlerts, badges = {} }: Props) {
   const pathname = usePathname();
   const sections = navSections(permissions);
 
   return (
     <>
-      <PhoneNav name={name} roleName={roleName} permissions={permissions} theme={theme} alerts={alerts} canSeeAlerts={canSeeAlerts} />
+      <PhoneNav name={name} roleName={roleName} permissions={permissions} theme={theme} alerts={alerts} canSeeAlerts={canSeeAlerts} badges={badges} />
 
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-16 flex-col border-r border-line bg-nav md:flex lg:w-64">
         <div className="flex flex-col items-center gap-1 py-3 lg:h-16 lg:flex-row lg:justify-between lg:py-0 lg:pr-3 lg:pl-5">
@@ -48,12 +49,13 @@ export function Sidebar({ name, roleName, permissions, theme, alerts, canSeeAler
                 href={href}
                 title={label}
                 aria-current={active ? "page" : undefined}
-                className={`press flex items-center justify-center gap-3 rounded-full px-3 py-2 text-sm font-medium lg:justify-start ${
+                className={`press relative flex items-center justify-center gap-3 rounded-full px-3 py-2 text-sm font-medium lg:justify-start ${
                   active ? "bg-nav-active text-nav-active-ink" : "text-muted hover:bg-ink/5 hover:text-ink"
                 }`}
               >
                 <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
                 <span className="hidden truncate lg:inline">{label}</span>
+                <NavBadge n={badges[href]} className="absolute top-0 right-0.5 lg:static lg:ml-auto" />
               </Link>
             );
               })}

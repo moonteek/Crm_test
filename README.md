@@ -184,6 +184,11 @@ to'lov yonidagi 🧾 belgisi chekni istalgan vaqtda qayta ochadi; To'lovlar sahi
 Ko'rinishi Sozlamalar → Chek'da (markaz nomi, telefon, manzil, logotip, qaysi qatorlar). Yangilangandan keyin
 `npm install` va `npm run db:push`. Chop etishda printer sozlamasida qog'oz o'lchamini rulon (80/58 mm) qilib tanlang.
 
+**Xavfli o'quvchilar:** faol va sinovdagi o'quvchilar — ketma-ket darsga kelmagan, davomati yoki bahosi tushgan,
+daraja imtihonidan o'tmaganlar — sabablari bilan. "Bog'lanildi" tugmasi qo'ng'iroq natijasini yozadi (o'quvchi Tarixida
+ham ko'rinadi); yangi muammo chiqmaguncha o'quvchi "Bog'lanilgan"da turadi. Chegaralar Sozlamalar → Xavfli o'quvchilar'da.
+Yangilangandan keyin `npm run db:push` va "Menejer" rolida "Xavfli o'quvchilar" ruxsatini belgilang.
+
 **Dars jadvali:** kompyuterda "Gorizontal" ko'rinish — xonalar pastga, 08:00–22:00 soatlar yon tomonga; har bir dars
 o'z vaqtida kartochka (guruh, kurs, o'qituvchi, vaqt, o'quvchilar / o'rinlar, o'tilgan darslar, daraja). "Vertikal"
 — avvalgi jadval; telefonda ro'yxat. Kartochka rangi kursdan: Kurslar → tahrirlash → "Rang" (tanlanmasa avtomatik).
