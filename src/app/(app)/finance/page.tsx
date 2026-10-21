@@ -6,8 +6,9 @@ import { requirePage } from "@/lib/auth";
 import { can } from "@/lib/access";
 import { date, EXPENSE_CATEGORIES, isoDate, money, MONTHS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
-import { Empty, Field, PageHeader, SubmitRow } from "@/components/ui";
+import { Empty, Field, PageHeader } from "@/components/ui";
 import { createExpense, deleteExpense } from "../actions";
+import { ActionButton, ActionForm } from "@/components/ActionForm";
 
 export default async function FinancePage({ searchParams }: { searchParams: Promise<{ y?: string }> }) {
   const user = await requirePage("finance.view");
@@ -35,7 +36,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
           <Link href={`/finance?y=${year + 1}`} className="btn-secondary px-2"><ChevronRight className="h-4 w-4" /></Link>
         </div>
         {manage && <Modal title="Yangi xarajat" trigger={<><Plus className="h-4 w-4" /> Xarajat qo&apos;shish</>}>
-          <form action={createExpense} className="space-y-3">
+          <ActionForm action={createExpense} className="space-y-3">
             <Field label="Nomi"><input name="title" className="input" required placeholder="Oktabr ijarasi" /></Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Summa"><input name="amount" type="number" min={1} className="input" required /></Field>
@@ -46,8 +47,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
               </Field>
             </div>
             <Field label="Sana"><input name="date" type="date" className="input" defaultValue={isoDate(new Date())} /></Field>
-            <SubmitRow />
-          </form>
+          </ActionForm>
         </Modal>}
       </PageHeader>
 
@@ -89,9 +89,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
                 <td data-label="Summa" className="font-semibold text-danger">{money(e.amount)}</td>
                 {manage && (
                   <td>
-                    {!e.salaryPayment && <form action={deleteExpense.bind(null, e.id)}>
-                      <button className="text-faint hover:text-danger" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
-                    </form>}
+                    {!e.salaryPayment && <ActionButton action={deleteExpense.bind(null, e.id)} className="text-faint hover:text-danger" label="O'chirish"><Trash2 className="h-4 w-4" /></ActionButton>}
                   </td>
                 )}
               </tr>

@@ -2,7 +2,7 @@ import { CheckCircle2, CircleAlert, Send, Unlink } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
 import { telegramClient } from "@/lib/telegram-client";
-import { ActionForm } from "@/components/ActionForm";
+import { ActionButton, ActionForm } from "@/components/ActionForm";
 import { Empty } from "@/components/ui";
 import { sendTelegramTest, unlinkTelegram } from "../../actions";
 
@@ -71,9 +71,7 @@ export default async function TelegramSettingsPage() {
                   <p className="truncate font-medium">{u.name}</p>
                   <p className="label-mono mt-0.5">{u.role.name}</p>
                 </div>
-                <form action={unlinkTelegram.bind(null, u.id)}>
-                  <button className="btn-ghost px-2 text-danger" title="Uzish" aria-label={`${u.name} — Telegramni uzish`}><Unlink className="h-4 w-4" /></button>
-                </form>
+                <ActionButton action={unlinkTelegram.bind(null, u.id)} className="btn-ghost px-2 text-danger" title="Uzish" label={`${u.name} — Telegramni uzish`}><Unlink className="h-4 w-4" /></ActionButton>
               </li>
             ))}
           </ul>

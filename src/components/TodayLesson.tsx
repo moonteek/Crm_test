@@ -3,6 +3,7 @@
 import { useOptimistic, useState, useTransition } from "react";
 import { Check, Clock, X } from "lucide-react";
 import { markAllPresent, markToday, setAbsenceReason } from "@/app/(app)/actions";
+import { answer } from "@/lib/action-result";
 
 type MarkKey = "present" | "late" | "absent";
 type Row = { id: number; name: string; mark: MarkKey | null; reasonId: number | null };
@@ -26,13 +27,13 @@ export function TodayLesson({
     start(async () => {
       setMark([id, mark]);
       setError(null);
-      try { await markToday(groupId, id, mark); } catch (e) { setError((e as Error).message); }
+      setError(await answer(markToday(groupId, id, mark)));
     });
   const all = () =>
     start(async () => {
       for (const r of rows) if (!marks.get(r.id)) setMark([r.id, "present"]);
       setError(null);
-      try { await markAllPresent(groupId); } catch (e) { setError((e as Error).message); }
+      setError(await answer(markAllPresent(groupId)));
     });
 
   return (
@@ -61,7 +62,7 @@ export function TodayLesson({
                     aria-label={`${r.name} — kelmaganlik sababi`}
                     onChange={(e) => start(async () => {
                       setError(null);
-                      try { await setAbsenceReason(groupId, r.id, day, e.target.value ? Number(e.target.value) : null); } catch (err) { setError((err as Error).message); }
+                      setError(await answer(setAbsenceReason(groupId, r.id, day, e.target.value ? Number(e.target.value) : null)));
                     })}
                   >
                     <option value="">Sabab…</option>

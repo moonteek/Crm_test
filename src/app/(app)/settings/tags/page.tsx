@@ -3,9 +3,10 @@ import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
 import { TAG_COLORS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
-import { Empty, Field, SubmitRow } from "@/components/ui";
+import { Empty, Field } from "@/components/ui";
 import { TagChip } from "@/components/students/TagChip";
 import { createTag, toggleTag, updateTag } from "../../actions";
+import { ActionButton, ActionForm } from "@/components/ActionForm";
 
 const COLOR_LABEL: Record<string, string> = { amber: "Sariq", green: "Yashil", red: "Qizil", orange: "To'q sariq", grey: "Kulrang" };
 
@@ -28,11 +29,11 @@ export default async function TagsPage() {
           <h2 className="font-semibold">Teglar</h2>
           <p className="mt-0.5 text-sm text-muted">O&apos;quvchilarga biriktiriladi va ro&apos;yxatda filtr sifatida ishlatiladi</p>
         </div>
-        <form action={createTag} className="flex w-full flex-wrap gap-2 sm:w-auto">
+        <ActionForm action={createTag} className="flex w-full flex-wrap gap-2 sm:w-auto" submit={null}>
           <input name="name" className="input min-w-0 flex-1 sm:w-56" placeholder="Masalan: Aksiya 2+1" required maxLength={40} aria-label="Teg nomi" />
           <div className="w-32"><ColorSelect /></div>
           <button className="btn-primary shrink-0"><Plus className="h-4 w-4" /> Qo&apos;shish</button>
-        </form>
+        </ActionForm>
       </div>
       {tags.length === 0 ? (
         <Empty text="Teglar hali qo'shilmagan" />
@@ -47,17 +48,14 @@ export default async function TagsPage() {
               </div>
               <div className="flex gap-1">
                 <Modal title="Tegni tahrirlash" triggerClassName="btn-ghost px-2" trigger={<Pencil className="h-4 w-4" aria-label="Tahrirlash" />}>
-                  <form action={updateTag.bind(null, t.id)} className="space-y-3">
+                  <ActionForm action={updateTag.bind(null, t.id)} className="space-y-3">
                     <Field label="Nomi"><input name="name" className="input" required maxLength={40} defaultValue={t.name} /></Field>
                     <Field label="Rang"><ColorSelect value={t.color} /></Field>
-                    <SubmitRow />
-                  </form>
+                  </ActionForm>
                 </Modal>
-                <form action={toggleTag.bind(null, t.id)}>
-                  <button className="btn-ghost px-2" aria-label={t.active ? "O'chirish" : "Yoqish"} title={t.active ? "O'chirish (o'quvchilarda qoladi)" : "Yoqish"}>
+                <ActionButton action={toggleTag.bind(null, t.id)} className="btn-ghost px-2" label={t.active ? "O'chirish" : "Yoqish"} title={t.active ? "O'chirish (o'quvchilarda qoladi)" : "Yoqish"}>
                     {t.active ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </form>
+                  </ActionButton>
               </div>
             </li>
           ))}

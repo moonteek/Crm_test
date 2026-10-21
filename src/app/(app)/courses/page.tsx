@@ -5,10 +5,11 @@ import { requirePage } from "@/lib/auth";
 import { can } from "@/lib/access";
 import { money } from "@/lib/format";
 import { Modal } from "@/components/Modal";
-import { Empty, Field, PageHeader, SubmitRow } from "@/components/ui";
+import { Empty, Field, PageHeader } from "@/components/ui";
 import { createCourse, updateCourse } from "../actions";
 import { SubjectEditor } from "@/components/SubjectEditor";
 import { COURSE_COLOR_LABEL, COURSE_COLORS, COURSE_TONE, courseColor } from "@/lib/timetable";
+import { ActionForm } from "@/components/ActionForm";
 
 type C = { name: string; price: number; durationMon: number; lessonMin: number; description: string | null; passPercent: number; color: string | null; subjects?: unknown[] };
 
@@ -48,7 +49,7 @@ export default async function CoursesPage() {
       <PageHeader title="Kurslar" subtitle={`${courses.length} ta kurs`}>
         <ExportButtons href="/courses/export" />
         {manage && <Modal title="Yangi kurs" trigger={<><Plus className="h-4 w-4" /> Kurs qo&apos;shish</>}>
-          <form action={createCourse} className="space-y-3"><CourseFields /><SubmitRow /></form>
+          <ActionForm action={createCourse} className="space-y-3"><CourseFields /></ActionForm>
         </Modal>}
       </PageHeader>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -57,7 +58,7 @@ export default async function CoursesPage() {
             <div className="flex items-start justify-between gap-2">
               <h3 className="text-lg font-semibold">{c.name}</h3>
               {manage && <Modal title="Kursni tahrirlash" triggerClassName="text-faint hover:text-ink" trigger={<Pencil className="h-4 w-4" />}>
-                <form action={updateCourse.bind(null, c.id)} className="space-y-3"><CourseFields c={c} /><SubmitRow /></form>
+                <ActionForm action={updateCourse.bind(null, c.id)} className="space-y-3"><CourseFields c={c} /></ActionForm>
               </Modal>}
             </div>
             <p className="mt-1 text-sm text-muted">{c.description}</p>

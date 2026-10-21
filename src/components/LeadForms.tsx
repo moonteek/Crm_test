@@ -1,6 +1,7 @@
 import { CALL_RESULTS, LOST_REASONS } from "@/lib/format";
-import { Field, SubmitRow } from "./ui";
+import { Field } from "./ui";
 import { addLeadActivity, setLeadStatus } from "@/app/(app)/actions";
+import { ActionForm } from "@/components/ActionForm";
 
 /** Local date-time string for <input type="datetime-local">, defaulting to tomorrow 10:00. */
 function tomorrowAt10() {
@@ -13,7 +14,7 @@ function tomorrowAt10() {
 
 export function ActivityForm({ leadId }: { leadId: number }) {
   return (
-    <form action={addLeadActivity.bind(null, leadId)} className="space-y-3">
+    <ActionForm action={addLeadActivity.bind(null, leadId)} className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <Field label="Turi">
           <select name="type" className="input" defaultValue="CALL">
@@ -35,20 +36,18 @@ export function ActivityForm({ leadId }: { leadId: number }) {
       <Field label="Keyingi aloqa (eslatma)">
         <input name="nextActionAt" type="datetime-local" className="input" defaultValue={tomorrowAt10()} />
       </Field>
-      <SubmitRow />
-    </form>
+    </ActionForm>
   );
 }
 
 export function LostForm({ leadId }: { leadId: number }) {
   return (
-    <form action={setLeadStatus.bind(null, leadId, "LOST")} className="space-y-3">
+    <ActionForm action={setLeadStatus.bind(null, leadId, "LOST")} className="space-y-3" submitText="Rad etdi deb belgilash">
       <Field label="Nima uchun rad etdi?">
         <select name="lostReason" className="input" required>
           {LOST_REASONS.map((r) => <option key={r}>{r}</option>)}
         </select>
       </Field>
-      <SubmitRow text="Rad etdi deb belgilash" />
-    </form>
+    </ActionForm>
   );
 }

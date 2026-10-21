@@ -11,6 +11,7 @@ import { redirect } from "next/navigation";
 import { receiptDataFor } from "@/lib/receipt-db";
 import { loadPayments } from "@/lib/lists/payments";
 import { deletePayment } from "../actions";
+import { ActionButton } from "@/components/ActionForm";
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const monthLabel = (d: Date | null) => (d ? `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}` : "—");
@@ -122,9 +123,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                       <PaymentEditDialog payment={{ id: p.id, amount: p.amount, method: p.method, date: iso(p.date), month: p.month ? iso(p.month).slice(0, 7) : null, note: p.note, student: p.student.name }} />
                     )}
                     {allow.remove && (
-                      <form action={deletePayment.bind(null, p.id)}>
-                        <button className="text-faint hover:text-danger" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
-                      </form>
+                      <ActionButton action={deletePayment.bind(null, p.id)} className="text-faint hover:text-danger" label="O'chirish"><Trash2 className="h-4 w-4" /></ActionButton>
                     )}
                   </div>
                 </td>

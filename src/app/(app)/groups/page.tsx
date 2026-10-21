@@ -11,6 +11,7 @@ import { CurriculumBadge, CurriculumBar } from "@/components/CurriculumBar";
 import { Empty, PageHeader, Segmented } from "@/components/ui";
 import { restoreGroup } from "../actions";
 import { NewGroupDialog } from "@/components/NewGroupDialog";
+import { ActionButton } from "@/components/ActionForm";
 
 export default async function GroupsPage({ searchParams }: { searchParams: Promise<GroupFilters> }) {
   const user = await requirePage("groups.view");
@@ -90,9 +91,9 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
               </div>
             </Link>
             {archive && can(user, "groups.manage") && (
-              <form action={restoreGroup.bind(null, g.id)} className="border-t border-line px-5 py-3">
-                <button className="btn-ghost -ml-2 px-2 text-sm"><RotateCcw className="h-4 w-4" /> Qayta tiklash</button>
-              </form>
+              <div className="border-t border-line px-5 py-3">
+                <ActionButton action={restoreGroup.bind(null, g.id)} className="btn-ghost -ml-2 px-2 text-sm" alignLeft><RotateCcw className="h-4 w-4" /> Qayta tiklash</ActionButton>
+              </div>
             )}
           </div>
         ))}

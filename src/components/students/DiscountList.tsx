@@ -3,6 +3,7 @@ import { date, money, MONTHS } from "@/lib/format";
 import { canDelete, canEnd, discountState } from "@/lib/discounts";
 import { deleteDiscount, endDiscount } from "@/app/(app)/actions";
 import { Empty } from "@/components/ui";
+import { ActionButton } from "@/components/ActionForm";
 
 type Row = { id: number; amount: number; from: Date; to: Date; reason: string | null; createdAt: Date; user: { name: string } | null; group: string };
 const month = (d: Date) => `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
@@ -30,14 +31,10 @@ export function DiscountList({ rows, canManage }: { rows: Row[]; canManage: bool
                 {canManage && (
                   <td>
                     {canDelete(d, today) && (
-                      <form action={deleteDiscount.bind(null, d.id)}>
-                        <button className="btn-ghost px-2 hover:text-danger" aria-label="O'chirish" title="O'chirish"><Trash2 className="h-4 w-4" /></button>
-                      </form>
+                      <ActionButton action={deleteDiscount.bind(null, d.id)} className="btn-ghost px-2 hover:text-danger" label="O'chirish" title="O'chirish"><Trash2 className="h-4 w-4" /></ActionButton>
                     )}
                     {canEnd(d, today) && (
-                      <form action={endDiscount.bind(null, d.id)}>
-                        <button className="btn-ghost px-2 text-xs" title="Shu oydan boshlab to'xtatish"><CircleStop className="h-4 w-4" /> Tugatish</button>
-                      </form>
+                      <ActionButton action={endDiscount.bind(null, d.id)} className="btn-ghost px-2 text-xs" title="Shu oydan boshlab to'xtatish"><CircleStop className="h-4 w-4" /> Tugatish</ActionButton>
                     )}
                   </td>
                 )}

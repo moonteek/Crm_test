@@ -5,8 +5,9 @@ import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/access";
 import { date } from "@/lib/format";
 import { Modal } from "@/components/Modal";
-import { Field, PageHeader, SubmitRow } from "@/components/ui";
+import { Field, PageHeader } from "@/components/ui";
 import { createUser, setUserActive, updateUser } from "../actions";
+import { ActionButton, ActionForm } from "@/components/ActionForm";
 
 type Role = { id: number; name: string };
 type Staff = { name: string; phone: string; roleId: number; isTeacher: boolean; isSales: boolean };
@@ -50,10 +51,9 @@ export default async function StaffPage() {
     <>
       <PageHeader title="Xodimlar" subtitle="Har bir xodim o'z roli ruxsat bergan bo'limlarni ko'radi">
         <Modal title="Yangi xodim" trigger={<><Plus className="h-4 w-4" /> Xodim qo&apos;shish</>}>
-          <form action={createUser} className="space-y-3">
+          <ActionForm action={createUser} className="space-y-3">
             <StaffFields roles={roles} />
-            <SubmitRow />
-          </form>
+          </ActionForm>
         </Modal>
       </PageHeader>
       <div className="card overflow-x-auto">
@@ -79,17 +79,14 @@ export default async function StaffPage() {
                 <td>
                   <div className="flex items-center justify-end gap-3">
                     <Modal title="Xodimni tahrirlash" triggerClassName="text-faint hover:text-ink" trigger={<Pencil className="h-4 w-4" />}>
-                      <form action={updateUser.bind(null, u.id)} className="space-y-3">
+                      <ActionForm action={updateUser.bind(null, u.id)} className="space-y-3">
                         <StaffFields roles={roles} u={u} />
-                        <SubmitRow />
-                      </form>
+                      </ActionForm>
                     </Modal>
                     {u.id !== me.id && (
-                      <form action={setUserActive.bind(null, u.id, !u.active)}>
-                        <button className={`text-xs hover:underline ${u.active ? "text-danger" : "text-success"}`}>
+                      <ActionButton action={setUserActive.bind(null, u.id, !u.active)} className={`text-xs hover:underline ${u.active ? "text-danger" : "text-success"}`}>
                           {u.active ? "Bloklash" : "Faollashtirish"}
-                        </button>
-                      </form>
+                        </ActionButton>
                     )}
                   </div>
                 </td>

@@ -3,9 +3,10 @@ import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
 import { GROUP_DAYS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
-import { Empty, Field, PageHeader, SubmitRow } from "@/components/ui";
+import { Empty, Field, PageHeader } from "@/components/ui";
 import { ExportButtons } from "@/components/ExportButtons";
 import { createRoom, deleteRoom } from "../actions";
+import { ActionButton, ActionForm } from "@/components/ActionForm";
 
 export default async function RoomsPage() {
   await requirePage("rooms.manage");
@@ -18,11 +19,10 @@ export default async function RoomsPage() {
       <PageHeader title="Xonalar" subtitle="Xonalar va ularning bandligi">
         <ExportButtons href="/rooms/export" />
         <Modal title="Yangi xona" trigger={<><Plus className="h-4 w-4" /> Xona qo&apos;shish</>}>
-          <form action={createRoom} className="space-y-3">
+          <ActionForm action={createRoom} className="space-y-3">
             <Field label="Xona nomi"><input name="name" className="input" required placeholder="1-xona" /></Field>
             <Field label="Sig'imi (o'rin)"><input name="capacity" type="number" className="input" defaultValue={15} /></Field>
-            <SubmitRow />
-          </form>
+          </ActionForm>
         </Modal>
       </PageHeader>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -35,9 +35,7 @@ export default async function RoomsPage() {
                 <span className="text-sm text-muted">· {r.capacity} o&apos;rin</span>
               </div>
               {(
-                <form action={deleteRoom.bind(null, r.id)}>
-                  <button className="text-faint hover:text-danger" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
-                </form>
+                <ActionButton action={deleteRoom.bind(null, r.id)} className="text-faint hover:text-danger" label="O'chirish"><Trash2 className="h-4 w-4" /></ActionButton>
               )}
             </div>
             <div className="mt-3 space-y-1 text-sm">

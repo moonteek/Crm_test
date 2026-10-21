@@ -7,8 +7,9 @@ import { can, groupScope, leadScope } from "@/lib/access";
 import { ACTIVITY_TYPES, CALL_RESULTS, date, LEAD_STATUSES } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { ActivityForm, LostForm } from "@/components/LeadForms";
-import { Field, SubmitRow } from "@/components/ui";
+import { Field } from "@/components/ui";
 import { assignLead, convertLead, deleteLead, setLeadStatus } from "../../actions";
+import { ActionButton, ActionForm } from "@/components/ActionForm";
 
 const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   CALL: Phone, MESSAGE: MessageCircle, MEETING: Users, NOTE: StickyNote, STATUS: ArrowRightLeft,
@@ -59,7 +60,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
             {manage && (
               <div className="mt-5 flex flex-wrap gap-2 border-t border-line pt-4">
                 {open && lead.status !== "TRIAL" && (
-                  <form action={setLeadStatus.bind(null, lead.id, "TRIAL")}><button className="btn-secondary">Sinov darsiga yozildi</button></form>
+                  <ActionButton action={setLeadStatus.bind(null, lead.id, "TRIAL")} className="btn-secondary">Sinov darsiga yozildi</ActionButton>
                 )}
                 {open && (
                   <Modal title="Rad etdi" triggerClassName="btn-secondary" trigger="Rad etdi">
@@ -67,24 +68,21 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                   </Modal>
                 )}
                 {!open && lead.status === "LOST" && (
-                  <form action={setLeadStatus.bind(null, lead.id, "CONTACTED")}><button className="btn-secondary">Qayta ochish</button></form>
+                  <ActionButton action={setLeadStatus.bind(null, lead.id, "CONTACTED")} className="btn-secondary">Qayta ochish</ActionButton>
                 )}
                 {open && can(user, "students.manage") && (
                   <Modal title="O'quvchiga aylantirish" trigger="✓ O'qishga yozildi">
-                    <form action={convertLead.bind(null, lead.id)} className="space-y-3">
+                    <ActionForm action={convertLead.bind(null, lead.id)} className="space-y-3" submitText="O'quvchi qilish">
                       <Field label="Guruh">
                         <select name="groupId" className="input">
                           <option value="">Hozircha guruhsiz</option>
                           {groups.map((g) => <option key={g.id} value={g.id}>{g.name} — {g.course.name} ({g.time})</option>)}
                         </select>
                       </Field>
-                      <SubmitRow text="O'quvchi qilish" />
-                    </form>
+                    </ActionForm>
                   </Modal>
                 )}
-                <form action={deleteLead.bind(null, lead.id)}>
-                  <button className="btn-danger"><Trash2 className="h-4 w-4" /></button>
-                </form>
+                <ActionButton action={deleteLead.bind(null, lead.id)} className="btn-danger"><Trash2 className="h-4 w-4" /></ActionButton>
               </div>
             )}
           </div>
@@ -92,13 +90,13 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
           {manage && !can(user, "leads.own") && (
             <div className="card p-5">
               <h2 className="mb-3 font-semibold">Sotuvchiga biriktirish</h2>
-              <form action={assignLead.bind(null, lead.id)} className="flex gap-2">
+              <ActionForm action={assignLead.bind(null, lead.id)} className="flex gap-2" submit={null}>
                 <select name="assignedToId" className="input" defaultValue={lead.assignedToId ?? ""}>
                   <option value="">Biriktirilmagan</option>
                   {sellers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
                 <button className="btn-primary">Saqlash</button>
-              </form>
+              </ActionForm>
             </div>
           )}
         </div>

@@ -3,8 +3,9 @@ import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
 import { ALL_PERMISSIONS, PERMISSION_GROUPS, parsePermissions } from "@/lib/permissions";
 import { Modal } from "@/components/Modal";
-import { Field, PageHeader, SubmitRow } from "@/components/ui";
+import { Field, PageHeader } from "@/components/ui";
 import { createRole, deleteRole, updateRole } from "../../actions";
+import { ActionButton, ActionForm } from "@/components/ActionForm";
 
 function PermissionChecklist({ selected, disabled }: { selected: Set<string>; disabled?: boolean }) {
   return (
@@ -44,11 +45,10 @@ export default async function RolesPage() {
     <>
       <PageHeader title="Rollar va ruxsatlar" subtitle="Rol yarating va u qaysi bo'limlarni ko'rishi va nima qila olishini belgilang">
         <Modal wide title="Yangi rol" trigger={<><Plus className="h-4 w-4" /> Rol qo&apos;shish</>}>
-          <form action={createRole} className="space-y-3">
+          <ActionForm action={createRole} className="space-y-3">
             <Field label="Rol nomi"><input name="name" className="input" required placeholder="Masalan: Kassir, Filial menejeri" /></Field>
             <PermissionChecklist selected={new Set()} />
-            <SubmitRow />
-          </form>
+          </ActionForm>
         </Modal>
       </PageHeader>
 
@@ -68,16 +68,13 @@ export default async function RolesPage() {
                 {!r.isSystem && (
                   <div className="flex items-center gap-3">
                     <Modal wide title={`Rolni tahrirlash — ${r.name}`} triggerClassName="text-faint hover:text-ink" trigger={<Pencil className="h-4 w-4" />}>
-                      <form action={updateRole.bind(null, r.id)} className="space-y-3">
+                      <ActionForm action={updateRole.bind(null, r.id)} className="space-y-3">
                         <Field label="Rol nomi"><input name="name" className="input" required defaultValue={r.name} /></Field>
                         <PermissionChecklist selected={perms} />
-                        <SubmitRow />
-                      </form>
+                      </ActionForm>
                     </Modal>
                     {r._count.users === 0 && (
-                      <form action={deleteRole.bind(null, r.id)}>
-                        <button className="text-faint hover:text-danger" aria-label="O'chirish"><Trash2 className="h-4 w-4" /></button>
-                      </form>
+                      <ActionButton action={deleteRole.bind(null, r.id)} className="text-faint hover:text-danger" label="O'chirish"><Trash2 className="h-4 w-4" /></ActionButton>
                     )}
                   </div>
                 )}
