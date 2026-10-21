@@ -15,7 +15,8 @@
     "db:migrate-statuses": "tsx prisma/migrate-statuses.ts",
     "db:lesson-length": "tsx prisma/lesson-length.ts",
     "db:notes-from-izoh": "tsx prisma/notes-from-izoh.ts",
-    "db:absence-reasons": "tsx prisma/absence-reasons.ts"
+    "db:absence-reasons": "tsx prisma/absence-reasons.ts",
+    "db:curriculum-v2": "tsx prisma/curriculum-v2.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -88,17 +88,26 @@ model Course {
   // a level exam is passed at this percentage of the maximum score
   passPercent Int      @default(60)
   subjects    Subject[]
+  sections    Section[]
+  // PNG/JPG data URL for the course card (src/lib/image.ts imageProblem)
+  image       String?
   // timetable card colour, one of COURSE_COLORS (src/lib/timetable.ts); empty = picked from the id
   color       String?
 }
 
 /// One subject of a course, so many months (= levels) long, in course order (src/lib/curriculum.ts).
+// a level line of a section: `levels` levels of `lessons` lessons each (src/lib/curriculum.ts)
 model Subject {
   id        Int      @id @default(autoincrement())
   courseId  Int
   course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  sectionId Int?
+  section   Section? @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   name      String
-  months    Int
+  levels    Int      @default(1)
+  lessons   Int      @default(13)
+  // legacy (month-based curriculum) — read only by `npm run db:curriculum-v2`
+  months    Int      @default(1)
   position  Int
   createdAt DateTime @default(now())
   startingGroups Group[]
@@ -138,7 +147,10 @@ model Group {
   exams     Exam[]
   prices    GroupPrice[]
   teachers  GroupTeacher[]
-  // where in the course the group began (empty = the first subject); levels count a month from startDate
+  // the course section the group studies (Frontend / Backend …); levels count held lessons from startDate
+  sectionId      Int?
+  section        Section? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  // where in the section the group began (empty = its first level line)
   startSubjectId Int?
   startSubject   Subject? @relation(fields: [startSubjectId], references: [id], onDelete: SetNull)
   startLevel     Int      @default(1)
@@ -612,4 +624,20 @@ model RiskContact {
   createdAt DateTime @default(now())
 
   @@index([studentId])
+}
+
+// a part of a course (Web dasturlash → Frontend, Backend); every course has at least one
+model Section {
+  id        Int       @id @default(autoincrement())
+  courseId  Int
+  course    Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  name      String
+  position  Int
+  // monthly price for new groups of this section; empty = the course price
+  price     Int?
+  createdAt DateTime  @default(now())
+  subjects  Subject[]
+  groups    Group[]
+
+  @@unique([courseId, name])
 }
