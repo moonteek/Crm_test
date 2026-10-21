@@ -86,3 +86,10 @@ test("the risk permission exists for roles", async () => {
   const { ALL_PERMISSIONS } = await import("./permissions");
   assert.ok(ALL_PERMISSIONS.includes("risk.view"));
 });
+
+test("the attendance lookback always reaches a full run of absences, even with a short period", async () => {
+  const { lookbackDays } = await import("./risk");
+  assert.equal(lookbackDays(RISK_DEFAULTS), 59); // 2 × 30 − 1 covers 2 in a row
+  assert.ok(lookbackDays({ ...RISK_DEFAULTS, days: 7, streak: 6 }) >= 6 * 14); // weekly lessons: 6 absences need 6 weeks
+  assert.ok(lookbackDays({ ...RISK_DEFAULTS, days: 7, streak: 10 }) >= 10 * 14);
+});

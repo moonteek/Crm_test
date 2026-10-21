@@ -45,3 +45,20 @@ test("teacher filter", () => {
   assert.deepEqual(rows[0].groups.map((g) => g.id), [2]);
   assert.deepEqual(ids(filterRows([A, B], { teacher: "10", tab: "all" })), [1, 2]);
 });
+
+test("level exams are matched to each membership quickly, even for a big centre", async () => {
+  const { levelExamsByMembership } = await import("./risk");
+  const day = new Date("2026-10-01T00:00:00Z");
+  // 900 groups × 20 students, 10 level exams per group with every student scored (the nested-loop version took ~1 s)
+  const members = Array.from({ length: 18000 }, (_, i) => ({ groupId: Math.floor(i / 20), studentId: i }));
+  const exams = Array.from({ length: 9000 }, (_, i) => {
+    const groupId = Math.floor(i / 10);
+    return { groupId, date: day, level: (i % 10) + 1, maxScore: 100, results: Array.from({ length: 20 }, (_, j) => ({ studentId: groupId * 20 + j, score: 50 })) };
+  });
+  const t = performance.now();
+  const map = levelExamsByMembership(exams, members);
+  const ms = performance.now() - t;
+  assert.equal(map.get("5:100")!.length, 10);
+  assert.equal(map.get("5:100")![0].score, 50);
+  assert.ok(ms < 400, `took ${Math.round(ms)} ms`);
+});

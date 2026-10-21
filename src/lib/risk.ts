@@ -125,6 +125,14 @@ export function membershipReasons(f: MembershipFacts, s: RiskSettings, today: Da
   return out;
 }
 
+/**
+ * How many days of marks to load: the window and the period before it, but always enough for a full run of absences
+ * even with weekly lessons (two weeks per lesson to spare).
+ */
+export function lookbackDays(s: RiskSettings): number {
+  return Math.max(2 * s.days - 1, s.streak * 14);
+}
+
 /** The newest trigger among the reasons (null when there are none). */
 export function newestTrigger(reasons: Reason[]): Date | null {
   return reasons.reduce<Date | null>((a, r) => (!a || r.trigger > a ? r.trigger : a), null);
@@ -166,4 +174,25 @@ export function filterRows(rows: RiskRow[], p: RiskParams): RiskRow[] {
     }))
     .filter((r) => r.groups.length > 0)
     .sort((a, b) => reasonCount(b) - reasonCount(a) || b.newest.getTime() - a.newest.getTime());
+}
+
+type ExamRow = { groupId: number; date: Date; level: number | null; maxScore: number; results: { studentId: number; score: number }[] };
+
+/** Each membership's level exams with its own score (null = not scored), keyed "groupId:studentId". */
+export function levelExamsByMembership(exams: ExamRow[], members: { groupId: number; studentId: number }[]) {
+  const byGroup = new Map<number, number[]>();
+  for (const m of members) {
+    if (!byGroup.has(m.groupId)) byGroup.set(m.groupId, []);
+    byGroup.get(m.groupId)!.push(m.studentId);
+  }
+  const out = new Map<string, MembershipFacts["levelExams"]>();
+  for (const e of exams) {
+    const scores = new Map(e.results.map((r) => [r.studentId, r.score]));
+    for (const studentId of byGroup.get(e.groupId) ?? []) {
+      const k = `${e.groupId}:${studentId}`;
+      if (!out.has(k)) out.set(k, []);
+      out.get(k)!.push({ date: e.date, level: e.level!, maxScore: e.maxScore, score: scores.get(studentId) ?? null });
+    }
+  }
+  return out;
 }

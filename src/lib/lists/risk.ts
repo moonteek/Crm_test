@@ -1,18 +1,23 @@
 import "server-only";
+import { cache } from "react";
 import { db } from "../db";
 import { centreDay } from "../membership-db";
 import { getRiskSettings } from "../risk-db";
-import { CONTACT_RESULTS, filterRows, isContacted, membershipReasons, newestTrigger, type MembershipFacts, type RiskParams, type RiskRow } from "../risk";
+import { CONTACT_RESULTS, filterRows, isContacted, levelExamsByMembership, lookbackDays, membershipReasons, newestTrigger, type MembershipFacts, type RiskParams, type RiskRow } from "../risk";
 import { fmtDate, type Table } from "../export";
 
 const DAY = 86_400_000;
 
-/** Every risky student (all tabs, no filters): one pass over active / trial memberships of running groups. */
-async function riskyStudents(): Promise<RiskRow[]> {
+/**
+ * Every risky student (all tabs, no filters): one pass over active / trial memberships of running groups. Cached per
+ * request — the sidebar badge, the dashboard card and the report page share one run.
+ */
+const riskyStudents = cache(async (): Promise<RiskRow[]> => {
   const s = await getRiskSettings();
   const today = centreDay();
-  // the window and the period before it (falling grades); a run of absences is counted inside this range too
+  // grades: the window and the period before it (falling grades); marks: far enough back for a full run of absences
   const since = new Date(today.getTime() - (2 * s.days - 1) * DAY);
+  const marksSince = new Date(today.getTime() - lookbackDays(s) * DAY);
   const members = await db.groupStudent.findMany({
     where: { status: { in: ["ACTIVE", "TRIAL"] }, group: { status: "ACTIVE" } },
     select: {
@@ -25,7 +30,7 @@ async function riskyStudents(): Promise<RiskRow[]> {
   const studentIds = [...new Set(members.map((m) => m.student.id))];
   const pair = { groupId: { in: groupIds }, studentId: { in: studentIds } };
   const [marks, grades, exams, contacts] = await Promise.all([
-    db.attendance.findMany({ where: { ...pair, date: { gte: since } }, select: { groupId: true, studentId: true, date: true, present: true } }),
+    db.attendance.findMany({ where: { ...pair, date: { gte: marksSince } }, select: { groupId: true, studentId: true, date: true, present: true } }),
     db.grade.findMany({ where: { ...pair, date: { gte: since } }, select: { groupId: true, studentId: true, date: true, score: true } }),
     db.exam.findMany({
       where: { groupId: { in: groupIds }, level: { not: null } },
@@ -44,12 +49,7 @@ async function riskyStudents(): Promise<RiskRow[]> {
   for (const m of members) factsOf(m.group.id, m.student.id, m.group.course.passPercent);
   for (const a of marks) facts.get(key(a.groupId, a.studentId))?.marks.push({ date: a.date, present: a.present });
   for (const g of grades) facts.get(key(g.groupId, g.studentId))?.grades.push({ date: g.date, score: g.score });
-  for (const e of exams) {
-    for (const m of members.filter((x) => x.group.id === e.groupId)) {
-      const r = e.results.find((x) => x.studentId === m.student.id);
-      facts.get(key(e.groupId, m.student.id))!.levelExams.push({ date: e.date, level: e.level!, maxScore: e.maxScore, score: r?.score ?? null });
-    }
-  }
+  for (const [k, list] of levelExamsByMembership(exams, members.map((m) => ({ groupId: m.group.id, studentId: m.student.id })))) facts.get(k)!.levelExams.push(...list);
   const lastContact = new Map<number, (typeof contacts)[number]>();
   for (const c of contacts) if (!lastContact.has(c.studentId)) lastContact.set(c.studentId, c);
 
@@ -72,7 +72,7 @@ async function riskyStudents(): Promise<RiskRow[]> {
     const all = r.groups.flatMap((g) => g.reasons);
     return { ...r, newest: newestTrigger(all)!, contacted: isContacted(all, r.contact ? centreDay(r.contact.at) : null) };
   });
-}
+});
 
 /** The report page and its export: rows of the chosen tab and filters, counts per tab, the filter choices. */
 export async function loadRisk(params: Record<string, string | undefined> = {}) {
