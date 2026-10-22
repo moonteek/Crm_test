@@ -42,7 +42,7 @@ export function statement(
   const rows: Omit<StatementRow, "balance">[] = [];
   // a transfer = leaving one group and starting in another on the same day
   const day = (d: Date) => d.toISOString().slice(0, 10);
-  const leaves = memberships.flatMap((m) => (m.events as StatementMembership["events"]).filter((e) => e.type === "LEAVE").map((e) => ({ groupId: m.groupId, day: day(e.date), comment: e.comment ?? null })));
+  const leaves = memberships.flatMap((m) => (m.events as { type: string; date: Date; comment?: string | null }[]).filter((e) => e.type === "LEAVE").map((e) => ({ groupId: m.groupId, day: day(e.date), comment: e.comment ?? null })));
   const starts = memberships.flatMap((m) => m.events.filter((e) => e.type === "ACTIVATE" || e.type === "TRIAL").map((e) => ({ groupId: m.groupId, day: day(e.date) })));
   for (const m of memberships) {
     for (const e of m.events) {
