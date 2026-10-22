@@ -9,7 +9,8 @@ import { balance, priceNow, withHolidays } from "@/lib/billing";
 import { closedDaysOf, holidayDays, makeupDaysOf, unchargedDaysOf } from "@/lib/holidays-db";
 import { upcomingPrice } from "@/lib/prices";
 import { membershipInclude } from "@/lib/billing-include";
-import { date, isoDate, lessonDates, lessonWeekdays, money, MONTHS } from "@/lib/format";
+import { date, isoDate, lessonWeekdays, money, MONTHS } from "@/lib/format";
+import { lessonDatesOf } from "@/lib/group-schedule";
 import { Modal } from "@/components/Modal";
 import { EditGroupDialog } from "@/components/EditGroupDialog";
 import { BalanceBadge, Empty, Field } from "@/components/ui";
@@ -74,7 +75,7 @@ export default async function GroupPage({
   ]);
   const makeupOn = new Map(monthMakeups.map((c) => [isoDate(c.makeupDate!), { original: isoDate(c.date), date: isoDate(c.makeupDate!), time: c.makeupTime ?? group.time, roomId: c.makeupRoomId, teacherId: c.makeupTeacherId }]));
   const cancelOn = new Map(cancelInfo.map((c) => [isoDate(c.date), { makeupDate: c.makeupDate ? isoDate(c.makeupDate) : null, charged: c.charged }]));
-  const days = [...lessonDates(group.days, year, month), ...monthMakeups.map((c) => c.makeupDate!)].sort((a, b) => a.getTime() - b.getTime());
+  const days = [...lessonDatesOf(group, year, month), ...monthMakeups.map((c) => c.makeupDate!)].sort((a, b) => a.getTime() - b.getTime());
   const range = { gte: days[0] ?? new Date(), lte: days.at(-1) ?? new Date() };
   const [attendance, grades, exams, courses, teachers, rooms, others, reasons, transferGroups, changes, absenceReasons, centreHolidays] = await Promise.all([
     db.attendance.findMany({ where: { groupId: id, date: range }, include: { reason: true } }),

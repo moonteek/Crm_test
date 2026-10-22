@@ -94,20 +94,5 @@ export function lessonWeekdays(days: string) {
   return weekdaysOf(days);
 }
 
-/** Lesson dates of a month without the centre's holidays (ISO days): the lessons that actually happen. */
-export function heldLessons(days: string, year: number, month: number, holidays: string[]) {
-  const off = new Set(holidays);
-  return lessonDates(days, year, month).filter((d) => !off.has(d.toISOString().slice(0, 10)));
-}
-
-/** All lesson dates of a group within a given month. */
-export function lessonDates(days: string, year: number, month: number) {
-  const weekdays = lessonWeekdays(days);
-  const out: Date[] = [];
-  const d = new Date(Date.UTC(year, month, 1));
-  while (d.getUTCMonth() === month) {
-    if (weekdays.includes(d.getUTCDay())) out.push(new Date(d));
-    d.setUTCDate(d.getUTCDate() + 1);
-  }
-  return out;
-}
+// A group's lesson dates come from src/lib/group-schedule.ts (lessonDatesOf / heldLessonsOf): they follow its
+// schedule changes, so past lessons keep the schedule they had.

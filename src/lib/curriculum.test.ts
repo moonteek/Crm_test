@@ -9,7 +9,7 @@ const line = (id: number, name: string, levels: number, lessons: number, positio
 const HTML = line(1, "HTML", 1, 13);
 const CSS = line(2, "CSS", 1, 13);
 // Du / Chor / Ju from Monday 7 Sep 2026: the 13th lesson is 5 Oct, the next one 7 Oct
-const group = { startDate: d(2026, 9, 7), days: "ODD", startSubjectId: null, startLevel: 1, holidays: [] as string[] };
+const group = { startDate: d(2026, 9, 7), days: "ODD", schedules: [], startSubjectId: null, startLevel: 1, holidays: [] as string[] };
 
 test("levels count held lessons: 13 lessons per level by default", () => {
   const w = levelWindows(group, [CSS, HTML]); // order comes from position, not the array
@@ -147,4 +147,11 @@ test("a make-up day counts as a lesson", () => {
   assert.equal(w.lessons.length, 13);
   assert.ok(w.lessons.some((l) => iso(l) === "2026-09-12"));
   assert.equal(iso(w.to), "2026-10-05"); // same end as with no cancel at all
+});
+
+test("curriculum: held lessons follow a schedule change (ODD, then Mon/Wed from the 16th)", () => {
+  const changed = { startDate: d(2026, 11, 2), days: "1,3", schedules: [{ from: d(2026, 11, 2), days: "ODD" }, { from: d(2026, 11, 16), days: "1,3" }], startSubjectId: null, startLevel: 1, holidays: [] as string[] };
+  // ODD 2,4,6,9,11,13 then Mon/Wed 16,18 → the 8th lesson is 18 Nov (Mon/Wed only would end on 25 Nov)
+  const [w] = levelWindows(changed, [line(1, "HTML", 1, 8)]);
+  assert.equal(iso(w.to), "2026-11-18");
 });

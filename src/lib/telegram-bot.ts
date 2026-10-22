@@ -34,7 +34,7 @@ export async function dueNow(now: Date): Promise<Outgoing[]> {
   const [groups, closed, subs, marked, linked, makeups] = await Promise.all([
     db.group.findMany({
       where: { status: "ACTIVE" },
-      include: { room: true, course: { select: { lessonMin: true } }, teachers: true, _count: { select: { students: { where: { leftAt: null } } } } },
+      include: { room: true, course: { select: { lessonMin: true } }, teachers: true, schedules: true, _count: { select: { students: { where: { leftAt: null } } } } },
     }),
     closedDaysOf(),
     db.lessonChange.findMany({ where: { kind: "SUBSTITUTE", date: day } }),
@@ -43,7 +43,7 @@ export async function dueNow(now: Date): Promise<Outgoing[]> {
     // lessons moved to today: reminded at their own time, to the make-up teacher (and the group's assistant)
     db.lessonChange.findMany({
       where: { kind: "CANCEL", makeupDate: day, group: { status: "ACTIVE" } },
-      include: { makeupRoom: true, group: { include: { course: { select: { lessonMin: true } }, _count: { select: { students: { where: { leftAt: null } } } } } } },
+      include: { makeupRoom: true, group: { include: { course: { select: { lessonMin: true } }, schedules: true, _count: { select: { students: { where: { leftAt: null } } } } } } },
     }),
   ]);
   return dueMessages(

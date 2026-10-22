@@ -28,7 +28,7 @@ export async function loadGroups(user: CurrentUser, params: GroupFilters) {
   const [all, courses] = await Promise.all([
     db.group.findMany({
       where: { status, ...(courseId ? { courseId } : {}), ...groupScope(user) },
-      include: { course: { include: { _count: { select: { sections: true } } } }, section: { include: { subjects: { orderBy: { position: "asc" } } } }, teacher: true, assistant: true, room: true, prices: true, _count: { select: { students: { where: { leftAt: null } } } } },
+      include: { course: { include: { _count: { select: { sections: true } } } }, section: { include: { subjects: { orderBy: { position: "asc" } } } }, teacher: true, assistant: true, room: true, prices: true, schedules: true, _count: { select: { students: { where: { leftAt: null } } } } },
       orderBy: [{ days: "asc" }, { time: "asc" }],
     }),
     db.course.findMany({ orderBy: { name: "asc" }, include: { sections: { orderBy: { position: "asc" }, include: { subjects: { orderBy: { position: "asc" } } } } } }),

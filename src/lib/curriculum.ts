@@ -1,4 +1,4 @@
-import { heldLessons } from "./format";
+import { heldLessonsOf, type DaysScheduled } from "./group-schedule";
 import { centreToday } from "./schedule";
 
 // A group studies one section of its course. The section is an ordered list of level lines ("JS", "Node.js ×3"),
@@ -7,7 +7,7 @@ import { centreToday } from "./schedule";
 // cancellation moves that level, its exam (on the level's last lesson) and every later level by one lesson.
 
 /** `holidays`: the group's closed days (ISO) — holidays and its cancelled lessons — which don't count as lessons. */
-export type CurriculumGroup = { startDate: Date; days: string; startSubjectId: number | null; startLevel: number; holidays: string[]; extraDays?: string[] };
+export type CurriculumGroup = DaysScheduled & { startDate: Date; startSubjectId: number | null; startLevel: number; holidays: string[]; extraDays?: string[] };
 /** A level line of the group's section: `levels` levels of `lessons` lessons each. */
 export type CurriculumSubject = { id: number; name: string; levels: number; lessons: number; position: number };
 
@@ -49,12 +49,12 @@ export function courseMonths(sections: { subjects: CurriculumSubject[] }[]): num
 }
 
 /** The group's next `count` held lessons from `start`, make-up days included (gives up after ten years of nothing). */
-function heldFrom(days: string, start: Date, count: number, holidays: string[], extra: string[] = []) {
+function heldFrom(g: DaysScheduled, start: Date, count: number, holidays: string[], extra: string[] = []) {
   const out: Date[] = [];
   const off = new Set(holidays);
   const extras = [...new Set(extra)].filter((x) => !off.has(x)).map((x) => new Date(x + "T00:00:00Z")).filter((x) => x >= start);
   for (let y = start.getUTCFullYear(), m = start.getUTCMonth(), k = 0; out.length < count && k < 120; k++, m === 11 ? (y++, (m = 0)) : m++) {
-    const month = [...heldLessons(days, y, m, holidays), ...extras.filter((x) => x.getUTCFullYear() === y && x.getUTCMonth() === m)]
+    const month = [...heldLessonsOf(g, y, m, holidays), ...extras.filter((x) => x.getUTCFullYear() === y && x.getUTCMonth() === m)]
       .filter((l, i, all) => all.findIndex((o) => o.getTime() === l.getTime()) === i)
       .sort((a, b) => a.getTime() - b.getTime());
     for (const l of month) if (l >= start && out.length < count) out.push(l);
@@ -70,7 +70,7 @@ export function levelWindows(group: CurriculumGroup, lines: CurriculumSubject[])
   const lineAt = steps.findIndex((x) => x.s.id === group.startSubjectId);
   const first = lineAt < 0 ? 0 : lineAt + Math.min(Math.max(group.startLevel, 1), steps[lineAt].s.levels) - 1;
   const taken = steps.slice(first);
-  const all = heldFrom(group.days, centreDate(group.startDate), taken.reduce((n, x) => n + Math.max(x.s.lessons, 0), 0), group.holidays, group.extraDays);
+  const all = heldFrom(group, centreDate(group.startDate), taken.reduce((n, x) => n + Math.max(x.s.lessons, 0), 0), group.holidays, group.extraDays);
   const out: Window[] = [];
   let at = 0;
   for (const [k, x] of taken.entries()) {

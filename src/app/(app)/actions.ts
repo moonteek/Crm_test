@@ -1038,7 +1038,7 @@ export async function saveLevelExamScores(_: MemberActionState, f: FormData): Pr
     await assertGroupAccess(user, groupId);
     const group = await db.group.findUniqueOrThrow({
       where: { id: groupId },
-      include: { section: { include: { subjects: true } }, students: { where: { leftAt: null }, select: { studentId: true } } },
+      include: { section: { include: { subjects: true } }, schedules: true, students: { where: { leftAt: null }, select: { studentId: true } } },
     });
     // level numbers belong to the group's section, so its own lines decide the title and date
     const saved = await db.exam.findUnique({ where: { groupId_level: { groupId, level } }, select: { date: true, _count: { select: { results: true } } } });

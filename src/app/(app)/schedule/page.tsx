@@ -29,7 +29,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const [groups, centreGroups, allRooms] = await Promise.all([
     db.group.findMany({
       where: { status: "ACTIVE", ...groupScope(user) },
-      include: { course: true, section: { include: { subjects: { orderBy: { position: "asc" } } } }, teacher: true, assistant: true, room: true, _count: { select: { students: { where: { leftAt: null } } } } },
+      include: { course: true, section: { include: { subjects: { orderBy: { position: "asc" } } } }, teacher: true, assistant: true, room: true, schedules: true, _count: { select: { students: { where: { leftAt: null } } } } },
       orderBy: { time: "asc" },
     }),
     // clashes are checked against every group, including ones this user can't see
@@ -70,7 +70,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     where: { kind: "CANCEL", makeupDate: shown, group: { status: "ACTIVE", ...groupScope(user) } },
     include: {
       makeupTeacher: true, makeupRoom: true,
-      group: { include: { course: true, section: { include: { subjects: { orderBy: { position: "asc" } } } }, assistant: true, _count: { select: { students: { where: { leftAt: null } } } } } },
+      group: { include: { course: true, section: { include: { subjects: { orderBy: { position: "asc" } } } }, assistant: true, schedules: true, _count: { select: { students: { where: { leftAt: null } } } } } },
     },
   });
   const makeups = moved.map((c) => {
