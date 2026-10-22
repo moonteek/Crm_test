@@ -60,6 +60,7 @@ model User {
   substitutions LessonChange[] @relation("Substitutions")
   lessonChanges LessonChange[] @relation("LessonChangeAuthor")
   telegramMessages TelegramMessage[]
+  groupSchedules   GroupSchedule[]
   makeups          LessonChange[] @relation("Makeups")
   studentDocuments StudentDocument[]
   riskContacts RiskContact[]
@@ -160,6 +161,24 @@ model Group {
   startSubject   Subject? @relation(fields: [startSubjectId], references: [id], onDelete: SetNull)
   startLevel     Int      @default(1)
   lessonChanges LessonChange[]
+  schedules     GroupSchedule[]
+}
+
+// A group's lesson days / time from a date (src/lib/group-schedule.ts). The group's own fields hold the newest one;
+// a group never changed has no rows.
+model GroupSchedule {
+  id        Int      @id @default(autoincrement())
+  groupId   Int
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  from      DateTime // calendar date, UTC midnight
+  days      String
+  time      String
+  endTime   String?
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@unique([groupId, from])
 }
 
 /// Who taught a group from a date on (TEACHER or ASSISTANT); lessons before keep the earlier person.
