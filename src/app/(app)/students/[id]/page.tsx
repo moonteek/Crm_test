@@ -117,7 +117,18 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
             <dl className="mt-5 space-y-2 text-sm">
               <Row k="Telefon"><a href={`tel:${student.phone}`} className="flex items-center gap-1 hover:underline"><Phone className="h-3.5 w-3.5" />{student.phone}</a></Row>
               {student.phone2 && <Row k="Qo'shimcha telefon">{student.phone2}</Row>}
-              <Row k="Ota-ona">{[student.parentName, student.parentPhone].filter(Boolean).join(" · ") || "—"}</Row>
+              {([["Otasi", student.fatherName, student.fatherPhone], ["Onasi", student.motherName, student.motherPhone]] as const).map(([k, name, phone]) => (
+                <Row key={k} k={k}>
+                  {name || phone ? (
+                    <span className="flex flex-wrap items-center gap-x-2">
+                      {name && <span>{name}</span>}
+                      {phone && <a href={`tel:${phone}`} className="flex items-center gap-1 hover:underline"><Phone className="h-3.5 w-3.5" />{phone}</a>}
+                    </span>
+                  ) : "—"}
+                </Row>
+              ))}
+              {student.telegram && <Row k="Telegram"><a href={`https://t.me/${student.telegram}`} target="_blank" rel="noopener noreferrer" className="text-accent-ink hover:underline">@{student.telegram}</a></Row>}
+              {student.email && <Row k="Email"><a href={`mailto:${student.email}`} className="text-accent-ink hover:underline">{student.email}</a></Row>}
               <Row k="Tug'ilgan sana">{date(student.birthDate)}</Row>
               <Row k="Qo'shilgan">{date(student.createdAt)}</Row>
               <Row k="Davomat">{student.attendance.length ? `${Math.round((present / student.attendance.length) * 100)}% (${present}/${student.attendance.length})` : "—"}</Row>

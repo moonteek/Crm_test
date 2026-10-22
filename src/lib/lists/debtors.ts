@@ -23,8 +23,8 @@ export async function loadDebtors(user: CurrentUser, params: { status?: string }
   const total = debtors.reduce((sum, s) => sum + s.balance, 0);
   const table: Table = {
     title: "Qarzdorlar",
-    columns: ["Ism", "Telefon", "Ota-ona", "Guruhlar", "Qarz"],
-    rows: debtors.map((s) => [s.name, s.phone, s.parentPhone, s.groups.filter((g) => !g.leftAt).map((g) => g.group.name).join(", "), -s.balance]),
+    columns: ["Ism", "Telefon", "Otasi telefoni", "Onasi telefoni", "Guruhlar", "Qarz"],
+    rows: debtors.map((s) => [s.name, s.phone, s.fatherPhone, s.motherPhone, s.groups.filter((g) => !g.leftAt).map((g) => g.group.name).join(", "), -s.balance]),
   };
   return { debtors, total, table, status };
 }

@@ -43,6 +43,7 @@ import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY
 import { check, parseForm, v } from "@/lib/validation";
 import { errorText, tryAction, type ActionState } from "@/lib/action-result";
 import { structureProblem, type LineShape } from "@/lib/curriculum-convert";
+import { emailField, telegramField } from "@/lib/student-contacts";
 import { assertMarkAccess } from "@/lib/cover-db";
 import { CONTACT_RESULTS, riskSettingsSchema } from "@/lib/risk";
 import { storeRiskSettings } from "@/lib/risk-db";
@@ -241,12 +242,17 @@ export async function copyKpiFromPrevious(month: string): Promise<ActionState> {
 const studentSchema = z.object({
   name: v.text("Ism", 120),
   phone: v.text("Telefon", 40),
-  parentPhone: v.optText(40),
   birthDate: v.optDate(),
+  fatherName: v.optText(120),
+  fatherPhone: v.optText(40),
+  motherName: v.optText(120),
+  motherPhone: v.optText(40),
+  // the round icons: Telegram, email, extra phone, passport
+  telegram: telegramField,
+  email: emailField,
+  phone2: v.optText(40),
   // "+ qo'shimcha ma'lumot"
   gender: v.oneOf(GENDERS, null),
-  parentName: v.optText(120),
-  phone2: v.optText(40),
   school: v.optText(120),
   address: v.optText(200),
   source: v.oneOf(LEAD_SOURCES, null),

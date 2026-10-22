@@ -192,12 +192,20 @@ model Student {
   id        Int            @id @default(autoincrement())
   name      String
   phone     String
+  // legacy single parent (read only by `npm run db:parents`): now fatherName / fatherPhone + motherName / motherPhone
   parentPhone String?
   birthDate DateTime?
   note      String? // old single "Izoh"; moved into StudentNote by `npm run db:notes-from-izoh`
   // extra details ("+ qo'shimcha ma'lumot"), all optional
   gender     String? // M | F
   parentName String?
+  fatherName  String?
+  fatherPhone String?
+  motherName  String?
+  motherPhone String?
+  // username without "@"
+  telegram    String?
+  email       String?
   phone2     String?
   school     String? // school and class, free text
   address    String?

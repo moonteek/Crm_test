@@ -119,7 +119,7 @@ export function buildServer(user: CurrentUser) {
       : null;
     const present = s.attendance.filter((a) => a.present).length;
     return {
-      id: s.id, name: s.name, phone: s.phone, parent_phone: s.parentPhone,
+      id: s.id, name: s.name, phone: s.phone, father_phone: s.fatherPhone, mother_phone: s.motherPhone,
       birth_date: s.birthDate && isoDate(s.birthDate), note: s.note,
       groups: s.groups.map((g) => ({
         group_id: g.groupId, name: g.group.name, course: g.group.course.name, monthly_price: priceNow(g.group),
@@ -287,7 +287,7 @@ export function buildServer(user: CurrentUser) {
       .filter(({ b }) => b < 0)
       .sort((a, b) => a.b - b.b)
       .map(({ s, b }) => ({
-        student_id: s.id, name: s.name, phone: s.phone, parent_phone: s.parentPhone, debt: -b,
+        student_id: s.id, name: s.name, phone: s.phone, father_phone: s.fatherPhone, mother_phone: s.motherPhone, debt: -b,
         groups: s.groups.filter((g) => !g.leftAt).map((g) => g.group.name),
       }));
   });

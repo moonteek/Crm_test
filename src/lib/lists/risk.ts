@@ -21,7 +21,7 @@ const riskyStudents = cache(async (): Promise<RiskRow[]> => {
   const members = await db.groupStudent.findMany({
     where: { status: { in: ["ACTIVE", "TRIAL"] }, group: { status: "ACTIVE" } },
     select: {
-      student: { select: { id: true, name: true, phone: true, parentPhone: true } },
+      student: { select: { id: true, name: true, phone: true, fatherPhone: true, motherPhone: true } },
       group: { select: { id: true, name: true, teacherId: true, teacher: { select: { name: true } }, course: { select: { passPercent: true } } } },
     },
   });
@@ -93,10 +93,10 @@ export async function loadRisk(params: Record<string, string | undefined> = {}) 
   const byName = (m: Map<number, string>) => [...m].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   const table: Table = {
     title: "Xavfli o'quvchilar",
-    columns: ["O'quvchi", "Telefon", "Ota-ona telefoni", "Guruh", "O'qituvchi", "Sabablar", "Oxirgi aloqa", "Natija", "Izoh"],
+    columns: ["O'quvchi", "Telefon", "Otasi telefoni", "Onasi telefoni", "Guruh", "O'qituvchi", "Sabablar", "Oxirgi aloqa", "Natija", "Izoh"],
     rows: rows.flatMap((r) =>
       r.groups.map((g) => [
-        r.student.name, r.student.phone, r.student.parentPhone, g.name, g.teacher, g.reasons.map((x) => x.label).join("; "),
+        r.student.name, r.student.phone, r.student.fatherPhone, r.student.motherPhone, g.name, g.teacher, g.reasons.map((x) => x.label).join("; "),
         r.contact ? fmtDate(r.contact.at) : null, r.contact ? CONTACT_RESULTS[r.contact.result] ?? r.contact.result : null, r.contact?.comment ?? null,
       ]),
     ),
