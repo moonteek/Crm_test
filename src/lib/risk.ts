@@ -147,7 +147,7 @@ export function isContacted(reasons: Reason[], contactDay: Date | null): boolean
 
 export type RiskGroup = { id: number; name: string; teacherId: number | null; teacher: string | null; reasons: Reason[] };
 export type RiskRow = {
-  student: { id: number; name: string; phone: string; parentPhone: string | null };
+  student: { id: number; name: string; phone: string; fatherPhone: string | null; motherPhone: string | null };
   groups: RiskGroup[];
   contact: { at: Date; who: string | null; result: keyof typeof CONTACT_RESULTS; comment: string | null } | null;
   contacted: boolean;

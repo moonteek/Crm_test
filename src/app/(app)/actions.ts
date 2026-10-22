@@ -21,7 +21,7 @@ import { centreDay, recordEvent, startMembership } from "@/lib/membership-db";
 import { nextMonthStart, schedulePrice } from "@/lib/prices-db";
 import { editedGroupPrice } from "@/lib/prices";
 import { changeTeacher } from "@/lib/teachers-db";
-import { menuActions, statusOn, systemLeaveDate, type EventType, type Status } from "@/lib/membership";
+import { menuActions, statusOn, systemLeaveDate, transferPlan, type EventType, type Status } from "@/lib/membership";
 import {
   ACTIVITY_TYPES, isoDate, CALL_RESULTS, lessonWeekdays, MONTHS, EXPENSE_CATEGORIES, GENDERS, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_SOURCES, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES, TAG_COLORS,
 } from "@/lib/format";
@@ -43,6 +43,8 @@ import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY
 import { check, parseForm, v } from "@/lib/validation";
 import { errorText, tryAction, type ActionState } from "@/lib/action-result";
 import { structureProblem, type LineShape } from "@/lib/curriculum-convert";
+import { emailField, telegramField } from "@/lib/student-contacts";
+import { decodeDocument, documentProblem } from "@/lib/documents";
 import { assertMarkAccess } from "@/lib/cover-db";
 import { CONTACT_RESULTS, riskSettingsSchema } from "@/lib/risk";
 import { storeRiskSettings } from "@/lib/risk-db";
@@ -241,12 +243,17 @@ export async function copyKpiFromPrevious(month: string): Promise<ActionState> {
 const studentSchema = z.object({
   name: v.text("Ism", 120),
   phone: v.text("Telefon", 40),
-  parentPhone: v.optText(40),
   birthDate: v.optDate(),
+  fatherName: v.optText(120),
+  fatherPhone: v.optText(40),
+  motherName: v.optText(120),
+  motherPhone: v.optText(40),
+  // the round icons: Telegram, email, extra phone, passport
+  telegram: telegramField,
+  email: emailField,
+  phone2: v.optText(40),
   // "+ qo'shimcha ma'lumot"
   gender: v.oneOf(GENDERS, null),
-  parentName: v.optText(120),
-  phone2: v.optText(40),
   school: v.optText(120),
   address: v.optText(200),
   source: v.oneOf(LEAD_SOURCES, null),
@@ -261,9 +268,12 @@ export async function createStudent(_: ActionState, f: FormData): Promise<Action
     const user = await requirePermission("students.manage");
     const { groupId, mode, joinedAt, ...data } = parseForm(studentSchema.extend({ groupId: v.optId(), mode: v.oneOf(MODES, "TRIAL"), joinedAt: v.optDate() }), f);
     if (groupId) await assertGroupAccess(user, groupId);
+    // tags chosen in the add form (staff who manage tags); switched-off tags are ignored
+    const wanted = can(user, "students.tags") ? f.getAll("tagId").map((x) => check(v.id("Teg"), x)) : [];
+    const tagIds = wanted.length ? (await db.tag.findMany({ where: { id: { in: wanted }, active: true }, select: { id: true } })).map((t) => t.id) : [];
     // all or nothing: a refused group start must not leave a student behind (the form stays open for another try)
     const student = await db.$transaction(async (tx) => {
-      const s = await tx.student.create({ data });
+      const s = await tx.student.create({ data: { ...data, tags: { create: tagIds.map((tagId) => ({ tagId })) } } });
       if (groupId) await startMembership(tx, { groupId, studentId: s.id, mode: mode as "TRIAL" | "ACTIVE", date: joinedAt ?? centreDay(), userId: user.id });
       return s;
     });
@@ -365,11 +375,16 @@ export async function transferStudent(_: MemberActionState, f: FormData): Promis
     await assertGroupAccess(user, d.toGroupId);
     const date = d.date ?? centreDay();
     const to = await db.group.findUniqueOrThrow({ where: { id: d.toGroupId } });
+    // "Guruhda saqlab qolish": join the new group and stay in the old one
+    const keep = f.get("keep") === "on";
+    const steps = transferPlan(keep);
     await db.$transaction(async (tx) => {
-      await recordEvent(tx, gs.id, { type: "LEAVE", date, reasonId: d.reasonId, comment: `${to.name} guruhiga o'tkazildi`, userId: user.id });
+      if (steps.includes("LEAVE_OLD")) await recordEvent(tx, gs.id, { type: "LEAVE", date, reasonId: d.reasonId, comment: `${to.name} guruhiga o'tkazildi`, userId: user.id });
       await startMembership(tx, { groupId: d.toGroupId, studentId: gs.studentId, mode: d.mode as "TRIAL" | "ACTIVE", date, userId: user.id });
     });
-    await logAction(user, "student.transfer", `${gs.student.name}: ${gs.group.name} → ${to.name} (${isoDate(date)})`, { studentId: gs.studentId });
+    await logAction(user, "student.transfer", keep
+      ? `${gs.student.name}: ${to.name} guruhiga qo'shildi (${gs.group.name} da qoldi, ${isoDate(date)})`
+      : `${gs.student.name}: ${gs.group.name} → ${to.name} (${isoDate(date)})`, { studentId: gs.studentId });
     revalidatePath(`/groups/${gs.groupId}`);
     revalidatePath(`/groups/${d.toGroupId}`);
     revalidatePath(`/students/${gs.studentId}`);
@@ -2055,5 +2070,33 @@ export async function recordRiskContact(studentId: number, _: ActionState, f: Fo
     await db.riskContact.create({ data: { studentId, userId: user.id, result: d.result, comment: d.comment } });
     await logAction(user, "risk.contact", `Bog'lanildi (xavfli o'quvchi): ${CONTACT_RESULTS[d.result]}${d.comment ? ` — ${d.comment}` : ""}`, { studentId });
     revalidatePath("/risk");
+  });
+}
+
+// ---------- Student documents ("Hujjatlar") ----------
+/** Uploads a named PDF / PNG / JPG (≤ 2 MB, ≤ 30 per student), checked by its first bytes. */
+export async function uploadDocument(studentId: number, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("students.manage");
+    await assertStudentAccess(user, studentId);
+    const name = check(v.text("Hujjat nomi", 80), f.get("name"));
+    const file = String(f.get("file") ?? "");
+    const problem = documentProblem(file, await db.studentDocument.count({ where: { studentId } }));
+    if (problem) throw new Error(problem);
+    const doc = decodeDocument(file);
+    await db.studentDocument.create({ data: { studentId, name, mime: doc.mime, size: doc.bytes.length, data: doc.bytes.toString("base64"), userId: user.id } });
+    await logAction(user, "student.document", `Hujjat qo'shildi: ${name}`, { studentId });
+    revalidatePath(`/students/${studentId}`);
+  });
+}
+
+export async function deleteDocument(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("students.manage");
+    const doc = await db.studentDocument.findUniqueOrThrow({ where: { id }, select: { studentId: true, name: true } });
+    await assertStudentAccess(user, doc.studentId);
+    await db.studentDocument.delete({ where: { id } });
+    await logAction(user, "student.document", `Hujjat o'chirildi: ${doc.name}`, { studentId: doc.studentId });
+    revalidatePath(`/students/${doc.studentId}`);
   });
 }

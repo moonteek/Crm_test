@@ -61,7 +61,8 @@ export default async function RiskPage({ searchParams }: { searchParams: Promise
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <Link href={`/students/${r.student.id}`} className="font-semibold hover:underline">{r.student.name}</Link>
                 <a href={`tel:${r.student.phone}`} className="flex items-center gap-1 font-mono text-sm text-muted hover:underline"><Phone className="h-3.5 w-3.5" />{r.student.phone}</a>
-                {r.student.parentPhone && <a href={`tel:${r.student.parentPhone}`} className="font-mono text-sm text-muted hover:underline">ota-ona: {r.student.parentPhone}</a>}
+                {r.student.fatherPhone && <a href={`tel:${r.student.fatherPhone}`} className="font-mono text-sm text-muted hover:underline">otasi: {r.student.fatherPhone}</a>}
+                {r.student.motherPhone && <a href={`tel:${r.student.motherPhone}`} className="font-mono text-sm text-muted hover:underline">onasi: {r.student.motherPhone}</a>}
               </div>
               {r.groups.map((g) => (
                 <div key={g.id} className="flex flex-wrap items-center gap-1.5 text-sm">

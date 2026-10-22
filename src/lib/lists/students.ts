@@ -44,9 +44,9 @@ export async function loadStudents(user: CurrentUser, f: StudentFilters) {
   const page = Math.min(f.page, pages);
   const table: Table = {
     title: "O'quvchilar",
-    columns: ["№", "Ism", "Telefon", "Ota-ona telefoni", "Guruhlar", "O'qituvchilar", "Holati", ...(showBalance ? ["Balans"] : []), "Teglar", "Qayerdan keldi"],
+    columns: ["№", "Ism", "Telefon", "Otasi telefoni", "Onasi telefoni", "Guruhlar", "O'qituvchilar", "Holati", ...(showBalance ? ["Balans"] : []), "Teglar", "Qayerdan keldi"],
     rows: all.map((s, i) => [
-      i + 1, s.name, s.phone, s.parentPhone, s.current.map((g) => g.group.name).join(", "), s.teachers.join(", "), s.statusLabel,
+      i + 1, s.name, s.phone, s.fatherPhone, s.motherPhone, s.current.map((g) => g.group.name).join(", "), s.teachers.join(", "), s.statusLabel,
       ...(showBalance ? [s.balance] : []), s.tags.map((t) => t.tag.name).join(", "), s.source,
     ]),
   };

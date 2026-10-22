@@ -21,7 +21,7 @@ test("where: search covers every phone, teacher means teacher or assistant, scop
   assert.deepEqual(w, {
     AND: [
       scope,
-      { OR: [{ name: { contains: "90" } }, { phone: { contains: "90" } }, { phone2: { contains: "90" } }, { parentPhone: { contains: "90" } }] },
+      { OR: [{ name: { contains: "90" } }, { phone: { contains: "90" } }, { phone2: { contains: "90" } }, { fatherPhone: { contains: "90" } }, { motherPhone: { contains: "90" } }, { fatherName: { contains: "90" } }, { motherName: { contains: "90" } }] },
       { groups: { some: { leftAt: null, group: { OR: [{ teacherId: 8 }, { assistantId: 8 }] }, status: "FROZEN" } } },
     ],
   });

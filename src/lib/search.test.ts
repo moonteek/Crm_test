@@ -5,7 +5,7 @@ import { debtorMatches } from "./debtor-status";
 
 test("search needs two characters and looks at the name and every phone", () => {
   assert.equal(searchWhere(" a "), null);
-  assert.deepEqual(searchWhere(" Ali "), { OR: [{ name: { contains: "Ali" } }, { phone: { contains: "Ali" } }, { phone2: { contains: "Ali" } }, { parentPhone: { contains: "Ali" } }] });
+  assert.deepEqual(searchWhere(" Ali "), { OR: [{ name: { contains: "Ali" } }, { phone: { contains: "Ali" } }, { phone2: { contains: "Ali" } }, { fatherPhone: { contains: "Ali" } }, { motherPhone: { contains: "Ali" } }, { fatherName: { contains: "Ali" } }, { motherName: { contains: "Ali" } }] });
 });
 
 test("debtor status filter: current group or left", () => {

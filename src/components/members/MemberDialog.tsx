@@ -60,6 +60,8 @@ export function MemberDialog({
   const [dateStr, setDateStr] = useState(today());
   const [toGroupId, setToGroupId] = useState<number | null>(null);
   const [mode, setMode] = useState<"ACTIVE" | "TRIAL">("ACTIVE");
+  // "Guruhda saqlab qolish": join the new group and stay in this one (no leave, no reason)
+  const [keep, setKeep] = useState(false);
   useEffect(() => { if (state?.ok) onClose(); }, [state, onClose]);
 
   const date = useMemo(() => new Date(`${dateStr || today()}T00:00:00Z`), [dateStr]);
@@ -67,7 +69,7 @@ export function MemberDialog({
 
   // how the balance moves: every month from the action up to today can change (a late freeze cancels later months too)
   const now = new Date();
-  let delta = chargeChangeIf(toBillable(member), { type: kind === "TRANSFER" ? "LEAVE" : (kind as EventType), date }, now);
+  let delta = kind === "TRANSFER" && keep ? 0 : chargeChangeIf(toBillable(member), { type: kind === "TRANSFER" ? "LEAVE" : (kind as EventType), date }, now);
   if (kind === "TRANSFER" && target && mode === "ACTIVE") {
     delta += totalCharges([joinBillable(target, date)], now);
   }
@@ -92,7 +94,7 @@ export function MemberDialog({
           <Field label={STARTS.includes(kind) ? "Qaysi kundan" : "Sana"}>
             <input name="date" type="date" className="input" value={dateStr} onChange={(e) => setDateStr(e.target.value)} required />
           </Field>
-          {NEEDS_REASON.includes(kind) && (
+          {NEEDS_REASON.includes(kind) && !(kind === "TRANSFER" && keep) && (
             <Field label="Sabab">
               <select name="reasonId" className="input" required defaultValue="">
                 <option value="">Sababni tanlang</option>
@@ -101,6 +103,13 @@ export function MemberDialog({
             </Field>
           )}
         </div>
+
+        {kind === "TRANSFER" && (
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <input type="checkbox" name="keep" checked={keep} onChange={(e) => setKeep(e.target.checked)} />
+            Guruhda saqlab qolish <span className="text-xs text-muted">({member.group.name} da ham o&apos;qiydi)</span>
+          </label>
+        )}
 
         {kind === "TRANSFER" && (
           <div className="flex gap-2">
@@ -120,7 +129,7 @@ export function MemberDialog({
         <div className="space-y-1.5 rounded-xl border border-line bg-raised p-3">
           {kind === "TRANSFER" ? (
             <>
-              <PreviewLine kind="LEAVE" member={member} date={date} />
+              {keep ? <p className="text-sm text-muted">{member.group.name}: o&apos;zgarmaydi</p> : <PreviewLine kind="LEAVE" member={member} date={date} />}
               {target && mode === "ACTIVE" && <PreviewLine kind="ACTIVATE" member={{ ...member, events: [], group: target }} date={date} />}
               {target && mode === "TRIAL" && <p className="text-sm text-muted">{target.name}: sinov darslari bepul</p>}
             </>

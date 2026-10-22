@@ -72,3 +72,8 @@ export function applyEvent(
   if (NEEDS_REASON.includes(next.type) && !next.reasonId && !next.system) return { ok: false, error: "Sababni tanlang" };
   return { ok: true, status: RESULT[next.type] };
 }
+
+/** A transfer's steps: a move leaves the old group and starts the new one; "Guruhda saqlab qolish" only starts the new one. */
+export function transferPlan(keep: boolean): ("LEAVE_OLD" | "START_NEW")[] {
+  return keep ? ["START_NEW"] : ["LEAVE_OLD", "START_NEW"];
+}

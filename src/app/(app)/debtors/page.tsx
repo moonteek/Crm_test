@@ -8,6 +8,7 @@ import { Modal } from "@/components/Modal";
 import { PaymentForm } from "@/components/PaymentForm";
 import { priceNow } from "@/lib/billing";
 import { Empty, PageHeader, Segmented } from "@/components/ui";
+import { parentPhones } from "@/lib/student-contacts";
 import { DEBTOR_STATUSES } from "@/lib/debtor-status";
 
 export default async function DebtorsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
@@ -30,7 +31,7 @@ export default async function DebtorsPage({ searchParams }: { searchParams: Prom
                 <tr key={s.id}>
                   <td className="max-md:text-base"><Link href={`/students/${s.id}`} className="font-medium hover:underline">{s.name}</Link></td>
                   <td data-label="Telefon"><a href={`tel:${s.phone}`} className="font-mono hover:underline">{s.phone}</a></td>
-                  <td data-label="Ota-ona" className="font-mono text-muted">{s.parentPhone ?? "—"}</td>
+                  <td data-label="Ota-ona" className="font-mono text-muted">{parentPhones(s) || "—"}</td>
                   <td data-label="Guruhlar">{active.map((g) => g.name).join(", ") || "—"}</td>
                   <td data-label="Qarz" className="font-semibold text-danger">{money(-s.balance)}</td>
                   <td>

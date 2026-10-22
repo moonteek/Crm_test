@@ -87,3 +87,9 @@ test("statusOn: the status a member had on a given day", () => {
   assert.equal(statusOn(events, u("2026-11-11")), "FROZEN");
   assert.equal(statusOn(events, u("2026-11-16")), "ACTIVE");
 });
+
+test("transfer: a move leaves the old group; 'Guruhda saqlab qolish' only starts the new one", async () => {
+  const { transferPlan } = await import("./membership");
+  assert.deepEqual(transferPlan(false), ["LEAVE_OLD", "START_NEW"]);
+  assert.deepEqual(transferPlan(true), ["START_NEW"]);
+});

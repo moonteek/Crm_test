@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { filterRows, type RiskRow } from "./risk";
 
 const d = (s: string) => new Date(s + "T00:00:00Z");
-const student = (id: number) => ({ id, name: `S${id}`, phone: "90", parentPhone: null });
+const student = (id: number) => ({ id, name: `S${id}`, phone: "90", fatherPhone: null, motherPhone: null });
 // A: two risky groups, not called yet. B: one group, called after its problem.
 const A: RiskRow = {
   student: student(1),

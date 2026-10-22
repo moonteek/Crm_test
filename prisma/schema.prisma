@@ -61,6 +61,7 @@ model User {
   lessonChanges LessonChange[] @relation("LessonChangeAuthor")
   telegramMessages TelegramMessage[]
   makeups          LessonChange[] @relation("Makeups")
+  studentDocuments StudentDocument[]
   riskContacts RiskContact[]
 }
 
@@ -192,12 +193,20 @@ model Student {
   id        Int            @id @default(autoincrement())
   name      String
   phone     String
+  // legacy single parent (read only by `npm run db:parents`): now fatherName / fatherPhone + motherName / motherPhone
   parentPhone String?
   birthDate DateTime?
   note      String? // old single "Izoh"; moved into StudentNote by `npm run db:notes-from-izoh`
   // extra details ("+ qo'shimcha ma'lumot"), all optional
   gender     String? // M | F
   parentName String?
+  fatherName  String?
+  fatherPhone String?
+  motherName  String?
+  motherPhone String?
+  // username without "@"
+  telegram    String?
+  email       String?
   phone2     String?
   school     String? // school and class, free text
   address    String?
@@ -207,6 +216,7 @@ model Student {
   tags      StudentTag[]
   notes     StudentNote[]
   riskContacts RiskContact[]
+  documents StudentDocument[]
   auditLogs AuditLog[]
   groups    GroupStudent[]
   attendance Attendance[]
@@ -651,4 +661,20 @@ model Section {
   groups    Group[]
 
   @@unique([courseId, name])
+}
+
+// a scanned file on the student (contract, ID copy): PDF / PNG / JPG up to 2 MB, base64 (src/lib/documents.ts)
+model StudentDocument {
+  id        Int      @id @default(autoincrement())
+  studentId Int
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  name      String
+  mime      String
+  size      Int
+  data      String
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([studentId])
 }

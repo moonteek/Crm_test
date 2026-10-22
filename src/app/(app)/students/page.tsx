@@ -57,6 +57,18 @@ export default async function StudentsPage({ searchParams }: { searchParams: Pro
               </Field>
               <Field label="Qaysi kundan"><input type="date" name="joinedAt" className="input" defaultValue={isoDate(centreDay())} /></Field>
             </div>
+            {can(user, "students.tags") && tags.length > 0 && (
+              <Field label="Teglar">
+                <div className="flex flex-wrap gap-2">
+                  {tags.map((t) => (
+                    <label key={t.id} className="flex cursor-pointer items-center gap-1.5">
+                      <input type="checkbox" name="tagId" value={t.id} className="h-4 w-4 accent-accent" />
+                      <TagChip name={t.name} color={t.color} />
+                    </label>
+                  ))}
+                </div>
+              </Field>
+            )}
           </ActionForm>
         </Modal>}
       </PageHeader>

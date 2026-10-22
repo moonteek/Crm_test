@@ -37,9 +37,9 @@ test("a freeze shows its reason and costs nothing by itself", () => {
     { type: "ACTIVATE", date: nov(1) },
     { type: "FREEZE", date: nov(10), reason: { name: "Kasallik" }, comment: "shifoxonada" },
   ])], [], NOW);
-  const freeze = rows.find((r) => r.kind === "event" && r.label.startsWith("Muzlatildi"))!;
+  const freeze = rows.find((r) => r.kind === "event" && r.type === "Muzlatildi")!;
   assert.equal(freeze.amount, 0);
-  assert.equal(freeze.label, "Muzlatildi · Kasallik · shifoxonada");
+  assert.equal(freeze.label, "Kasallik · shifoxonada");
 });
 
 test("months before the switch are labelled as full months", () => {
@@ -52,4 +52,49 @@ test("a discounted month says how much was taken off", () => {
   const charge = statement([m], [], NOW).find((r) => r.kind === "charge")!;
   assert.equal(charge.amount, -400_000);
   assert.equal(charge.lessons, "12/12 dars · chegirma −200 000 so'm");
+});
+
+test("ledger rows say what they are, who recorded them and when; the note sits on its own line", async () => {
+  const at = new Date("2026-11-05T09:30:00Z");
+  const rows = statement(
+    [{ ...member([{ type: "ACTIVATE", date: nov(1), user: { name: "Menejer" }, createdAt: nov(1) }]) }],
+    [{ ...pay(1, 600_000, nov(5)), note: "onasi olib keldi", user: { name: "Direktor" }, createdAt: at }],
+    NOW,
+  );
+  const p = rows.find((r) => r.kind === "payment")!;
+  assert.deepEqual([p.type, p.label, p.who, p.at, p.note, p.method], ["To'lov", "Naqd", "Direktor", at, "onasi olib keldi", "CASH"]);
+  const c = rows.find((r) => r.kind === "charge")!;
+  assert.deepEqual([c.type, c.label, c.who, c.at], ["Oylik hisob", "Noyabr 2026", "Tizim", null]);
+  const e = rows.find((r) => r.kind === "event")!;
+  assert.deepEqual([e.type, e.who], ["Faollashtirildi", "Menejer"]);
+});
+
+test("a transfer reads as one: left for another group, joined by transfer", () => {
+  const a: StatementMembership = { ...member([{ type: "ACTIVATE", date: nov(1) }, { type: "LEAVE", date: nov(10) }]), groupId: 1 };
+  const b: StatementMembership = { ...member([{ type: "ACTIVATE", date: nov(10) }]), groupId: 2, group: { name: "PY-07", days: "ODD", course: { price: 650_000 } } };
+  const types = statement([a, b], [], NOW).filter((r) => r.kind === "event").map((r) => [r.groupName, r.type]);
+  assert.deepEqual(types, [["PY-07", "O'tkazma bilan qo'shildi"], ["ROBO-3", "Boshqa guruhga o'tkazildi"], ["ROBO-3", "Faollashtirildi"]]);
+});
+
+test("the ledger filter keeps each row's own running balance", async () => {
+  const { filterLedger } = await import("./statement");
+  const rows = statement(
+    [member([{ type: "ACTIVATE", date: nov(1) }])],
+    [pay(1, 300_000, nov(5)), { ...pay(2, 300_000, nov(6)), method: "CARD" }],
+    NOW,
+  );
+  const cash = filterLedger(rows, "CASH");
+  assert.deepEqual(cash.map((r) => [r.paymentId, r.balance]), [[1, rows.find((r) => r.paymentId === 1)!.balance]]);
+  assert.deepEqual(filterLedger(rows, "payments").map((r) => r.paymentId), [2, 1]);
+  assert.deepEqual(filterLedger(rows, "charges").map((r) => r.kind), ["charge"]);
+  assert.deepEqual(filterLedger(rows, "events").map((r) => r.kind), ["event"]);
+  assert.equal(filterLedger(rows, "bogus").length, rows.length);
+});
+
+test("a join on the day of someone else's transfer is not a transfer", () => {
+  const a: StatementMembership = { ...member([{ type: "ACTIVATE", date: nov(1) }, { type: "LEAVE", date: nov(10), comment: "PY-07 guruhiga o'tkazildi" }]), groupId: 1 };
+  const b: StatementMembership = { ...member([{ type: "ACTIVATE", date: nov(10) }]), groupId: 2, group: { name: "PY-07", days: "ODD", course: { price: 650_000 } } };
+  const c: StatementMembership = { ...member([{ type: "ACTIVATE", date: nov(10) }]), groupId: 3, group: { name: "KS-21", days: "ODD", course: { price: 350_000 } } };
+  const types = Object.fromEntries(statement([a, b, c], [], NOW).filter((r) => r.kind === "event" && r.date.getTime() === nov(10).getTime()).map((r) => [r.groupName, r.type]));
+  assert.deepEqual(types, { "ROBO-3": "Boshqa guruhga o'tkazildi", "PY-07": "O'tkazma bilan qo'shildi", "KS-21": "Faollashtirildi" });
 });

@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { contactMatch } from "./search";
 
 // The student list's filters, read from the URL: shared by the page and its Excel / Google Sheets export,
 // so the file always holds exactly what the page shows.
@@ -55,7 +56,7 @@ export function studentWhere(f: StudentFilters, scope: Prisma.StudentWhereInput)
   const membership = MEMBERSHIP_STATUS[f.status];
   // with a group / course / teacher chosen, the status belongs to that same membership ("trial in group 5")
   const status = membership ? { status: membership } : {};
-  if (f.q) and.push({ OR: [{ name: { contains: f.q } }, { phone: { contains: f.q } }, { phone2: { contains: f.q } }, { parentPhone: { contains: f.q } }] });
+  if (f.q) and.push({ OR: contactMatch(f.q) });
   if (f.groupId) and.push({ groups: { some: { leftAt: null, groupId: f.groupId, ...status } } });
   if (f.courseId) and.push({ groups: { some: { leftAt: null, group: { courseId: f.courseId }, ...status } } });
   if (f.teacherId) and.push({ groups: { some: { leftAt: null, group: { OR: [{ teacherId: f.teacherId }, { assistantId: f.teacherId }] }, ...status } } });
