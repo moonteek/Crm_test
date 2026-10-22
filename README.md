@@ -197,6 +197,12 @@ jadvalda "Qo'shimcha dars"). Yo'q: "Talabalar va o'qituvchi balansiga ta'sir qil
 olinmaydi), o'chirilgan bo'lsa to'lov saqlanadi. O'rinbosar yoki qo'shimcha dars o'qituvchisi faqat o'sha kuni, faqat o'sha
 dars uchun davomat va baho qo'ya oladi ("O'rinbosar darslaringiz"). Yangilangandan keyin `npm run db:push`.
 
+**O'quvchi ma'lumotlari:** Otasi va Onasi (ism, telefon) — qidiruvda ham topiladi; dumaloq tugmalar Telegram, Email,
+qo'shimcha telefon va pasport maydonlarini ochadi. "Hujjatlar" bo'limida PDF/JPG/PNG (2 MB gacha, 30 tagacha) saqlanadi —
+faqat o'quvchini tahrirlash huquqi borlarga. To'lovlar bo'limida har qatorning turi, kim va qachon kiritgani, izoh va
+filtr (Naqd, Karta, O'tkazma, Hisoblar, Amallar). "Boshqa guruhga o'tkazish"da "Guruhda saqlab qolish" belgisi o'quvchini
+eski guruhda ham qoldiradi. Yangilangandan keyin `npm run db:push`, so'ng bir marta `npm run db:parents`.
+
 **Xavfli o'quvchilar:** faol va sinovdagi o'quvchilar — ketma-ket darsga kelmagan, davomati yoki bahosi tushgan,
 daraja imtihonidan o'tmaganlar — sabablari bilan. "Bog'lanildi" tugmasi qo'ng'iroq natijasini yozadi (o'quvchi Tarixida
 ham ko'rinadi); yangi muammo chiqmaguncha o'quvchi "Bog'lanilgan"da turadi. Chegaralar Sozlamalar → Xavfli o'quvchilar'da.

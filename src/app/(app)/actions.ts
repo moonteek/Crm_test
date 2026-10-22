@@ -21,7 +21,7 @@ import { centreDay, recordEvent, startMembership } from "@/lib/membership-db";
 import { nextMonthStart, schedulePrice } from "@/lib/prices-db";
 import { editedGroupPrice } from "@/lib/prices";
 import { changeTeacher } from "@/lib/teachers-db";
-import { menuActions, statusOn, systemLeaveDate, type EventType, type Status } from "@/lib/membership";
+import { menuActions, statusOn, systemLeaveDate, transferPlan, type EventType, type Status } from "@/lib/membership";
 import {
   ACTIVITY_TYPES, isoDate, CALL_RESULTS, lessonWeekdays, MONTHS, EXPENSE_CATEGORIES, GENDERS, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_SOURCES, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES, TAG_COLORS,
 } from "@/lib/format";
@@ -268,9 +268,12 @@ export async function createStudent(_: ActionState, f: FormData): Promise<Action
     const user = await requirePermission("students.manage");
     const { groupId, mode, joinedAt, ...data } = parseForm(studentSchema.extend({ groupId: v.optId(), mode: v.oneOf(MODES, "TRIAL"), joinedAt: v.optDate() }), f);
     if (groupId) await assertGroupAccess(user, groupId);
+    // tags chosen in the add form (staff who manage tags); switched-off tags are ignored
+    const wanted = can(user, "students.tags") ? f.getAll("tagId").map((x) => check(v.id("Teg"), x)) : [];
+    const tagIds = wanted.length ? (await db.tag.findMany({ where: { id: { in: wanted }, active: true }, select: { id: true } })).map((t) => t.id) : [];
     // all or nothing: a refused group start must not leave a student behind (the form stays open for another try)
     const student = await db.$transaction(async (tx) => {
-      const s = await tx.student.create({ data });
+      const s = await tx.student.create({ data: { ...data, tags: { create: tagIds.map((tagId) => ({ tagId })) } } });
       if (groupId) await startMembership(tx, { groupId, studentId: s.id, mode: mode as "TRIAL" | "ACTIVE", date: joinedAt ?? centreDay(), userId: user.id });
       return s;
     });
@@ -372,11 +375,16 @@ export async function transferStudent(_: MemberActionState, f: FormData): Promis
     await assertGroupAccess(user, d.toGroupId);
     const date = d.date ?? centreDay();
     const to = await db.group.findUniqueOrThrow({ where: { id: d.toGroupId } });
+    // "Guruhda saqlab qolish": join the new group and stay in the old one
+    const keep = f.get("keep") === "on";
+    const steps = transferPlan(keep);
     await db.$transaction(async (tx) => {
-      await recordEvent(tx, gs.id, { type: "LEAVE", date, reasonId: d.reasonId, comment: `${to.name} guruhiga o'tkazildi`, userId: user.id });
+      if (steps.includes("LEAVE_OLD")) await recordEvent(tx, gs.id, { type: "LEAVE", date, reasonId: d.reasonId, comment: `${to.name} guruhiga o'tkazildi`, userId: user.id });
       await startMembership(tx, { groupId: d.toGroupId, studentId: gs.studentId, mode: d.mode as "TRIAL" | "ACTIVE", date, userId: user.id });
     });
-    await logAction(user, "student.transfer", `${gs.student.name}: ${gs.group.name} → ${to.name} (${isoDate(date)})`, { studentId: gs.studentId });
+    await logAction(user, "student.transfer", keep
+      ? `${gs.student.name}: ${to.name} guruhiga qo'shildi (${gs.group.name} da qoldi, ${isoDate(date)})`
+      : `${gs.student.name}: ${gs.group.name} → ${to.name} (${isoDate(date)})`, { studentId: gs.studentId });
     revalidatePath(`/groups/${gs.groupId}`);
     revalidatePath(`/groups/${d.toGroupId}`);
     revalidatePath(`/students/${gs.studentId}`);

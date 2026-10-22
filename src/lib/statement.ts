@@ -42,13 +42,15 @@ export function statement(
   const rows: Omit<StatementRow, "balance">[] = [];
   // a transfer = leaving one group and starting in another on the same day
   const day = (d: Date) => d.toISOString().slice(0, 10);
-  const leaves = memberships.flatMap((m) => m.events.filter((e) => e.type === "LEAVE").map((e) => ({ groupId: m.groupId, day: day(e.date) })));
+  const leaves = memberships.flatMap((m) => m.events.filter((e) => e.type === "LEAVE").map((e) => ({ groupId: m.groupId, day: day(e.date), comment: e.comment ?? null })));
   const starts = memberships.flatMap((m) => m.events.filter((e) => e.type === "ACTIVATE" || e.type === "TRIAL").map((e) => ({ groupId: m.groupId, day: day(e.date) })));
   for (const m of memberships) {
     for (const e of m.events) {
       const extra = [e.reason?.name, e.comment].filter(Boolean).join(" · ");
       const movedOut = e.type === "LEAVE" && starts.some((x) => x.groupId !== m.groupId && x.day === day(e.date));
-      const movedIn = (e.type === "ACTIVATE" || e.type === "TRIAL") && leaves.some((x) => x.groupId !== m.groupId && x.day === day(e.date));
+      // the app's transfer names the new group on the leave ("PY-07 guruhiga o'tkazildi"): another join that day is not part of it
+      const movedIn = (e.type === "ACTIVATE" || e.type === "TRIAL")
+        && leaves.some((x) => x.groupId !== m.groupId && x.day === day(e.date) && (!x.comment || x.comment === `${m.group.name} guruhiga o'tkazildi`));
       const type = movedOut ? "Boshqa guruhga o'tkazildi" : movedIn ? "O'tkazma bilan qo'shildi" : EVENT_LABEL[e.type as EventType] ?? e.type;
       rows.push({ date: e.date, kind: "event", type, label: extra, groupName: m.group.name, amount: 0, who: e.user?.name ?? null, at: e.createdAt ?? null, note: null, method: null });
     }

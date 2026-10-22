@@ -90,3 +90,11 @@ test("the ledger filter keeps each row's own running balance", async () => {
   assert.deepEqual(filterLedger(rows, "events").map((r) => r.kind), ["event"]);
   assert.equal(filterLedger(rows, "bogus").length, rows.length);
 });
+
+test("a join on the day of someone else's transfer is not a transfer", () => {
+  const a: StatementMembership = { ...member([{ type: "ACTIVATE", date: nov(1) }, { type: "LEAVE", date: nov(10), comment: "PY-07 guruhiga o'tkazildi" }]), groupId: 1 };
+  const b: StatementMembership = { ...member([{ type: "ACTIVATE", date: nov(10) }]), groupId: 2, group: { name: "PY-07", days: "ODD", course: { price: 650_000 } } };
+  const c: StatementMembership = { ...member([{ type: "ACTIVATE", date: nov(10) }]), groupId: 3, group: { name: "KS-21", days: "ODD", course: { price: 350_000 } } };
+  const types = Object.fromEntries(statement([a, b, c], [], NOW).filter((r) => r.kind === "event" && r.date.getTime() === nov(10).getTime()).map((r) => [r.groupName, r.type]));
+  assert.deepEqual(types, { "ROBO-3": "Boshqa guruhga o'tkazildi", "PY-07": "O'tkazma bilan qo'shildi", "KS-21": "Faollashtirildi" });
+});
