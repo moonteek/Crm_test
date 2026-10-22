@@ -3,11 +3,11 @@ import { db } from "../db";
 import { groupScope, type CurrentUser } from "../access";
 import { priceNow } from "../billing";
 import { curriculumOn, type Progress } from "../curriculum";
-import { GROUP_DAYS } from "../format";
 import { centreDay } from "../membership-db";
 import { closedDaysOf, makeupDaysOf } from "../holidays-db";
 import { loadUnmarkedToday } from "./unmarked";
 import { fmtDate, type Table } from "../export";
+import { daysLabel } from "../group-days";
 
 export const PROGRESS: Record<Progress["state"], string> = {
   "not-started": "Boshlanmagan",
@@ -53,7 +53,7 @@ export async function loadGroups(user: CurrentUser, params: GroupFilters) {
     title: status === "FINISHED" ? "Guruhlar arxivi" : "Guruhlar",
     columns: ["Guruh", "Kurs", "Hozirgi daraja", "Kunlar", "Vaqt", "O'qituvchi", "Yordamchi", "Xona", "O'quvchilar", "Narx", "Boshlangan"],
     rows: groups.map((g) => [
-      g.name, g.course.name, where(g), GROUP_DAYS[g.days] ?? g.days, g.time, g.teacher?.name ?? null, g.assistant?.name ?? null,
+      g.name, g.course.name, where(g), daysLabel(g.days), g.time, g.teacher?.name ?? null, g.assistant?.name ?? null,
       g.room?.name ?? null, g._count.students, priceNow(g), fmtDate(g.startDate),
     ]),
   };

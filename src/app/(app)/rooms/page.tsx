@@ -1,12 +1,12 @@
 import { DoorOpen, Plus, Trash2 } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
-import { GROUP_DAYS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { Empty, Field, PageHeader } from "@/components/ui";
 import { ExportButtons } from "@/components/ExportButtons";
 import { createRoom, deleteRoom } from "../actions";
 import { ActionButton, ActionForm } from "@/components/ActionForm";
+import { daysLabel } from "@/lib/group-days";
 
 export default async function RoomsPage() {
   await requirePage("rooms.manage");
@@ -42,7 +42,7 @@ export default async function RoomsPage() {
               {r.groups.map((g) => (
                 <div key={g.id} className="flex justify-between rounded-md bg-ink/[.03] px-3 py-1.5">
                   <span>{g.name}</span>
-                  <span className="text-muted">{GROUP_DAYS[g.days]} · {g.time}</span>
+                  <span className="text-muted">{daysLabel(g.days)} · {g.time}</span>
                 </div>
               ))}
               {r.groups.length === 0 && <p className="text-faint">Bo&apos;sh</p>}

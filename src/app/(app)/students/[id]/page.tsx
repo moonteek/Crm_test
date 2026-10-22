@@ -11,7 +11,7 @@ import { filterLedger, statement } from "@/lib/statement";
 import { upcomingPrice } from "@/lib/prices";
 import { passed } from "@/lib/curriculum";
 import { membershipInclude } from "@/lib/billing-include";
-import { date, GENDERS, GROUP_DAYS, isoDate, money } from "@/lib/format";
+import { date, GENDERS, isoDate, money } from "@/lib/format";
 import { studentHistory } from "@/lib/student-history";
 import { Modal } from "@/components/Modal";
 import { StudentFields } from "@/components/forms";
@@ -30,6 +30,7 @@ import { centreToday } from "@/lib/schedule";
 import { addStudentToGroup, deletePayment, deleteStudent, setStudentTags, updateStudent } from "../../actions";
 import { DocumentsPanel } from "@/components/students/DocumentsPanel";
 import { ActionButton, ActionForm } from "@/components/ActionForm";
+import { daysLabel } from "@/lib/group-days";
 
 /** Payments tab filter (src/lib/statement.ts filterLedger). */
 const LEDGER_FILTERS = [["all", "Hammasi"], ["payments", "To'lovlar"], ["CASH", "Naqd"], ["CARD", "Karta"], ["TRANSFER", "O'tkazma"], ["charges", "Hisoblar"], ["events", "Amallar"]] as const;
@@ -271,7 +272,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
                       {failed.length > 0 && <span className="badge bg-danger-tint text-danger">Imtihondan yiqilgan: {failed.length}</span>}
                     </div>
                     <dl className="mt-3 space-y-1 text-sm">
-                      <Row k="Jadval">{GROUP_DAYS[gs.group.days]} · <span className="font-mono">{gs.group.time}</span></Row>
+                      <Row k="Jadval">{daysLabel(gs.group.days)} · <span className="font-mono">{gs.group.time}</span></Row>
                       <Row k="Qo'shilgan">{date(gs.events[0]?.date ?? gs.joinedAt)}</Row>
                       {activated && <Row k="Faollashtirilgan">{date(activated.date)}</Row>}
                       {(gs.status === "FROZEN" || gs.status === "LEFT") && last && (

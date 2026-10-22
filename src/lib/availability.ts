@@ -1,5 +1,6 @@
-import { GROUP_DAYS, lessonWeekdays } from "./format";
+import { lessonWeekdays } from "./format";
 import { centreWeekday, fromMinutes, toMinutes } from "./schedule";
+import { daysLabel } from "./group-days";
 
 // Teachers' weekly hours, 08:00–20:00 in 1-hour cells, on odd (Du/Chor/Ju) and even (Se/Pay/Sha) days.
 // Lessons are never stored here — they come from the active groups every time.
@@ -25,7 +26,9 @@ type Slot = { dayType: string; hour: number; free: boolean };
 /** Today's day type: Tue/Thu/Sat are even days; Mon/Wed/Fri and Sunday show odd days. */
 export const todayDayType = (d = new Date()): DayType => ([2, 4, 6].includes(centreWeekday(d)) ? "EVEN" : "ODD");
 
-export const dayTypesOf = (days: string): DayType[] => (days === "ODD" ? ["ODD"] : days === "EVEN" ? ["EVEN"] : ["ODD", "EVEN"]);
+/** The grid rows a lesson set falls on: each day type that contains one of its days (Du/Pay → both). */
+export const dayTypesOf = (days: string): DayType[] =>
+  DAY_TYPES.filter((t) => lessonWeekdays(days).some((d) => lessonWeekdays(t).includes(d)));
 
 /** Hours whose cell the lesson touches (14:30 + 90 min → 14 and 15). */
 export function lessonCells(time: string, minutes: number) {
@@ -60,7 +63,7 @@ export function groupClashes(candidate: LessonLike, others: LessonLike[], names:
 
 export function clashMessage(c: Clash) {
   const g = c.group;
-  const when = `${GROUP_DAYS[g.days] ?? g.days} ${g.time}–${fromMinutes(toMinutes(g.time) + g.minutes)}`;
+  const when = `${daysLabel(g.days)} ${g.time}–${fromMinutes(toMinutes(g.time) + g.minutes)}`;
   return c.kind === "teacher" ? `${c.who} ${when} da ${g.name} guruhida dars beradi` : `${c.who} ${when} da ${g.name} guruhi bilan band`;
 }
 

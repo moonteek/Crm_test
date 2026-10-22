@@ -1,3 +1,5 @@
+import { weekdaysOf } from "./group-days";
+
 export function money(n: number) {
   return new Intl.NumberFormat("ru-RU").format(n).replace(/ /g, " ") + " so'm";
 }
@@ -89,9 +91,7 @@ export const LEAD_SOURCES = ["Instagram", "Telegram", "Facebook", "Tanish orqali
 
 /** Lesson weekdays (0 = Sunday) for a group schedule. */
 export function lessonWeekdays(days: string) {
-  if (days === "ODD") return [1, 3, 5];
-  if (days === "EVEN") return [2, 4, 6];
-  return [1, 2, 3, 4, 5, 6];
+  return weekdaysOf(days);
 }
 
 /** Lesson dates of a month without the centre's holidays (ISO days): the lessons that actually happen. */

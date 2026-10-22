@@ -9,7 +9,7 @@ import { balance, priceNow, withHolidays } from "@/lib/billing";
 import { closedDaysOf, holidayDays, makeupDaysOf, unchargedDaysOf } from "@/lib/holidays-db";
 import { upcomingPrice } from "@/lib/prices";
 import { membershipInclude } from "@/lib/billing-include";
-import { date, GROUP_DAYS, isoDate, lessonDates, lessonWeekdays, money, MONTHS } from "@/lib/format";
+import { date, isoDate, lessonDates, lessonWeekdays, money, MONTHS } from "@/lib/format";
 import { Modal } from "@/components/Modal";
 import { EditGroupDialog } from "@/components/EditGroupDialog";
 import { BalanceBadge, Empty, Field } from "@/components/ui";
@@ -31,6 +31,7 @@ import { StatusBadge, StatusLegend } from "@/components/members/StatusBadge";
 import { toMemberData, toMemberGroup } from "@/components/members/types";
 import { addStudentToGroup, createExam, deleteExam, deleteGroup } from "../../actions";
 import { ActionButton, ActionForm } from "@/components/ActionForm";
+import { daysLabel } from "@/lib/group-days";
 
 export default async function GroupPage({
   params, searchParams,
@@ -151,7 +152,7 @@ export default async function GroupPage({
         <div className={`mt-5 grid grid-cols-2 gap-2.5 text-sm ${group.assistant ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
           <Info k="O'qituvchi" v={group.teacher?.name ?? "—"} />
           {group.assistant && <Info k="Yordamchi o'qituvchi" v={group.assistant.name} />}
-          <Info k="Jadval" v={`${GROUP_DAYS[group.days]} · ${group.time}`} />
+          <Info k="Jadval" v={`${daysLabel(group.days)} · ${group.time}`} />
           <Info k="Xona" v={group.room?.name ?? "—"} />
           <Info k="Boshlangan" v={date(group.startDate)} />
         </div>

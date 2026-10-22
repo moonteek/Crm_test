@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { priceNow } from "@/lib/billing";
 import { requirePage } from "@/lib/auth";
 import { can } from "@/lib/access";
-import { date, GROUP_DAYS, money } from "@/lib/format";
+import { date, money } from "@/lib/format";
 import { loadGroups, PROGRESS, type GroupFilters } from "@/lib/lists/groups";
 import { ExportButtons } from "@/components/ExportButtons";
 import { CurriculumBadge, CurriculumBar } from "@/components/CurriculumBar";
@@ -13,6 +13,7 @@ import { Empty, PageHeader, Segmented } from "@/components/ui";
 import { restoreGroup } from "../actions";
 import { NewGroupDialog } from "@/components/NewGroupDialog";
 import { ActionButton } from "@/components/ActionForm";
+import { daysLabel } from "@/lib/group-days";
 
 export default async function GroupsPage({ searchParams }: { searchParams: Promise<GroupFilters> }) {
   const user = await requirePage("groups.view");
@@ -82,7 +83,7 @@ export default async function GroupsPage({ searchParams }: { searchParams: Promi
                 </div>
               </div>
               <div className="mt-4 space-y-1.5 text-sm text-muted">
-                <p className="flex items-center gap-2"><Clock className="h-4 w-4 shrink-0 text-faint" />{GROUP_DAYS[g.days]} · <span className="font-mono">{g.time}</span></p>
+                <p className="flex items-center gap-2"><Clock className="h-4 w-4 shrink-0 text-faint" />{daysLabel(g.days)} · <span className="font-mono">{g.time}</span></p>
                 <p className="flex min-w-0 items-center gap-2"><User className="h-4 w-4 shrink-0 text-faint" /><span className="truncate">{g.teacher?.name ?? "O'qituvchi biriktirilmagan"}{g.assistant && <span className="text-faint"> · yordamchi: {g.assistant.name}</span>}</span></p>
                 <p className="flex items-center gap-2"><DoorOpen className="h-4 w-4 text-faint" />{g.room?.name ?? "Xona yo'q"}</p>
               </div>

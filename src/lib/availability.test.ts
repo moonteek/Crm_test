@@ -22,6 +22,10 @@ test("day types", () => {
   assert.deepEqual(dayTypesOf("ODD"), ["ODD"]);
   assert.deepEqual(dayTypesOf("EVEN"), ["EVEN"]);
   assert.deepEqual(dayTypesOf("DAILY"), ["ODD", "EVEN"]);
+  // a custom set marks each day type that contains one of its days
+  assert.deepEqual(dayTypesOf("1,4"), ["ODD", "EVEN"]);
+  assert.deepEqual(dayTypesOf("1,5"), ["ODD"]);
+  assert.deepEqual(dayTypesOf("2,6"), ["EVEN"]);
 });
 
 test("clashes: teacher, assistant, room, day types, self, back-to-back", () => {
