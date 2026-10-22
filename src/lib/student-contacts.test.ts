@@ -33,8 +33,17 @@ test("parents: the old single parent moves into Otasi only when Otasi is empty",
       row(3, {}),
       row(4, { parentPhone: "+998907776655" }),
     ]),
-    [{ id: 1, fatherName: "Karim", fatherPhone: "+998901112233" }, { id: 4, fatherName: null, fatherPhone: "+998907776655" }],
+    [
+      { id: 1, fatherName: "Karim", fatherPhone: "+998901112233" },
+      { id: 2, fatherName: "Already", fatherPhone: null }, // Otasi kept; the old value is only emptied
+      { id: 4, fatherName: null, fatherPhone: "+998907776655" },
+    ].map((r) => ({ ...r, parentName: null, parentPhone: null })),
   );
+});
+
+test("parents: once copied, the old field is emptied, so a second run never brings back a cleared Otasi", () => {
+  const after = { id: 1, parentName: null, parentPhone: null, fatherName: null, fatherPhone: null }; // staff cleared a wrong Otasi
+  assert.deepEqual(planParents([after]), []);
 });
 
 test("parent phones for lists and exports", () => {

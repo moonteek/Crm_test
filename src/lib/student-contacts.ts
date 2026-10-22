@@ -18,11 +18,17 @@ export const emailField = z.preprocess(
 
 type ParentRow = { id: number; parentName: string | null; parentPhone: string | null; fatherName: string | null; fatherPhone: string | null };
 
-/** `npm run db:parents`: the old single parent becomes "Otasi" where Otasi is still empty (safe to run again). */
+/**
+ * `npm run db:parents`: the old single parent becomes "Otasi" where Otasi is still empty, and the old field is emptied
+ * either way — so running it again never brings back an "Otasi" that staff have since corrected or cleared.
+ */
 export function planParents(rows: ParentRow[]) {
   return rows
-    .filter((r) => !r.fatherName && !r.fatherPhone && (r.parentName || r.parentPhone))
-    .map((r) => ({ id: r.id, fatherName: r.parentName, fatherPhone: r.parentPhone }));
+    .filter((r) => r.parentName || r.parentPhone)
+    .map((r) => {
+      const copy = !r.fatherName && !r.fatherPhone;
+      return { id: r.id, fatherName: copy ? r.parentName : r.fatherName, fatherPhone: copy ? r.parentPhone : r.fatherPhone, parentName: null, parentPhone: null };
+    });
 }
 
 /** "Otasi: …, Onasi: …" for lists and exports (missing ones left out). */

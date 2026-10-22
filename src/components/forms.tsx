@@ -63,19 +63,18 @@ export function StudentFields({ s, canManage = true }: { s?: StudentInfo; canMan
           </button>
         ))}
       </div>
-      {open.has("telegram") && (
+      {/* every field stays in the form (only hidden while its icon is closed), so what was typed is always saved */}
+      <div hidden={!open.has("telegram")}>
         <Field label="Telegram">
           <div className="relative">
             <AtSign className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-faint" />
             <input name="telegram" className="input pl-9" maxLength={33} placeholder="username" defaultValue={s?.telegram ?? ""} />
           </div>
         </Field>
-      )}
-      {open.has("email") && <Field label="Email"><input name="email" type="email" className="input" maxLength={120} defaultValue={s?.email ?? ""} /></Field>}
-      {open.has("phone2") && <Field label="Qo'shimcha telefon"><input name="phone2" className="input" maxLength={40} defaultValue={s?.phone2 ?? ""} /></Field>}
-      {open.has("passport") && <Field label="Pasport / ID"><input name="passport" className="input" maxLength={40} defaultValue={s?.passport ?? ""} /></Field>}
-      {/* closed icons keep their stored value (an edit must not wipe what isn't shown) */}
-      {icons.filter((i) => !open.has(i.key)).map((i) => <input key={i.key} type="hidden" name={i.key} value={s?.[i.key] ?? ""} />)}
+      </div>
+      <div hidden={!open.has("email")}><Field label="Email"><input name="email" type="email" className="input" maxLength={120} defaultValue={s?.email ?? ""} /></Field></div>
+      <div hidden={!open.has("phone2")}><Field label="Qo'shimcha telefon"><input name="phone2" className="input" maxLength={40} defaultValue={s?.phone2 ?? ""} /></Field></div>
+      {canManage && <div hidden={!open.has("passport")}><Field label="Pasport / ID"><input name="passport" className="input" maxLength={40} defaultValue={s?.passport ?? ""} /></Field></div>}
 
       <details className="rounded-xl border border-line px-3 py-2" open={more}>
         <summary className="cursor-pointer text-sm font-medium text-accent-ink">+ qo&apos;shimcha ma&apos;lumot</summary>
