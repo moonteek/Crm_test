@@ -7,7 +7,7 @@ import { requirePage } from "@/lib/auth";
 import { can, canSeeBalances, groupScope, studentScope } from "@/lib/access";
 import { balance, priceNow, withHolidays } from "@/lib/billing";
 import { unchargedDaysOf } from "@/lib/holidays-db";
-import { statement } from "@/lib/statement";
+import { filterLedger, statement } from "@/lib/statement";
 import { upcomingPrice } from "@/lib/prices";
 import { passed } from "@/lib/curriculum";
 import { membershipInclude } from "@/lib/billing-include";
@@ -16,7 +16,7 @@ import { studentHistory } from "@/lib/student-history";
 import { Modal } from "@/components/Modal";
 import { StudentFields } from "@/components/forms";
 import { PaymentForm } from "@/components/PaymentForm";
-import { Empty, Field } from "@/components/ui";
+import { Empty, Field, Segmented } from "@/components/ui";
 import { MemberMenu } from "@/components/members/MemberMenu";
 import { StatusBadge } from "@/components/members/StatusBadge";
 import { toMemberData, toMemberGroup } from "@/components/members/types";
@@ -31,6 +31,10 @@ import { addStudentToGroup, deletePayment, deleteStudent, setStudentTags, update
 import { DocumentsPanel } from "@/components/students/DocumentsPanel";
 import { ActionButton, ActionForm } from "@/components/ActionForm";
 
+/** Payments tab filter (src/lib/statement.ts filterLedger). */
+const LEDGER_FILTERS = [["all", "Hammasi"], ["payments", "To'lovlar"], ["CASH", "Naqd"], ["CARD", "Karta"], ["TRANSFER", "O'tkazma"], ["charges", "Hisoblar"], ["events", "Amallar"]] as const;
+const dateTime = (d: Date) => d.toLocaleString("ru-RU", { timeZone: "Asia/Tashkent", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
 const TABS = [
   { key: "groups", label: "Guruhlar" },
   { key: "payments", label: "To'lovlar" },
@@ -42,10 +46,11 @@ const TABS = [
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
 
-export default async function StudentPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> }) {
+export default async function StudentPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; ledger?: string }> }) {
   const user = await requirePage("students.view");
   const id = Number((await params).id);
-  const asked = (await searchParams).tab;
+  const sp = await searchParams;
+  const asked = sp.tab;
   const [student, allGroups] = await Promise.all([
     db.student.findFirst({
       where: { id, ...studentScope(user) },
@@ -54,13 +59,13 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
       include: {
         groups: {
           include: {
-            events: { ...membershipInclude.events, include: { reason: true } },
+            events: { ...membershipInclude.events, include: { reason: true, user: { select: { name: true } } } },
             group: { include: { course: true, teacher: true, prices: true } },
             discounts: { include: { user: { select: { name: true } } }, orderBy: { from: "desc" } },
           },
           orderBy: { joinedAt: "desc" },
         },
-        payments: { include: { group: true }, orderBy: { date: "desc" } },
+        payments: { include: { group: true, user: { select: { name: true } } }, orderBy: { date: "desc" } },
         attendance: true,
         grades: { select: { score: true } },
         examResults: { include: { exam: true } },
@@ -83,7 +88,8 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
     ? Math.round(student.examResults.reduce((s, r) => s + (r.score / r.exam.maxScore) * 100, 0) / student.examResults.length)
     : null;
   const activeGroups = student.groups.filter((g) => !g.leftAt).map((g) => g.group);
-  const rows = statement(groups, student.payments);
+  const ledgerKey = LEDGER_FILTERS.some(([k]) => k === sp.ledger) ? sp.ledger! : "all";
+  const rows = filterLedger(statement(groups, student.payments), ledgerKey);
   const allow = {
     manage: can(user, "students.manage"),
     remove: can(user, "students.delete"),
@@ -293,22 +299,26 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
           )}
 
           {tab === "payments" && allow.payments && <div className="card">
-            <div className="flex items-center justify-between px-5 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
               <h2 className="font-semibold">To&apos;lovlar va hisob</h2>
+              <Segmented options={LEDGER_FILTERS.map(([k, label]) => ({ href: `/students/${student.id}?tab=payments${k === "all" ? "" : `&ledger=${k}`}`, label, active: ledgerKey === k }))} />
               {allow.balance && <span className={`font-semibold ${b < 0 ? "text-danger" : "text-success"}`}>{money(b)}</span>}
             </div>
             <div className="md:overflow-x-auto">
               <table className="table table-stack">
-                <thead><tr><th>Sana</th><th>Amal</th><th>Guruh</th><th className="text-right">Summa</th>{allow.balance && <th className="text-right">Balans</th>}<th></th></tr></thead>
+                <thead><tr><th>Sana</th><th>Amal</th><th>Guruh</th><th>Hodim</th><th className="text-right">Summa</th>{allow.balance && <th className="text-right">Balans</th>}<th></th></tr></thead>
                 <tbody>
                   {rows.map((r, i) => (
                     <tr key={i}>
                       <td data-label="Sana" className="text-muted">{date(r.date)}</td>
                       <td className="max-md:order-first whitespace-normal">
-                        <span className={r.kind === "event" ? "text-muted" : "font-medium"}>{r.label}</span>
+                        <span className={r.kind === "event" ? "text-muted" : "font-medium"}>{r.type}</span>
+                        {r.label && <span className="text-muted"> · {r.label}</span>}
                         {r.lessons && <span className="label-mono ml-2">{r.lessons}</span>}
+                        {r.note && <span className="block text-xs text-muted">{r.note}</span>}
                       </td>
                       <td data-label="Guruh">{r.groupName ?? "—"}</td>
+                      <td data-label="Hodim" className="text-xs text-muted">{r.who ?? "—"}{r.at && <span className="block font-mono">{dateTime(r.at)}</span>}</td>
                       <td data-label="Summa" className={`text-right font-semibold ${r.amount > 0 ? "text-success" : r.amount < 0 ? "text-danger" : "text-faint"}`}>
                         {r.amount === 0 ? "—" : `${r.amount > 0 ? "+" : "−"}${money(Math.abs(r.amount))}`}
                       </td>
