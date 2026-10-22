@@ -7,7 +7,7 @@ O'quv markazi uchun CRM tizimi: lidlar, o'quvchilar, guruhlar, davomat, to'lovla
 - **Bosh sahifa** — faol o'quvchilar, guruhlar, lidlar, qarzdorlar, oylik tushum/xarajat, bugungi darslar
 - **Lidlar** — kanban (Yangi → Bog'lanildi → Sinov darsi → O'qishga yozildi / Rad etdi), lidni bir bosishda o'quvchiga aylantirish
 - **O'quvchilar** — qidiruv, profil, guruhga qo'shish/chiqarish, balans, to'lovlar tarixi, davomat foizi
-- **Guruhlar** — jadval (toq/juft kunlar), o'qituvchi, xona, oylik davomat jadvali
+- **Guruhlar** — jadval (toq/juft kunlar, har kuni yoki istalgan kunlar), boshlanish va tugash vaqti, o'qituvchi, xona, oylik davomat jadvali
 - **To'lovlar** — oy bo'yicha, to'lov turi bo'yicha (naqd / karta / o'tkazma)
 - **Qarzdorlar** — avtomatik hisoblanadi: har bir oy uchun kurs narxi − to'langan summa
 - **Moliya** — xarajatlar, yillik tushum/xarajat grafigi, sof foyda
@@ -202,6 +202,13 @@ qo'shimcha telefon va pasport maydonlarini ochadi. "Hujjatlar" bo'limida PDF/JPG
 faqat o'quvchini tahrirlash huquqi borlarga. To'lovlar bo'limida har qatorning turi, kim va qachon kiritgani, izoh va
 filtr (Naqd, Karta, O'tkazma, Hisoblar, Amallar). "Boshqa guruhga o'tkazish"da "Guruhda saqlab qolish" belgisi o'quvchini
 eski guruhda ham qoldiradi. Yangilangandan keyin `npm run db:push`, so'ng bir marta `npm run db:parents`.
+
+**Guruh jadvali:** dars kunlari — Toq kunlar, Juft kunlar, Har kuni yoki "Boshqa" (Du…Sha dan istalgan kunlar);
+boshlanish va tugash vaqti (tugash kursning dars davomiyligidan to'ldiriladi, o'zgartirsa bo'ladi; dars 4 soatdan
+uzun bo'lmaydi). Jadval o'zgarsa "Qachondan?" so'raladi (shu oyning 1-sanasidan 60 kun oldinggacha): shu kungacha
+bo'lgan darslar, to'lovlar, ish haqi va daraja hisobi eski jadval bo'yicha qoladi; kelajakdagi sana tanlansa dars
+jadvali va eslatmalar shu kuni almashadi. Olib tashlanadigan kunlarda davomat yoki baho bo'lsa saqlanmaydi.
+Yangilangandan keyin `npm run db:push`.
 
 **Xavfli o'quvchilar:** faol va sinovdagi o'quvchilar — ketma-ket darsga kelmagan, davomati yoki bahosi tushgan,
 daraja imtihonidan o'tmaganlar — sabablari bilan. "Bog'lanildi" tugmasi qo'ng'iroq natijasini yozadi (o'quvchi Tarixida
