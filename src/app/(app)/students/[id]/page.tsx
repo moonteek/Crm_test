@@ -31,6 +31,7 @@ import { addStudentToGroup, deletePayment, deleteStudent, setStudentTags, update
 import { DocumentsPanel } from "@/components/students/DocumentsPanel";
 import { ActionButton, ActionForm } from "@/components/ActionForm";
 import { daysLabel } from "@/lib/group-days";
+import { scheduleOn } from "@/lib/group-schedule";
 
 /** Payments tab filter (src/lib/statement.ts filterLedger). */
 const LEDGER_FILTERS = [["all", "Hammasi"], ["payments", "To'lovlar"], ["CASH", "Naqd"], ["CARD", "Karta"], ["TRANSFER", "O'tkazma"], ["charges", "Hisoblar"], ["events", "Amallar"]] as const;
@@ -272,7 +273,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
                       {failed.length > 0 && <span className="badge bg-danger-tint text-danger">Imtihondan yiqilgan: {failed.length}</span>}
                     </div>
                     <dl className="mt-3 space-y-1 text-sm">
-                      <Row k="Jadval">{daysLabel(gs.group.days)} · <span className="font-mono">{gs.group.time}</span></Row>
+                      <Row k="Jadval">{daysLabel(scheduleOn(gs.group, centreDay()).days)} · <span className="font-mono">{scheduleOn(gs.group, centreDay()).time}</span></Row>
                       <Row k="Qo'shilgan">{date(gs.events[0]?.date ?? gs.joinedAt)}</Row>
                       {activated && <Row k="Faollashtirilgan">{date(activated.date)}</Row>}
                       {(gs.status === "FROZEN" || gs.status === "LEFT") && last && (

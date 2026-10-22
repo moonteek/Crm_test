@@ -13,7 +13,7 @@ export type Scheduled = Schedule & { schedules: ScheduleRow[] };
 export type DaysScheduled = { days: string; schedules: { from: Date; days: string }[] };
 
 /** The row in force on `day`: the latest one from on or before it (null before the first row / with no rows). */
-function rowOn<R extends { from: Date }>(rows: R[], day: Date): R | null {
+export function rowOn<R extends { from: Date }>(rows: R[], day: Date): R | null {
   let best: R | null = null;
   for (const r of rows) if (r.from.getTime() <= day.getTime() && (!best || r.from > best.from)) best = r;
   return best;

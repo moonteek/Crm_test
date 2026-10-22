@@ -1,5 +1,5 @@
-import { lessonWeekdays } from "./format";
 import { centreToday, fromMinutes, toMinutes } from "./schedule";
+import { isLessonDay, type DaysScheduled } from "./group-schedule";
 
 // One group's lesson on one day can be cancelled ("Darsni qoldirish": a closed day for that group, like a holiday)
 // or taught by a substitute ("O'qituvchini almashtirish": that lesson's pay goes to them).
@@ -10,7 +10,8 @@ export function lessonChangeProblem(
   input: {
     kind: "CANCEL" | "SUBSTITUTE";
     date: Date;
-    days: string;
+    /** the group's days and their changes: the lesson must be on that day's schedule */
+    group: DaysScheduled;
     holidays: string[];
     existing: { kind: string; date: Date }[];
     substituteId?: number | null;
@@ -21,7 +22,7 @@ export function lessonChangeProblem(
   },
   today: Date,
 ): string | null {
-  if (!lessonWeekdays(input.days).includes(input.date.getUTCDay())) return "Bu kunda dars yo'q";
+  if (!isLessonDay(input.group, input.date)) return "Bu kunda dars yo'q";
   if (input.holidays.includes(iso(input.date))) return "Bayram kuni — dars yo'q";
   if (!lessonChangeOpen(input.date, today)) return "Faqat shu oydan boshlab";
   const same = input.existing.filter((e) => iso(e.date) === iso(input.date));
@@ -75,12 +76,12 @@ export const makeupDays = (cancels: Pick<CancelRow, "makeupDate">[]) => cancels.
 const DAY = 86_400_000;
 
 /** Where a moved lesson may go: today … 60 days ahead, not a holiday, not a day without lessons, not a usual lesson day. */
-export function makeupProblem(p: { date: Date; original: Date; today: Date; days: string; holidays: string[]; noLesson: string[]; taken?: string[] }): string | null {
+export function makeupProblem(p: { date: Date; original: Date; today: Date; group: DaysScheduled; holidays: string[]; noLesson: string[]; taken?: string[] }): string | null {
   const today = Date.UTC(p.today.getUTCFullYear(), p.today.getUTCMonth(), p.today.getUTCDate());
   if (p.date.getTime() < today || p.date.getTime() > today + 60 * DAY) return "Sana bugundan 60 kungacha bo'lishi kerak";
   if (p.holidays.includes(iso(p.date))) return "Bayram kuni";
   if (p.noLesson.includes(iso(p.date)) || iso(p.date) === iso(p.original)) return "Bu kun ham bekor qilingan";
-  if (lessonWeekdays(p.days).includes(p.date.getUTCDay())) return "Guruhning shu kuni darsi bor";
+  if (isLessonDay(p.group, p.date)) return "Guruhning shu kuni darsi bor";
   // the group's other moved lessons already use that day
   if (p.taken?.includes(iso(p.date))) return "Bu kunga boshqa dars ko'chirilgan";
   return null;

@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { closedDays, lessonChangeOpen, lessonChangeProblem, markProblem, whoTaught } from "./lesson-changes";
+import { closedDays, lessonChangeOpen, lessonChangeProblem, makeupProblem, markProblem, whoTaught } from "./lesson-changes";
 
 const d = (y: number, m: number, day: number) => new Date(Date.UTC(y, m - 1, day));
 const today = new Date("2026-11-04T08:00:00Z");
-const base = { kind: "CANCEL" as const, date: d(2026, 11, 10), days: "EVEN", holidays: [] as string[], existing: [] as { kind: string; date: Date }[] };
+const base = { kind: "CANCEL" as const, date: d(2026, 11, 10), group: { days: "EVEN", schedules: [] }, holidays: [] as string[], existing: [] as { kind: string; date: Date }[] };
 
 test("lesson change rules", () => {
   assert.equal(lessonChangeProblem(base, today), null);
@@ -38,7 +38,7 @@ test("marks: only lessons that already happened (today included)", () => {
 
 test("substitute: not the person who had that lesson, nor the group's other teacher on it", () => {
   const today = new Date("2026-11-02T00:00:00Z");
-  const base = { kind: "SUBSTITUTE" as const, date: new Date("2026-11-10T00:00:00Z"), days: "EVEN", holidays: [], existing: [] };
+  const base = { kind: "SUBSTITUTE" as const, date: new Date("2026-11-10T00:00:00Z"), group: { days: "EVEN", schedules: [] }, holidays: [], existing: [] };
   // teacher on that day was 3 (history), the assistant 4; today's teacher (7) doesn't matter
   assert.equal(lessonChangeProblem({ ...base, substituteId: 3, absentId: 3, onLesson: [3, 4] }, today), "O'zini o'zi almashtira olmaydi");
   assert.equal(lessonChangeProblem({ ...base, substituteId: 4, absentId: 3, onLesson: [3, 4] }, today), "Bu darsda u allaqachon bor (guruhning o'qituvchisi)");
@@ -67,7 +67,7 @@ test("day sets: plain cancel, charged cancel, moved lesson", async () => {
 
 test("make-up date rules", async () => {
   const { makeupProblem } = await import("./lesson-changes");
-  const p = { original: d(2026, 11, 16), today: d(2026, 11, 16), days: "ODD", holidays: ["2026-11-28"], noLesson: ["2026-11-24"] };
+  const p = { original: d(2026, 11, 16), today: d(2026, 11, 16), group: { days: "ODD", schedules: [] }, holidays: ["2026-11-28"], noLesson: ["2026-11-24"] };
   assert.equal(makeupProblem({ ...p, date: d(2026, 11, 21) }), null);
   assert.equal(makeupProblem({ ...p, date: d(2026, 11, 18) }), "Guruhning shu kuni darsi bor");
   assert.equal(makeupProblem({ ...p, date: d(2026, 11, 28) }), "Bayram kuni");
@@ -125,7 +125,7 @@ test("a make-up day can be marked; the original day and holidays can't", async (
 
 test("two lessons can't be moved to the same day", async () => {
   const { makeupProblem } = await import("./lesson-changes");
-  const p = { original: d(2026, 11, 16), today: d(2026, 11, 16), days: "ODD", holidays: [], noLesson: [] };
+  const p = { original: d(2026, 11, 16), today: d(2026, 11, 16), group: { days: "ODD", schedules: [] }, holidays: [], noLesson: [] };
   assert.equal(makeupProblem({ ...p, date: d(2026, 11, 21), taken: ["2026-11-21"] }), "Bu kunga boshqa dars ko'chirilgan");
   assert.equal(makeupProblem({ ...p, date: d(2026, 11, 21), taken: ["2026-11-28"] }), null);
 });
@@ -151,4 +151,15 @@ test("who hears that a make-up is off: on undo everyone involved, on a move the 
   assert.deepEqual(makeupOffRecipients([10, 7], 8, 9, true), [8]);
   assert.deepEqual(makeupOffRecipients([10, 7], 8, 8, true), []); // same teacher: nothing extra
   assert.deepEqual(makeupOffRecipients([10, 7], 10, 9, true), []); // the old one is the group's teacher: told by the new text
+});
+
+test("lesson changes follow the schedule of that day (ODD until the 15th, EVEN from the 16th)", () => {
+  const group = { days: "EVEN", schedules: [{ from: d(2026, 9, 1), days: "ODD" }, { from: d(2026, 11, 16), days: "EVEN" }] };
+  const p = { kind: "CANCEL" as const, holidays: [] as string[], existing: [] as { kind: string; date: Date }[], group };
+  assert.equal(lessonChangeProblem({ ...p, date: d(2026, 11, 11) }, today), null); // Wednesday, still ODD
+  assert.equal(lessonChangeProblem({ ...p, date: d(2026, 11, 17) }, today), null); // Tuesday, EVEN
+  assert.equal(lessonChangeProblem({ ...p, date: d(2026, 11, 18) }, today), "Bu kunda dars yo'q");
+  const m = { original: d(2026, 11, 10), today: d(2026, 11, 4), holidays: [], noLesson: [], group };
+  assert.equal(makeupProblem({ ...m, date: d(2026, 11, 11) }), "Guruhning shu kuni darsi bor"); // an ODD day then
+  assert.equal(makeupProblem({ ...m, date: d(2026, 11, 12) }), null); // Thursday before the change: free
 });

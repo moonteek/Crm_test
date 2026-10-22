@@ -6,10 +6,10 @@ import { canCover } from "@/lib/cover-db";
 import { centreDay } from "@/lib/membership-db";
 import { closedDaysOf, makeupDaysOf } from "@/lib/holidays-db";
 import { lessonOpenOn } from "@/lib/lesson-changes";
-import { lessonWeekdays } from "@/lib/format";
 import { TodayLesson } from "@/components/TodayLesson";
 import { GradeCell } from "@/components/GradeCell";
 import { PageHeader } from "@/components/ui";
+import { isLessonDay, scheduleOn } from "@/lib/group-schedule";
 
 /**
  * One lesson of one group, today: marks, absence reasons and daily grades — for the person covering it (a substitute
@@ -29,6 +29,7 @@ export default async function LessonPage({ params }: { params: Promise<{ groupId
     where: { id: groupId },
     include: {
       room: true,
+      schedules: true,
       students: { where: { leftAt: null, status: { in: ["ACTIVE", "TRIAL"] } }, include: { student: { select: { id: true, name: true } } }, orderBy: { student: { name: "asc" } } },
     },
   });
@@ -39,8 +40,8 @@ export default async function LessonPage({ params }: { params: Promise<{ groupId
     db.absenceReason.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
     db.lessonChange.findFirst({ where: { groupId, kind: "CANCEL", makeupDate: date }, include: { makeupRoom: true } }),
   ]);
-  const open = lessonOpenOn(day, { noLesson: closed(groupId), extra: makeups(groupId), weekdayLesson: lessonWeekdays(group.days).includes(date.getUTCDay()) });
-  const time = makeup?.makeupTime ?? group.time;
+  const open = lessonOpenOn(day, { noLesson: closed(groupId), extra: makeups(groupId), weekdayLesson: isLessonDay(group, date) });
+  const time = makeup?.makeupTime ?? scheduleOn(group, date).time;
   const room = makeup ? makeup.makeupRoom?.name ?? null : group.room?.name ?? null;
   const rows = group.students.map((gs) => {
     const a = marks.find((m) => m.studentId === gs.student.id);

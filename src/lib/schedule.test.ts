@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { centreMonthStart, centreToday, greeting } from "./schedule";
+import { centreMonthStart, centreToday, dateThisWeek, greeting } from "./schedule";
 
 test("centreToday uses Tashkent time, not the server's", () => {
   // 20:00 UTC on Saturday 10 Oct is already 01:00 on Sunday 11 Oct in Tashkent
@@ -24,4 +24,13 @@ test("centreMonthStart is the 1st of the Tashkent month, even when the server is
   assert.equal(start.getFullYear(), 2026);
   assert.equal(start.getMonth(), 10);
   assert.equal(start.getDate(), 1);
+});
+
+test("timetable week: a weekday's date this week; on Sunday, the coming week", () => {
+  const u = (s: string) => new Date(`${s}T00:00:00Z`);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  assert.equal(iso(dateThisWeek(1, u("2026-11-11"))), "2026-11-09"); // Wednesday → this Monday
+  assert.equal(iso(dateThisWeek(6, u("2026-11-11"))), "2026-11-14");
+  assert.equal(iso(dateThisWeek(1, u("2026-11-15"))), "2026-11-16"); // Sunday → the coming Monday
+  assert.equal(iso(dateThisWeek(3, u("2026-11-16"))), "2026-11-18");
 });

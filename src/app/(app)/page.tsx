@@ -7,7 +7,9 @@ import { can, firstAllowedPage, groupScope, studentScope } from "@/lib/access";
 import { balance, withHolidays } from "@/lib/billing";
 import { holidayDays } from "@/lib/holidays-db";
 import { membershipInclude } from "@/lib/billing-include";
-import { centreMonthStart, centreToday, fromMinutes, greeting, scheduleKeysOn, toMinutes, WEEKDAYS } from "@/lib/schedule";
+import { centreMonthStart, centreToday, fromMinutes, greeting, toMinutes, WEEKDAYS } from "@/lib/schedule";
+import { lessonMinutes } from "@/lib/group-days";
+import { isLessonDay, scheduleOn } from "@/lib/group-schedule";
 import { date, money, MONTHS, PAYMENT_METHODS, LEAD_STATUSES } from "@/lib/format";
 import { DotMeter, Empty, PageHeader, StatCard } from "@/components/ui";
 import { alertsFor } from "@/lib/alerts-db";
@@ -42,9 +44,12 @@ export default async function Dashboard() {
     db.payment.findMany({ take: 6, orderBy: { date: "desc" }, include: { student: true } }),
     db.lead.groupBy({ by: ["status"], _count: true }),
     db.group.findMany({
-      where: { status: "ACTIVE", days: { in: scheduleKeysOn(today.weekday) }, ...groupScope(user) },
-      include: { course: true, teacher: true, room: true, _count: { select: { students: { where: { leftAt: null } } } } },
-      orderBy: { time: "asc" },
+      where: { status: "ACTIVE", ...groupScope(user) },
+      include: { course: true, teacher: true, room: true, schedules: true, _count: { select: { students: { where: { leftAt: null } } } } },
+    }).then((all) => {
+      // today's schedule of each group: a change dated later doesn't apply yet
+      const day = new Date(Date.UTC(today.year, today.month - 1, today.day));
+      return all.filter((g) => isLessonDay(g, day)).map((g) => ({ ...g, ...scheduleOn(g, day) }));
     }),
     db.sale.aggregate({ _sum: { total: true }, where: { date: { gte: monthStart } } }),
   ]);
@@ -61,11 +66,11 @@ export default async function Dashboard() {
   // lessons moved to today ("Qo'shimcha dars"): listed with today's lessons at their own time, room and teacher
   const todayMakeups = todayClosed ? [] : await db.lessonChange.findMany({
     where: { kind: "CANCEL", makeupDate: new Date(`${todayIso}T00:00:00Z`), group: { status: "ACTIVE", ...groupScope(user) } },
-    include: { makeupRoom: true, makeupTeacher: true, group: { include: { course: true, _count: { select: { students: { where: { leftAt: null } } } } } } },
+    include: { makeupRoom: true, makeupTeacher: true, group: { include: { course: true, schedules: true, _count: { select: { students: { where: { leftAt: null } } } } } } },
   });
   const todayList = [
     ...todayGroups.map((g) => ({ ...g, key: String(g.id), makeup: false })),
-    ...todayMakeups.map((c) => ({ ...c.group, key: `m${c.id}`, time: c.makeupTime ?? c.group.time, room: c.makeupRoom, teacher: c.makeupTeacher, makeup: true })),
+    ...todayMakeups.map((c) => ({ ...c.group, ...scheduleOn(c.group, c.date), key: `m${c.id}`, time: c.makeupTime ?? scheduleOn(c.group, c.date).time, room: c.makeupRoom, teacher: c.makeupTeacher, makeup: true })),
   ].sort((a, b) => a.time.localeCompare(b.time));
   const substituteOf = (groupId: number) => changes.filter((c) => c.kind === "SUBSTITUTE" && c.groupId === groupId).map((c) => c.substitute?.name ?? "—").join(", ");
   // the same count as the Qarzdorlar page (everyone who owes, current and former students)
@@ -128,7 +133,7 @@ export default async function Dashboard() {
                 >
                   <div className="w-[68px] shrink-0">
                     <p className="font-dot text-xl leading-none font-black">{g.time}</p>
-                    <p className="label-mono mt-1">{fromMinutes(toMinutes(g.time) + g.course.lessonMin)}</p>
+                    <p className="label-mono mt-1">{fromMinutes(toMinutes(g.time) + lessonMinutes(g))}</p>
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className={`truncate font-medium ${!g.makeup && cancelled.has(g.id) ? "line-through" : ""}`}>{g.name}{g.makeup && <span className="label-mono ml-2 text-accent-ink">qo&apos;shimcha dars</span>}</p>

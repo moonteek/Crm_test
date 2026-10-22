@@ -7,11 +7,13 @@ import { ExportButtons } from "@/components/ExportButtons";
 import { createRoom, deleteRoom } from "../actions";
 import { ActionButton, ActionForm } from "@/components/ActionForm";
 import { daysLabel } from "@/lib/group-days";
+import { scheduleOn } from "@/lib/group-schedule";
+import { centreDay } from "@/lib/membership-db";
 
 export default async function RoomsPage() {
   await requirePage("rooms.manage");
   const [rooms] = await Promise.all([
-    db.room.findMany({ include: { groups: { where: { status: "ACTIVE" }, orderBy: { time: "asc" } } }, orderBy: { name: "asc" } }),
+    db.room.findMany({ include: { groups: { where: { status: "ACTIVE" }, include: { schedules: true }, orderBy: { time: "asc" } } }, orderBy: { name: "asc" } }),
   ]);
 
   return (
@@ -42,7 +44,7 @@ export default async function RoomsPage() {
               {r.groups.map((g) => (
                 <div key={g.id} className="flex justify-between rounded-md bg-ink/[.03] px-3 py-1.5">
                   <span>{g.name}</span>
-                  <span className="text-muted">{daysLabel(g.days)} · {g.time}</span>
+                  <span className="text-muted">{daysLabel(scheduleOn(g, centreDay()).days)} · {scheduleOn(g, centreDay()).time}</span>
                 </div>
               ))}
               {r.groups.length === 0 && <p className="text-faint">Bo&apos;sh</p>}

@@ -23,7 +23,7 @@ import { editedGroupPrice } from "@/lib/prices";
 import { changeTeacher } from "@/lib/teachers-db";
 import { menuActions, statusOn, systemLeaveDate, transferPlan, type EventType, type Status } from "@/lib/membership";
 import {
-  ACTIVITY_TYPES, isoDate, CALL_RESULTS, lessonWeekdays, MONTHS, EXPENSE_CATEGORIES, GENDERS, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_SOURCES, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES, TAG_COLORS,
+  ACTIVITY_TYPES, isoDate, CALL_RESULTS, MONTHS, EXPENSE_CATEGORIES, GENDERS, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_SOURCES, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES, TAG_COLORS,
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
@@ -49,6 +49,8 @@ import { assertMarkAccess } from "@/lib/cover-db";
 import { CONTACT_RESULTS, riskSettingsSchema } from "@/lib/risk";
 import { storeRiskSettings } from "@/lib/risk-db";
 import { phoneKey } from "@/lib/phone";
+import { lessonMinutes } from "@/lib/group-days";
+import { isLessonDay, scheduleOn } from "@/lib/group-schedule";
 
 // ---------- Leads ----------
 const leadSchema = z.object({
@@ -589,8 +591,8 @@ export async function setAttendance(groupId: number, studentId: number, isoDay: 
 
 /** Today's lesson for the group (or a refusal): one of its lesson days or a make-up day, not a holiday or cancelled. */
 async function lessonOf(groupId: number, date: Date) {
-  const group = await db.group.findUniqueOrThrow({ where: { id: groupId } });
-  const open = lessonOpenOn(isoDate(date), { noLesson: [], extra: (await makeupDaysOf())(groupId), weekdayLesson: lessonWeekdays(group.days).includes(date.getUTCDay()) });
+  const group = await db.group.findUniqueOrThrow({ where: { id: groupId }, include: { schedules: true } });
+  const open = lessonOpenOn(isoDate(date), { noLesson: [], extra: (await makeupDaysOf())(groupId), weekdayLesson: isLessonDay(group, date) });
   if (!open) throw new Error("Bu kunda guruhda dars yo'q");
   await assertLessonOpen(groupId, date);
   return { group, date };
@@ -1321,7 +1323,7 @@ const peopleOn = (group: { teachers: { userId: number | null; role: string; from
 async function lessonChangeContext(user: Awaited<ReturnType<typeof requirePermission>>, groupId: number) {
   await assertGroupAccess(user, groupId);
   const [group, existing, holidays] = await Promise.all([
-    db.group.findUniqueOrThrow({ where: { id: groupId }, include: { teacher: true, assistant: true, teachers: true, course: { select: { lessonMin: true } } } }),
+    db.group.findUniqueOrThrow({ where: { id: groupId }, include: { teacher: true, assistant: true, teachers: true, schedules: true, course: { select: { lessonMin: true } } } }),
     db.lessonChange.findMany({ where: { groupId } }),
     holidayDays(),
   ]);
@@ -1345,20 +1347,28 @@ async function checkMakeup(group: MakeupGroup, original: Date, f: FormData): Pro
   // the group's other make-ups (not the one being moved) already take their days
   const taken = (await db.lessonChange.findMany({ where: { groupId: group.id, kind: "CANCEL", makeupDate: { not: null }, NOT: { date: original } }, select: { makeupDate: true } }))
     .map((c) => c.makeupDate!.toISOString().slice(0, 10));
-  const problem = makeupProblem({ date: m.makeupDate, original, today: centreDay(), days: group.days, holidays, noLesson: closed(group.id), taken });
+  const problem = makeupProblem({ date: m.makeupDate, original, today: centreDay(), group, holidays, noLesson: closed(group.id), taken });
   if (problem) throw new Error(problem);
-  const minutes = group.course.lessonMin;
+  // the make-up is as long as the group's lessons were on the cancelled day
+  const minutes = lessonMinutes({ ...scheduleOn(group, original), course: group.course });
   if (!fitsDay(m.makeupTime, minutes)) throw new Error("Dars 08:00–20:00 oralig'ida bo'lishi kerak");
   const day = m.makeupDate.toISOString().slice(0, 10);
   const [groups, makeups] = await Promise.all([
-    db.group.findMany({ where: { status: "ACTIVE", NOT: { id: group.id }, startDate: { lte: m.makeupDate } }, include: { course: { select: { lessonMin: true } } } }),
-    db.lessonChange.findMany({ where: { kind: "CANCEL", makeupDate: m.makeupDate, NOT: { groupId: group.id } }, include: { group: { include: { course: { select: { lessonMin: true } } } } } }),
+    db.group.findMany({ where: { status: "ACTIVE", NOT: { id: group.id }, startDate: { lte: m.makeupDate } }, include: { course: { select: { lessonMin: true } }, schedules: true } }),
+    db.lessonChange.findMany({ where: { kind: "CANCEL", makeupDate: m.makeupDate, NOT: { groupId: group.id } }, include: { group: { include: { course: { select: { lessonMin: true } }, schedules: true } } } }),
   ]);
   const others = [
     ...groups
-      .filter((g) => lessonWeekdays(g.days).includes(m.makeupDate.getUTCDay()) && !closed(g.id).includes(day))
-      .map((g) => ({ name: g.name, start: g.time, minutes: g.course.lessonMin, teacherId: g.teacherId, assistantId: g.assistantId, roomId: g.roomId })),
-    ...makeups.map((c) => ({ name: `${c.group.name} (qo'shimcha)`, start: c.makeupTime ?? c.group.time, minutes: c.group.course.lessonMin, teacherId: c.makeupTeacherId, assistantId: c.group.assistantId, roomId: c.makeupRoomId })),
+      .filter((g) => isLessonDay(g, m.makeupDate) && !closed(g.id).includes(day))
+      .map((g) => {
+        // each group's lesson that date, by its schedule then
+        const s = scheduleOn(g, m.makeupDate);
+        return { name: g.name, start: s.time, minutes: lessonMinutes({ ...s, course: g.course }), teacherId: g.teacherId, assistantId: g.assistantId, roomId: g.roomId };
+      }),
+    ...makeups.map((c) => {
+      const s = scheduleOn(c.group, c.date);
+      return { name: `${c.group.name} (qo'shimcha)`, start: c.makeupTime ?? s.time, minutes: lessonMinutes({ ...s, course: c.group.course }), teacherId: c.makeupTeacherId, assistantId: c.group.assistantId, roomId: c.makeupRoomId };
+    }),
   ];
   const clashes = clashesOn({ start: m.makeupTime, minutes, teacherId, roomId: m.makeupRoomId }, others);
   if (clashes.length) throw new Error(clashes.join("; "));
@@ -1435,7 +1445,7 @@ export async function cancelLesson(_: MemberActionState, f: FormData): Promise<M
     const user = await requirePermission("lessons.manage");
     const d = parseForm(lessonChangeSchema, f);
     const { group, existing, holidays } = await lessonChangeContext(user, d.groupId);
-    const problem = lessonChangeProblem({ kind: "CANCEL", date: d.date, days: group.days, holidays, existing }, new Date());
+    const problem = lessonChangeProblem({ kind: "CANCEL", date: d.date, group, holidays, existing }, new Date());
     if (problem) return { error: problem };
     // "Ha, roziman": moved to a make-up day (money stays on this day); else the toggle decides whether it's charged
     const makeup = f.get("makeup") === "1" ? await checkMakeup(group, d.date, f) : null;
@@ -1490,14 +1500,14 @@ export async function substituteLesson(_: MemberActionState, f: FormData): Promi
     const assistantThen = teacherOn(group.teachers, group, d.date, "ASSISTANT");
     const absentId = d.role === "ASSISTANT" ? assistantThen : teacherThen;
     if (d.role === "ASSISTANT" && !absentId) return { error: "Guruhda yordamchi o'qituvchi yo'q" };
-    const problem = lessonChangeProblem({ kind: "SUBSTITUTE", date: d.date, days: group.days, holidays, existing, substituteId: d.substituteId, absentId, onLesson: [teacherThen, assistantThen] }, new Date());
+    const problem = lessonChangeProblem({ kind: "SUBSTITUTE", date: d.date, group, holidays, existing, substituteId: d.substituteId, absentId, onLesson: [teacherThen, assistantThen] }, new Date());
     if (problem) return { error: problem };
     if (existing.some((e) => e.kind === "SUBSTITUTE" && e.role === d.role && e.date.getTime() === d.date.getTime())) return { error: "Bu dars uchun o'rinbosar allaqachon bor" };
     const sub = await db.user.findFirst({ where: { id: d.substituteId!, isTeacher: true, active: true } });
     if (!sub) return { error: "O'rinbosar topilmadi" };
     const change = await db.lessonChange.create({ data: { groupId: group.id, date: d.date, kind: "SUBSTITUTE", role: d.role, substituteId: sub.id, reason: d.reason, userId: user.id } });
     const absent = absentId === null ? null : (await db.user.findUnique({ where: { id: absentId }, select: { name: true } }))?.name;
-    const texts = substituteTexts(group.name, d.date, group.time, sub.name, absent ?? null);
+    const texts = substituteTexts(group.name, d.date, scheduleOn(group, d.date).time, sub.name, absent ?? null);
     tell([
       { key: `sub:${change.id}:${sub.id}`, userId: sub.id, text: texts.toSubstitute },
       ...(absentId ? [{ key: `sub:${change.id}:${absentId}`, userId: absentId, text: texts.toAbsent }] : []),
