@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  isLessonDay, lessonDatesOf, heldLessonsOf, removedLessonDays, scheduleChangeProblem, scheduleOn, scheduleRowsToWrite, schedulesFrom,
+  isLessonDay, lessonDatesOf, heldLessonsOf, marksMessage, removedLessonDays, scheduleChangeProblem, scheduleOn, scheduleRowsToWrite, schedulesFrom,
   type ScheduleRow, type Scheduled,
 } from "./group-schedule";
 
@@ -14,9 +14,9 @@ test("schedule: a group never changed uses its own fields", () => {
   assert.deepEqual(scheduleOn(group([]), d("2026-11-10")), { days: "EVEN", time: "16:00", endTime: null });
 });
 
-test("schedule: the latest row on or before the day applies; before the first row, the group's fields", () => {
+test("schedule: the latest row on or before the day applies; before the first row, the oldest row", () => {
   const g = group([row("2026-11-02", "ODD"), row("2026-11-16", "EVEN", "16:00", "17:30")]);
-  assert.equal(scheduleOn(g, d("2026-11-01")).days, "EVEN"); // before any row
+  assert.equal(scheduleOn(g, d("2026-11-01")).days, "ODD"); // before the first row: the oldest schedule, never the newest
   assert.equal(scheduleOn(g, d("2026-11-15")).days, "ODD");
   assert.deepEqual(scheduleOn(g, d("2026-11-16")), { days: "EVEN", time: "16:00", endTime: "17:30" }); // boundary day
 });
@@ -74,4 +74,17 @@ test("schedule change: the first change writes the old schedule from the start t
   const next = row("2026-11-16", "EVEN", "16:00");
   assert.deepEqual(scheduleRowsToWrite({ before, startDate: d("2026-09-01"), rows: [], next }), [{ ...before, from: d("2026-09-01") }, next]);
   assert.deepEqual(scheduleRowsToWrite({ before, startDate: d("2026-09-01"), rows: [row("2026-09-01", "ODD")], next }), [next]);
+});
+
+test("schedule change: the marks message lists up to five dates", () => {
+  assert.equal(marksMessage(["2026-11-16", "2026-11-18"]), "Bu sanalarda davomat bor: 16.11, 18.11 — avval ularni tozalang");
+  const seven = ["2026-11-16", "2026-11-18", "2026-11-20", "2026-11-23", "2026-11-25", "2026-11-27", "2026-11-30"];
+  assert.equal(marksMessage(seven), "Bu sanalarda davomat bor: 16.11, 18.11, 20.11, 23.11, 25.11 … — avval ularni tozalang");
+});
+
+test("schedule: a day before the first row (e.g. before the start) never takes the newest schedule", () => {
+  const g = group([row("2026-10-22", "1,4", "15:00", "16:30"), row("2026-10-27", "EVEN", "15:00", "16:30")], { days: "EVEN", time: "15:00", endTime: "16:30" });
+  assert.equal(scheduleOn(g, d("2026-10-20")).days, "1,4");
+  assert.equal(isLessonDay(g, d("2026-10-20")), false); // Tuesday: not a Du/Pay day
+  assert.equal(isLessonDay({ days: "EVEN", schedules: [{ from: d("2026-10-22"), days: "1,4" }] }, d("2026-10-20")), false);
 });

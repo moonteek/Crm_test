@@ -6,7 +6,7 @@ import { money } from "@/lib/format";
 import { Field } from "./ui";
 
 type SectionOption = { id: number; name: string; price: number | null; subjects: { id: number; name: string; levels: number }[] };
-export type CourseOption = { id: number; name: string; price: number; sections: SectionOption[] };
+export type CourseOption = { id: number; name: string; price: number; lessonMin: number; sections: SectionOption[] };
 
 /**
  * Course → section (only when the course has several) → where in the section the group starts (line + level), and the

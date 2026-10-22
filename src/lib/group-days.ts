@@ -51,3 +51,18 @@ export function timeProblem(time: string, endTime: string): string | null {
   if (s < DAY_FROM || e > DAY_TO) return "Dars 08:00–20:00 oralig'ida bo'lishi kerak";
   return null;
 }
+
+/**
+ * The `days` to store from the group form: a named set as it is, or "CUSTOM" with the ticked weekdays sent as one
+ * comma-separated field (the browser joins the Boshqa checkboxes). Throws the message to show.
+ */
+export function daysFromForm(days: string, customDays: string | null | undefined): string {
+  if (days !== "CUSTOM") {
+    if (!NAMED[days]) throw new Error("Dars kunlari noto'g'ri");
+    return days;
+  }
+  const picked = (customDays ?? "").split(",").filter(Boolean).map(Number);
+  const value = normalizeDays(picked);
+  if (!value) throw new Error("Kamida bitta dars kunini tanlang");
+  return value;
+}

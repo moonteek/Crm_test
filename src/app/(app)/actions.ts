@@ -23,7 +23,7 @@ import { editedGroupPrice } from "@/lib/prices";
 import { changeTeacher } from "@/lib/teachers-db";
 import { menuActions, statusOn, systemLeaveDate, transferPlan, type EventType, type Status } from "@/lib/membership";
 import {
-  ACTIVITY_TYPES, isoDate, CALL_RESULTS, MONTHS, EXPENSE_CATEGORIES, GENDERS, GROUP_DAYS, GROUP_LEVELS, KPI_METRICS, LEAD_SOURCES, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES, TAG_COLORS,
+  ACTIVITY_TYPES, isoDate, CALL_RESULTS, MONTHS, EXPENSE_CATEGORIES, GENDERS, GROUP_LEVELS, KPI_METRICS, LEAD_SOURCES, LEAD_STATUSES, money, PAYMENT_METHODS, PRODUCT_CATEGORIES, TAG_COLORS,
 } from "@/lib/format";
 import { SALARY_TYPES } from "@/lib/salary";
 import { levelExams } from "@/lib/curriculum";
@@ -49,8 +49,8 @@ import { assertMarkAccess } from "@/lib/cover-db";
 import { CONTACT_RESULTS, riskSettingsSchema } from "@/lib/risk";
 import { storeRiskSettings } from "@/lib/risk-db";
 import { phoneKey } from "@/lib/phone";
-import { lessonMinutes } from "@/lib/group-days";
-import { isLessonDay, scheduleOn } from "@/lib/group-schedule";
+import { daysFromForm, daysLabel, endOf, lessonMinutes, timeProblem } from "@/lib/group-days";
+import { isLessonDay, marksMessage, removedLessonDays, scheduleChangeProblem, scheduleOn, scheduleRowsToWrite, type ScheduleRow } from "@/lib/group-schedule";
 
 // ---------- Leads ----------
 const leadSchema = z.object({
@@ -411,9 +411,21 @@ const groupSchema = z.object({
   teacherId: v.optId(),
   assistantId: v.optId(),
   roomId: v.optId(),
-  days: v.oneOf(GROUP_DAYS),
+  // ODD | EVEN | DAILY, or CUSTOM with the ticked weekdays in customDays ("6,1,4") — see readGroupForm
+  days: z.string({ error: "Dars kunlari noto'g'ri" }),
+  customDays: z.string().optional(),
   time: v.time(),
+  endTime: v.time(),
 });
+
+/** The group form, read and checked: the stored `days` value and a start / end that make a lesson. */
+function readGroupForm<S extends typeof groupSchema>(schema: S, f: FormData) {
+  const { customDays, ...data } = parseForm(schema, f);
+  const days = daysFromForm(data.days, customDays);
+  const problem = timeProblem(data.time, data.endTime);
+  if (problem) throw new Error(problem);
+  return { ...data, days };
+}
 
 /** The section the group studies: one of its course's (empty = the course's first section). */
 async function groupSection(courseId: number, sectionId: number | null) {
@@ -458,10 +470,26 @@ async function checkGroupTime(g: GroupTime, from: Date): Promise<{ warnings: str
   return { warnings: busyMarkMessages(candidate, slots, names.users) };
 }
 
+/**
+ * A schedule change from `from`: allowed dates (scheduleChangeProblem), and no attendance or grades left on days the
+ * new days drop (make-up days excepted) — those would silently fall out of the grid and the bills.
+ */
+async function checkScheduleChange(group: { id: number; startDate: Date; schedules: ScheduleRow[] }, days: string, from: Date) {
+  const problem = scheduleChangeProblem({ from, today: centreDay(), startDate: group.startDate, rows: group.schedules });
+  if (problem) throw new Error(problem);
+  const [marks, grades] = await Promise.all([
+    db.attendance.findMany({ where: { groupId: group.id, date: { gte: from } }, select: { date: true }, distinct: ["date"] }),
+    db.grade.findMany({ where: { groupId: group.id, date: { gte: from } }, select: { date: true }, distinct: ["date"] }),
+  ]);
+  const marked = [...marks, ...grades].map((m) => isoDate(m.date));
+  const removed = removedLessonDays({ marked, from, days, makeups: (await makeupDaysOf())(group.id) });
+  if (removed.length) throw new Error(marksMessage(removed));
+}
+
 async function insertGroup(f: FormData) {
   const user = await requirePermission("groups.manage");
-  const { startDate, ...data } = parseForm(groupSchema.extend({ startDate: v.optDate() }), f);
-  const { warnings } = await checkGroupTime({ ...data, endTime: null }, startDate ?? centreDay());
+  const { startDate, ...data } = readGroupForm(groupSchema.extend({ startDate: v.optDate() }), f);
+  const { warnings } = await checkGroupTime(data, startDate ?? centreDay());
   const section = await groupSection(data.courseId, data.sectionId);
   // a new group takes its section's price when it has one (else it follows the course price)
   const price = data.price ?? section?.price ?? null;
@@ -488,10 +516,15 @@ export async function saveNewGroup(_: MemberActionState, f: FormData): Promise<M
 export async function updateGroup(id: number, f: FormData) {
   const user = await requirePermission("groups.manage");
   await assertGroupAccess(user, id);
-  const { teacherFrom, ...data } = parseForm(groupSchema.extend({ status: v.oneOf(GROUP_STATUSES, "ACTIVE"), teacherFrom: v.optDate() }), f);
-  const before = await db.group.findUniqueOrThrow({ where: { id }, include: { course: true, teacher: true, assistant: true } });
+  const { teacherFrom, scheduleFrom, ...data } = readGroupForm(groupSchema.extend({ status: v.oneOf(GROUP_STATUSES, "ACTIVE"), teacherFrom: v.optDate(), scheduleFrom: v.optDate() }), f);
+  const before = await db.group.findUniqueOrThrow({ where: { id }, include: { course: true, teacher: true, assistant: true, schedules: true } });
+  // new lesson days / time apply from the chosen day; earlier lessons keep the schedule they had
+  const scheduleChanged = data.days !== before.days || data.time !== before.time || data.endTime !== endOf(before);
+  const sFrom = scheduleFrom ?? centreDay();
+  if (scheduleChanged) await checkScheduleChange(before, data.days, sFrom);
   // a changed lesson time / teacher / room must not collide with another group (a finished group has no lessons)
-  const { warnings } = data.status === "ACTIVE" && (before.status !== "ACTIVE" || needsClashCheck(before, data)) ? await checkGroupTime({ ...data, endTime: before.endTime, id }, centreDay()) : { warnings: [] };
+  const clashCheck = data.status === "ACTIVE" && (before.status !== "ACTIVE" || scheduleChanged || needsClashCheck(before, data));
+  const { warnings } = clashCheck ? await checkGroupTime({ ...data, id }, scheduleChanged ? sFrom : centreDay()) : { warnings: [] };
   // a new teacher / assistant takes over from the chosen day; earlier lessons stay with the previous person
   const from = teacherFrom ?? centreDay();
   // a new price (own, or the new course's) starts next month; past months keep what they were charged
@@ -518,10 +551,25 @@ export async function updateGroup(id: number, f: FormData) {
     }
     // saved level exams are numbered within the old course's section: keep them as ordinary exams
     if (data.courseId !== before.courseId) await tx.exam.updateMany({ where: { groupId: id, level: { not: null } }, data: { level: null } });
+    if (scheduleChanged) {
+      const rows = scheduleRowsToWrite({
+        before: { from: before.startDate, days: before.days, time: before.time, endTime: before.endTime },
+        startDate: before.startDate, rows: before.schedules,
+        next: { from: sFrom, days: data.days, time: data.time, endTime: data.endTime },
+      });
+      for (const r of rows) {
+        await tx.groupSchedule.upsert({
+          where: { groupId_from: { groupId: id, from: r.from } },
+          create: { groupId: id, ...r, userId: user.id },
+          update: { days: r.days, time: r.time, endTime: r.endTime, userId: user.id },
+        });
+      }
+    }
     const priced = await schedulePrice(tx, id, target, current, user.id);
     await tx.group.update({ where: { id }, data: { ...data, price: own, sectionId: section?.id ?? null, ...start } });
     return priced;
   });
+  if (scheduleChanged) await logAction(user, "group.schedule", `${before.name} jadvali ${isoDate(sFrom)} dan: ${daysLabel(data.days)} ${data.time}–${data.endTime}`);
   if (changes.length) await logAction(user, "group.teacher", `${before.name}: ${changes.join(" va ")} ${isoDate(from)} dan almashtirildi`);
   if (repriced) await logAction(user, "group.price", `${before.name} narxi ${isoDate(nextMonthStart())} dan: ${money(target)}`);
   if (before.status !== "FINISHED" && data.status === "FINISHED") {

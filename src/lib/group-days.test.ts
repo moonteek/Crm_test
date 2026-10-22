@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { daysLabel, endOf, lessonMinutes, normalizeDays, timeProblem, weekdaysOf } from "./group-days";
+import { daysFromForm, daysLabel, endOf, lessonMinutes, normalizeDays, timeProblem, weekdaysOf } from "./group-days";
 
 test("group days: named and custom sets give their weekdays", () => {
   assert.deepEqual(weekdaysOf("ODD"), [1, 3, 5]);
@@ -45,4 +45,14 @@ test("lesson time rules", () => {
   assert.equal(timeProblem("07:30", "09:00"), "Dars 08:00–20:00 oralig'ida bo'lishi kerak");
   assert.equal(timeProblem("14:00", "16:00"), null);
   assert.equal(timeProblem("10:00", "14:00"), null);
+});
+
+test("day picker: named sets as they are, Boshqa from the ticked days", () => {
+  assert.equal(daysFromForm("EVEN", undefined), "EVEN");
+  assert.equal(daysFromForm("CUSTOM", "6,1,4"), "1,4,6");
+  assert.equal(daysFromForm("CUSTOM", "2,4,6"), "EVEN");
+  assert.throws(() => daysFromForm("CUSTOM", ""), /Kamida bitta dars kunini tanlang/);
+  assert.throws(() => daysFromForm("CUSTOM", undefined), /Kamida bitta dars kunini tanlang/);
+  assert.throws(() => daysFromForm("CUSTOM", "0,7"), /Kamida bitta dars kunini tanlang/);
+  assert.throws(() => daysFromForm("WEEKEND", undefined), /Dars kunlari noto'g'ri/);
 });

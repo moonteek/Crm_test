@@ -12,11 +12,17 @@ export type Scheduled = Schedule & { schedules: ScheduleRow[] };
 /** What lesson dates need: the days and when they changed (billing, curriculum, the grid). */
 export type DaysScheduled = { days: string; schedules: { from: Date; days: string }[] };
 
-/** The row in force on `day`: the latest one from on or before it (null before the first row / with no rows). */
+/** The row in force on `day`: the latest one from on or before it, else the oldest; null only with no rows. */
 export function rowOn<R extends { from: Date }>(rows: R[], day: Date): R | null {
   let best: R | null = null;
-  for (const r of rows) if (r.from.getTime() <= day.getTime() && (!best || r.from > best.from)) best = r;
-  return best;
+  let first: R | null = null;
+  for (const r of rows) {
+    if (r.from.getTime() <= day.getTime() && (!best || r.from > best.from)) best = r;
+    if (!first || r.from < first.from) first = r;
+  }
+  // before the first change (only days before the group's start): the oldest schedule — the group's own fields are
+  // the newest one and must never reach back
+  return best ?? first;
 }
 
 const own = (g: Schedule): Schedule => ({ days: g.days, time: g.time, endTime: g.endTime });
@@ -92,4 +98,10 @@ export function scheduleRowsToWrite(p: { before: ScheduleRow; startDate: Date; r
   if (p.rows.length) return [p.next];
   const start = new Date(Date.UTC(p.startDate.getUTCFullYear(), p.startDate.getUTCMonth(), p.startDate.getUTCDate()));
   return [{ ...p.before, from: start }, p.next];
+}
+
+/** The refusal for marks on days a new schedule drops: up to five dates (DD.MM), then "…". */
+export function marksMessage(dates: string[]): string {
+  const shown = dates.slice(0, 5).map((d) => `${d.slice(8, 10)}.${d.slice(5, 7)}`).join(", ");
+  return `Bu sanalarda davomat bor: ${shown}${dates.length > 5 ? " …" : ""} — avval ularni tozalang`;
 }
