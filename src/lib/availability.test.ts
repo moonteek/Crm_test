@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { busyMarkMessages, busyMarkWarnings, needsClashCheck, clashMessage, dayTypesOf, fitsDay, groupClashes, lessonCells, teacherGrid, type LessonLike } from "./availability";
+import { busyMarkMessages, busyMarkWarnings, needsClashCheck, clashMessage, dayTypesOf, fitsDay, groupClashes, lessonCells, lessonsFrom, teacherGrid, type LessonLike } from "./availability";
 
 const L = (o: Partial<LessonLike>): LessonLike => ({ id: 1, name: "FE-14", days: "ODD", time: "14:00", minutes: 120, teacherId: 1, assistantId: null, roomId: 1, ...o });
 const names = { users: new Map([[1, "Aziz Karimov"], [2, "Shoxrux Aliyev"]]), rooms: new Map([[1, "Kompyuter xonasi"], [2, "1-xona"]]) };
@@ -73,4 +73,18 @@ test("busy-mark warning text merges consecutive hours", () => {
   const slots = [14, 15, 18].map((hour) => ({ userId: 1, dayType: "ODD", hour, free: false }));
   assert.deepEqual(busyMarkMessages(L({ id: 9, time: "14:00", minutes: 300 }), slots, names.users), ["Diqqat: Aziz Karimov 14:00–16:00, 18:00–19:00 ni band deb belgilagan"]);
   assert.deepEqual(busyMarkMessages(L({ id: 9 }), [], names.users), []);
+});
+
+test("clashes: another group's change still to come counts, at its own time and length", () => {
+  const u = (s: string) => new Date(`${s}T00:00:00Z`);
+  const other = {
+    id: 2, name: "PY-07", days: "EVEN", time: "16:00", endTime: "18:00", teacherId: 2, assistantId: null, roomId: 1, course: { lessonMin: 120 },
+    schedules: [{ from: u("2026-09-01"), days: "ODD", time: "14:00", endTime: null }, { from: u("2026-12-01"), days: "EVEN", time: "16:00", endTime: "18:00" }],
+  };
+  // before the change both schedules lie ahead; from 1 Dec only the new one
+  assert.deepEqual(lessonsFrom(other, u("2026-11-20")).map((l) => `${l.days} ${l.time} ${l.minutes}`), ["ODD 14:00 120", "EVEN 16:00 120"]);
+  assert.deepEqual(lessonsFrom(other, u("2026-12-05")).map((l) => `${l.days} ${l.time} ${l.minutes}`), ["EVEN 16:00 120"]);
+  const candidate = L({ id: 1, days: "EVEN", time: "16:30", minutes: 90, teacherId: 1, roomId: 1 });
+  const clashes = groupClashes(candidate, lessonsFrom(other, u("2026-11-20")), names);
+  assert.deepEqual(clashes.map((c) => c.kind), ["room"]);
 });

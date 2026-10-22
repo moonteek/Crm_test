@@ -1,6 +1,7 @@
 import { lessonWeekdays } from "./format";
 import { centreWeekday, fromMinutes, toMinutes } from "./schedule";
-import { daysLabel } from "./group-days";
+import { daysLabel, lessonMinutes } from "./group-days";
+import { schedulesFrom, type Scheduled } from "./group-schedule";
 
 // Teachers' weekly hours, 08:00–20:00 in 1-hour cells, on odd (Du/Chor/Ju) and even (Se/Pay/Sha) days.
 // Lessons are never stored here — they come from the active groups every time.
@@ -45,6 +46,20 @@ function overlaps(a: LessonLike, b: LessonLike) {
   if (!lessonWeekdays(a.days).some((d) => days.includes(d))) return false;
   const [as, bs] = [toMinutes(a.time), toMinutes(b.time)];
   return as < bs + b.minutes && bs < as + a.minutes;
+}
+
+/**
+ * A group's weekly lessons from `day` on: the schedule in force that day and every change dated later, each with its
+ * own days, time and length — so a clash check sees what is still to come, not only today's timetable.
+ */
+export function lessonsFrom(
+  g: Scheduled & { id: number; name: string; teacherId: number | null; assistantId: number | null; roomId: number | null; course: { lessonMin: number } },
+  day: Date,
+): LessonLike[] {
+  return schedulesFrom(g, day).map((s) => ({
+    id: g.id, name: g.name, days: s.days, time: s.time, minutes: lessonMinutes({ ...s, course: g.course }),
+    teacherId: g.teacherId, assistantId: g.assistantId, roomId: g.roomId,
+  }));
 }
 
 const people = (l: LessonLike) => [l.teacherId, l.assistantId].filter((x): x is number => x !== null);

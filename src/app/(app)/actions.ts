@@ -39,7 +39,7 @@ import { logoProblem, RECEIPT_LINES, type ReceiptLine } from "@/lib/receipt";
 import { getReceiptSettings, saveReceiptSettings } from "@/lib/receipt-db";
 import { teacherFormSchema } from "@/lib/teacher-profile";
 import { imageProblem } from "@/lib/image";
-import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, fitsDay, groupClashes, needsClashCheck, teacherGrid, type DayType, type LessonLike } from "@/lib/availability";
+import { busyMarkMessages, clashMessage, DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, fitsDay, groupClashes, lessonsFrom, needsClashCheck, teacherGrid, type DayType, type LessonLike } from "@/lib/availability";
 import { check, parseForm, v } from "@/lib/validation";
 import { errorText, tryAction, type ActionState } from "@/lib/action-result";
 import { structureProblem, type LineShape } from "@/lib/curriculum-convert";
@@ -434,23 +434,24 @@ async function startPoint(sectionId: number | null, startSubjectId: number | nul
   return { startSubjectId: line.id, startLevel: Math.min(startLevel, line.levels) };
 }
 
-type GroupTime = { id?: number; name: string; days: string; time: string; courseId: number; teacherId: number | null; assistantId: number | null; roomId: number | null };
+type GroupTime = { id?: number; name: string; days: string; time: string; endTime: string | null; courseId: number; teacherId: number | null; assistantId: number | null; roomId: number | null };
 
 /**
  * A group's lesson must fit 08:00–20:00 and not collide with another active group's teacher, assistant or room
  * (throws one message listing every problem). Hours the teacher marked "band" only come back as warnings.
  */
-async function checkGroupTime(g: GroupTime): Promise<{ warnings: string[] }> {
+async function checkGroupTime(g: GroupTime, from: Date): Promise<{ warnings: string[] }> {
   const course = await db.course.findUniqueOrThrow({ where: { id: g.courseId } });
-  const candidate: LessonLike = { ...g, minutes: course.lessonMin };
-  if (!fitsDay(g.time, course.lessonMin)) throw new Error("Dars 08:00–20:00 oralig'ida bo'lishi kerak");
+  const candidate: LessonLike = { ...g, minutes: lessonMinutes({ ...g, course }) };
+  if (!fitsDay(g.time, candidate.minutes)) throw new Error("Dars 08:00–20:00 oralig'ida bo'lishi kerak");
   const [others, users, rooms] = await Promise.all([
-    db.group.findMany({ where: { status: "ACTIVE" }, include: { course: { select: { lessonMin: true } } } }),
+    db.group.findMany({ where: { status: "ACTIVE" }, include: { course: { select: { lessonMin: true } }, schedules: true } }),
     db.user.findMany({ select: { id: true, name: true } }),
     db.room.findMany({ select: { id: true, name: true } }),
   ]);
   const names = { users: new Map(users.map((u) => [u.id, u.name])), rooms: new Map(rooms.map((r) => [r.id, r.name])) };
-  const clashes = groupClashes(candidate, others.map((o) => ({ ...o, minutes: o.course.lessonMin })), names);
+  // every other group's lessons from the day this schedule starts: its schedule then and any change dated later
+  const clashes = groupClashes(candidate, others.flatMap((o) => lessonsFrom(o, from)), names);
   if (clashes.length) throw new Error(clashes.map(clashMessage).join("; "));
   const ids = [g.teacherId, g.assistantId].filter((x): x is number => x !== null);
   const slots = ids.length ? await db.teacherSlot.findMany({ where: { userId: { in: ids } } }) : [];
@@ -460,7 +461,7 @@ async function checkGroupTime(g: GroupTime): Promise<{ warnings: string[] }> {
 async function insertGroup(f: FormData) {
   const user = await requirePermission("groups.manage");
   const { startDate, ...data } = parseForm(groupSchema.extend({ startDate: v.optDate() }), f);
-  const { warnings } = await checkGroupTime(data);
+  const { warnings } = await checkGroupTime({ ...data, endTime: null }, startDate ?? centreDay());
   const section = await groupSection(data.courseId, data.sectionId);
   // a new group takes its section's price when it has one (else it follows the course price)
   const price = data.price ?? section?.price ?? null;
@@ -490,7 +491,7 @@ export async function updateGroup(id: number, f: FormData) {
   const { teacherFrom, ...data } = parseForm(groupSchema.extend({ status: v.oneOf(GROUP_STATUSES, "ACTIVE"), teacherFrom: v.optDate() }), f);
   const before = await db.group.findUniqueOrThrow({ where: { id }, include: { course: true, teacher: true, assistant: true } });
   // a changed lesson time / teacher / room must not collide with another group (a finished group has no lessons)
-  const { warnings } = data.status === "ACTIVE" && (before.status !== "ACTIVE" || needsClashCheck(before, data)) ? await checkGroupTime({ ...data, id }) : { warnings: [] };
+  const { warnings } = data.status === "ACTIVE" && (before.status !== "ACTIVE" || needsClashCheck(before, data)) ? await checkGroupTime({ ...data, endTime: before.endTime, id }, centreDay()) : { warnings: [] };
   // a new teacher / assistant takes over from the chosen day; earlier lessons stay with the previous person
   const from = teacherFrom ?? centreDay();
   // a new price (own, or the new course's) starts next month; past months keep what they were charged
@@ -1589,8 +1590,8 @@ export async function setSlot(userId: number, dayType: DayType, hour: number, st
     const d = check(z.object({ dayType: z.enum(DAY_TYPES), hour: z.number().int().min(DAY_START).max(DAY_END - 1), state: z.enum(["free", "busy", "unset"]) }), { dayType, hour, state });
     const teacher = await db.user.findUniqueOrThrow({ where: { id: userId } });
     if (!teacher.isTeacher) throw new Error("Bu foydalanuvchi o'qituvchi emas");
-    const groups = await db.group.findMany({ where: { status: "ACTIVE", OR: [{ teacherId: userId }, { assistantId: userId }] }, include: { course: { select: { lessonMin: true } } } });
-    if (teacherGrid(userId, groups.map((g) => ({ ...g, minutes: g.course.lessonMin })), [])[d.dayType].get(d.hour)?.state === "lesson") throw new Error("Bu soatda dars bor");
+    const groups = await db.group.findMany({ where: { status: "ACTIVE", OR: [{ teacherId: userId }, { assistantId: userId }] }, include: { course: { select: { lessonMin: true } }, schedules: true } });
+    if (teacherGrid(userId, groups.flatMap((g) => lessonsFrom(g, centreDay())), [])[d.dayType].get(d.hour)?.state === "lesson") throw new Error("Bu soatda dars bor");
     const key = { userId_dayType_hour: { userId, dayType: d.dayType, hour: d.hour } };
     if (d.state === "unset") await db.teacherSlot.deleteMany({ where: { userId, dayType: d.dayType, hour: d.hour } });
     else await db.teacherSlot.upsert({ where: key, create: { userId, dayType: d.dayType, hour: d.hour, free: d.state === "free" }, update: { free: d.state === "free" } });

@@ -10,6 +10,8 @@ import { ageText, STAFF_GENDERS } from "@/lib/teacher-profile";
 import { ExportButtons } from "@/components/ExportButtons";
 import { centreToday } from "@/lib/schedule";
 import { DAY_END, DAY_START, DAY_TYPE_LABEL, DAY_TYPES, HOURS, teacherGrid, todayDayType, type Cell, type DayType } from "@/lib/availability";
+import { lessonsFrom } from "@/lib/availability";
+import { centreDay } from "@/lib/membership-db";
 
 const hh = (h: number) => `${String(h).padStart(2, "0")}:00`;
 const CELL: Record<Cell["state"], string> = { lesson: "bg-ink text-page", free: "bg-success-tint text-success", busy: "bg-danger-tint text-danger", unset: "border border-dashed border-line-strong" };
@@ -30,11 +32,12 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
       orderBy: { name: "asc" },
     }),
     db.role.findFirst({ where: { name: "O'qituvchi" } }),
-    db.group.findMany({ where: { status: "ACTIVE" }, include: { course: { select: { lessonMin: true } } } }),
+    db.group.findMany({ where: { status: "ACTIVE" }, include: { course: { select: { lessonMin: true } }, schedules: true } }),
     db.teacherSlot.findMany(),
   ]);
   // every teacher's week for the chosen day type, and who is free / not set / busy at the chosen hour
-  const lessons = activeGroups.map((g) => ({ ...g, minutes: g.course.lessonMin }));
+  // this week's lessons and any schedule change still to come
+  const lessons = activeGroups.flatMap((g) => lessonsFrom(g, centreDay()));
   const weeks = teachers.map((t) => ({ t, row: teacherGrid(t.id, lessons, slots.filter((s) => s.userId === t.id))[day] }));
   const at = (states: Cell["state"][]) => weeks.filter((w) => states.includes(w.row.get(hour)!.state));
   const manage = can(user, "staff.manage");

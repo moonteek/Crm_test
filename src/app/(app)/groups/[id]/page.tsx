@@ -33,7 +33,7 @@ import { toMemberData, toMemberGroup } from "@/components/members/types";
 import { addStudentToGroup, createExam, deleteExam, deleteGroup } from "../../actions";
 import { ActionButton, ActionForm } from "@/components/ActionForm";
 import { daysLabel } from "@/lib/group-days";
-import { endOf } from "@/lib/group-days";
+import { endOf, lessonMinutes } from "@/lib/group-days";
 import { isLessonDay, scheduleOn } from "@/lib/group-schedule";
 
 const ddmm = (d: Date) => `${String(d.getUTCDate()).padStart(2, "0")}.${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -115,7 +115,7 @@ export default async function GroupPage({
   const people = [group.teacher, group.assistant].filter((p): p is NonNullable<typeof p> => p !== null);
   const busyWarnings = warn && people.length
     ? busyMarkMessages(
-        { ...group, minutes: group.course.lessonMin },
+        { ...group, ...scheduleOn(group, centreDay()), minutes: lessonMinutes({ ...scheduleOn(group, centreDay()), course: group.course }) },
         await db.teacherSlot.findMany({ where: { userId: { in: people.map((p) => p.id) } } }),
         new Map(people.map((p) => [p.id, p.name])),
       )
