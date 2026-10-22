@@ -5,7 +5,7 @@ import { requirePage } from "@/lib/auth";
 import { can, groupScope } from "@/lib/access";
 import { centreToday, centreWeekday, dateThisWeek, findClashes, fromMinutes, toMinutes, WEEKDAYS } from "@/lib/schedule";
 import { lessonMinutes } from "@/lib/group-days";
-import { isLessonDay, scheduleOn } from "@/lib/group-schedule";
+import { isLessonDay, movedLesson, scheduleOn } from "@/lib/group-schedule";
 import { DotMeter, Empty, PageHeader } from "@/components/ui";
 import { ExportButtons } from "@/components/ExportButtons";
 import { CurriculumBadge } from "@/components/CurriculumBar";
@@ -80,8 +80,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   });
   const makeups = moved.map((c) => {
     // as long as the cancelled lesson was, at the make-up's own time
-    const s = scheduleOn(c.group, c.date);
-    const l = withTimes({ ...c.group, ...s, time: c.makeupTime ?? s.time });
+    const l = withTimes({ ...c.group, ...movedLesson(c.group, c.date, c.makeupTime ?? scheduleOn(c.group, c.date).time) });
     const cur = curriculumOn({ ...c.group, holidays: closedFor(c.groupId), extraDays: makeupsFor(c.groupId) }, c.group.section?.subjects ?? [], shown);
     return {
       ...l, roomId: c.makeupRoomId, room: c.makeupRoom, teacherId: c.makeupTeacherId, teacher: c.makeupTeacher,

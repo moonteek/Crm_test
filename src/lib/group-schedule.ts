@@ -1,4 +1,4 @@
-import { weekdaysOf } from "./group-days";
+import { lessonMinutes, weekdaysOf } from "./group-days";
 
 // A group's lesson schedule over time. `Group.days / time / endTime` hold the newest schedule (it may start in the
 // future); GroupSchedule rows say from which day each schedule applied. A group never changed has no rows and uses
@@ -104,4 +104,44 @@ export function scheduleRowsToWrite(p: { before: ScheduleRow; startDate: Date; r
 export function marksMessage(dates: string[]): string {
   const shown = dates.slice(0, 5).map((d) => `${d.slice(8, 10)}.${d.slice(5, 7)}`).join(", ");
   return `Bu sanalarda davomat bor: ${shown}${dates.length > 5 ? " …" : ""} — avval ularni tozalang`;
+}
+
+const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+const toHHMM = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+
+/** A lesson moved from `original` to `time`: as long as the cancelled lesson was, ending at its own time. */
+export function movedLesson(g: Scheduled & { course: { lessonMin: number } }, original: Date, time: string): Schedule {
+  const s = scheduleOn(g, original);
+  return { days: s.days, time, endTime: toHHMM(toMin(time) + lessonMinutes({ ...s, course: g.course })) };
+}
+
+/**
+ * Lesson changes a schedule change from `from` would orphan (ISO, sorted): cancelled / substituted lessons on days the
+ * new `days` no longer have (a cancel's money sits on its own day), and make-up days that become regular lessons.
+ */
+export function blockingLessonChanges(p: { from: Date; days: string; changeDays: string[]; makeups: string[] }): string[] {
+  const weekdays = weekdaysOf(p.days);
+  const fromIso = p.from.toISOString().slice(0, 10);
+  const isLesson = (day: string) => weekdays.includes(new Date(day + "T00:00:00Z").getUTCDay());
+  return [...new Set([...p.changeDays.filter((day) => !isLesson(day)), ...p.makeups.filter(isLesson)])]
+    .filter((day) => day >= fromIso)
+    .sort();
+}
+
+/** The refusal for lesson changes in the way: up to five dates (DD.MM), then "…". */
+export function changesMessage(dates: string[]): string {
+  const shown = dates.slice(0, 5).map((d) => `${d.slice(8, 10)}.${d.slice(5, 7)}`).join(", ");
+  return `Bu sanalarda dars o'zgarishi bor: ${shown}${dates.length > 5 ? " …" : ""} — avval ularni bekor qiling`;
+}
+
+/**
+ * What a schedule change writes: a group that hasn't started yet has no lessons to keep, so it simply takes the new
+ * schedule (no rows, no date rules); otherwise the date rules, then the history rows.
+ */
+export function planScheduleChange(p: { from: Date; today: Date; startDate: Date; rows: ScheduleRow[]; before: ScheduleRow; next: ScheduleRow }): { error: string } | { rows: ScheduleRow[] } {
+  const start = Date.UTC(p.startDate.getUTCFullYear(), p.startDate.getUTCMonth(), p.startDate.getUTCDate());
+  if (start > p.today.getTime() && !p.rows.length) return { rows: [] };
+  const error = scheduleChangeProblem(p);
+  if (error) return { error };
+  return { rows: scheduleRowsToWrite(p) };
 }

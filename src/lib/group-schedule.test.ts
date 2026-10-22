@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  isLessonDay, lessonDatesOf, heldLessonsOf, marksMessage, removedLessonDays, scheduleChangeProblem, scheduleOn, scheduleRowsToWrite, schedulesFrom,
+  changesMessage, isLessonDay, lessonDatesOf, heldLessonsOf, marksMessage, movedLesson, planScheduleChange, removedLessonDays, blockingLessonChanges, scheduleChangeProblem, scheduleOn, scheduleRowsToWrite, schedulesFrom,
   type ScheduleRow, type Scheduled,
 } from "./group-schedule";
 
@@ -87,4 +87,32 @@ test("schedule: a day before the first row (e.g. before the start) never takes t
   assert.equal(scheduleOn(g, d("2026-10-20")).days, "1,4");
   assert.equal(isLessonDay(g, d("2026-10-20")), false); // Tuesday: not a Du/Pay day
   assert.equal(isLessonDay({ days: "EVEN", schedules: [{ from: d("2026-10-22"), days: "1,4" }] }, d("2026-10-20")), false);
+});
+
+test("final fix: a moved lesson keeps the cancelled lesson's length at its own time", () => {
+  const g = { ...group([row("2026-09-01", "ODD", "14:00", "16:00")], { days: "ODD", time: "14:00", endTime: "16:00" }), course: { lessonMin: 90 } };
+  assert.deepEqual(movedLesson(g, d("2026-11-11"), "10:00"), { days: "ODD", time: "10:00", endTime: "12:00" });
+  assert.deepEqual(movedLesson(g, d("2026-11-11"), "17:00"), { days: "ODD", time: "17:00", endTime: "19:00" });
+  const plain = { ...group([], { days: "ODD", time: "14:00", endTime: null }), course: { lessonMin: 90 } };
+  assert.deepEqual(movedLesson(plain, d("2026-11-11"), "09:00"), { days: "ODD", time: "09:00", endTime: "10:30" });
+});
+
+test("final fix: a schedule change is refused over lesson changes it would orphan", () => {
+  // cancelled Wed 18.11 (its money stays on that day) and a make-up on Tue 24.11; change to Juft from 15.11
+  const p = { from: d("2026-11-15"), days: "EVEN", changeDays: ["2026-11-18", "2026-11-10"], makeups: ["2026-11-24"] };
+  assert.deepEqual(blockingLessonChanges(p), ["2026-11-18", "2026-11-24"]);
+  // the same lessons under Du/Chor/Ju from 15.11: 18.11 stays a lesson day, 24.11 (Tue) stays off
+  assert.deepEqual(blockingLessonChanges({ ...p, days: "ODD" }), []);
+  assert.equal(changesMessage(["2026-11-18", "2026-11-24"]), "Bu sanalarda dars o'zgarishi bor: 18.11, 24.11 — avval ularni bekor qiling");
+});
+
+test("final fix: a group that hasn't started takes the new schedule outright, whatever the date", () => {
+  const before = { from: d("2026-01-01"), days: "ODD", time: "14:00", endTime: null };
+  const next = { from: d("2026-11-10"), days: "EVEN", time: "16:00", endTime: "18:00" };
+  // starts in 90 days: no history, no date refusal
+  assert.deepEqual(planScheduleChange({ from: d("2026-11-10"), today: d("2026-11-10"), startDate: d("2027-02-08"), rows: [], before, next }), { rows: [] });
+  // started: the usual checks and rows
+  assert.deepEqual(planScheduleChange({ from: d("2026-10-31"), today: d("2026-11-10"), startDate: d("2026-09-01"), rows: [], before, next }),
+    { error: "Jadvalni o'tgan oylardan boshlab o'zgartirib bo'lmaydi — eng erta sana: 01.11.2026" });
+  assert.equal((planScheduleChange({ from: d("2026-11-10"), today: d("2026-11-10"), startDate: d("2026-09-01"), rows: [], before, next }) as { rows: unknown[] }).rows.length, 2);
 });

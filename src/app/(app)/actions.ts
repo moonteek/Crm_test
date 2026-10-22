@@ -50,7 +50,7 @@ import { CONTACT_RESULTS, riskSettingsSchema } from "@/lib/risk";
 import { storeRiskSettings } from "@/lib/risk-db";
 import { phoneKey } from "@/lib/phone";
 import { daysFromForm, daysLabel, endOf, lessonMinutes, timeProblem } from "@/lib/group-days";
-import { isLessonDay, marksMessage, removedLessonDays, scheduleChangeProblem, scheduleOn, scheduleRowsToWrite, type ScheduleRow } from "@/lib/group-schedule";
+import { blockingLessonChanges, changesMessage, isLessonDay, marksMessage, removedLessonDays, scheduleChangeProblem, scheduleOn, scheduleRowsToWrite, type ScheduleRow } from "@/lib/group-schedule";
 
 // ---------- Leads ----------
 const leadSchema = z.object({
@@ -477,6 +477,10 @@ async function checkGroupTime(g: GroupTime, from: Date): Promise<{ warnings: str
 async function checkScheduleChange(group: { id: number; startDate: Date; schedules: ScheduleRow[] }, days: string, from: Date) {
   const problem = scheduleChangeProblem({ from, today: centreDay(), startDate: group.startDate, rows: group.schedules });
   if (problem) throw new Error(problem);
+  // cancels / substitutes on dropped days (a cancel's money sits on its day) and make-ups that would become lessons
+  const changes = await db.lessonChange.findMany({ where: { groupId: group.id, OR: [{ date: { gte: from } }, { makeupDate: { gte: from } }] }, select: { date: true, makeupDate: true } });
+  const blocking = blockingLessonChanges({ from, days, changeDays: changes.map((c) => isoDate(c.date)), makeups: changes.flatMap((c) => (c.makeupDate ? [isoDate(c.makeupDate)] : [])) });
+  if (blocking.length) throw new Error(changesMessage(blocking));
   const [marks, grades] = await Promise.all([
     db.attendance.findMany({ where: { groupId: group.id, date: { gte: from } }, select: { date: true }, distinct: ["date"] }),
     db.grade.findMany({ where: { groupId: group.id, date: { gte: from } }, select: { date: true }, distinct: ["date"] }),
@@ -521,7 +525,9 @@ export async function updateGroup(id: number, f: FormData) {
   // new lesson days / time apply from the chosen day; earlier lessons keep the schedule they had
   const scheduleChanged = data.days !== before.days || data.time !== before.time || data.endTime !== endOf(before);
   const sFrom = scheduleFrom ?? centreDay();
-  if (scheduleChanged) await checkScheduleChange(before, data.days, sFrom);
+  // a group that hasn't started has no lessons to keep: it simply takes the new schedule
+  const notStarted = before.startDate.getTime() > centreDay().getTime() && !before.schedules.length;
+  if (scheduleChanged && !notStarted) await checkScheduleChange(before, data.days, sFrom);
   // a changed lesson time / teacher / room must not collide with another group (a finished group has no lessons)
   const clashCheck = data.status === "ACTIVE" && (before.status !== "ACTIVE" || scheduleChanged || needsClashCheck(before, data));
   const { warnings } = clashCheck ? await checkGroupTime({ ...data, id }, scheduleChanged ? sFrom : centreDay()) : { warnings: [] };
@@ -551,7 +557,7 @@ export async function updateGroup(id: number, f: FormData) {
     }
     // saved level exams are numbered within the old course's section: keep them as ordinary exams
     if (data.courseId !== before.courseId) await tx.exam.updateMany({ where: { groupId: id, level: { not: null } }, data: { level: null } });
-    if (scheduleChanged) {
+    if (scheduleChanged && !notStarted) {
       const rows = scheduleRowsToWrite({
         before: { from: before.startDate, days: before.days, time: before.time, endTime: before.endTime },
         startDate: before.startDate, rows: before.schedules,

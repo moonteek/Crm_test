@@ -9,7 +9,7 @@ import { holidayDays } from "@/lib/holidays-db";
 import { membershipInclude } from "@/lib/billing-include";
 import { centreMonthStart, centreToday, fromMinutes, greeting, toMinutes, WEEKDAYS } from "@/lib/schedule";
 import { lessonMinutes } from "@/lib/group-days";
-import { isLessonDay, scheduleOn } from "@/lib/group-schedule";
+import { isLessonDay, movedLesson, scheduleOn } from "@/lib/group-schedule";
 import { date, money, MONTHS, PAYMENT_METHODS, LEAD_STATUSES } from "@/lib/format";
 import { DotMeter, Empty, PageHeader, StatCard } from "@/components/ui";
 import { alertsFor } from "@/lib/alerts-db";
@@ -70,7 +70,7 @@ export default async function Dashboard() {
   });
   const todayList = [
     ...todayGroups.map((g) => ({ ...g, key: String(g.id), makeup: false })),
-    ...todayMakeups.map((c) => ({ ...c.group, ...scheduleOn(c.group, c.date), key: `m${c.id}`, time: c.makeupTime ?? scheduleOn(c.group, c.date).time, room: c.makeupRoom, teacher: c.makeupTeacher, makeup: true })),
+    ...todayMakeups.map((c) => ({ ...c.group, ...movedLesson(c.group, c.date, c.makeupTime ?? scheduleOn(c.group, c.date).time), key: `m${c.id}`, room: c.makeupRoom, teacher: c.makeupTeacher, makeup: true })),
   ].sort((a, b) => a.time.localeCompare(b.time));
   const substituteOf = (groupId: number) => changes.filter((c) => c.kind === "SUBSTITUTE" && c.groupId === groupId).map((c) => c.substitute?.name ?? "—").join(", ");
   // the same count as the Qarzdorlar page (everyone who owes, current and former students)
