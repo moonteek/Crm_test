@@ -28,6 +28,7 @@ import { DiscountList } from "@/components/students/DiscountList";
 import { PER_LESSON_FROM } from "@/lib/billing";
 import { centreToday } from "@/lib/schedule";
 import { addStudentToGroup, deletePayment, deleteStudent, setStudentTags, updateStudent } from "../../actions";
+import { DocumentsPanel } from "@/components/students/DocumentsPanel";
 import { ActionButton, ActionForm } from "@/components/ActionForm";
 
 const TABS = [
@@ -37,6 +38,7 @@ const TABS = [
   { key: "notes", label: "Eslatma" },
   { key: "exams", label: "Imtihonlar" },
   { key: "history", label: "Tarix" },
+  { key: "documents", label: "Hujjatlar" },
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
 
@@ -93,7 +95,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
     discount: can(user, "students.discount"),
   };
   // money tabs only for staff who see payments
-  const tabs = TABS.filter((t) => (t.key !== "payments" && t.key !== "discounts") || allow.payments);
+  const tabs = TABS.filter((t) => ((t.key !== "payments" && t.key !== "discounts") || allow.payments) && (t.key !== "documents" || allow.manage));
   const tab: Tab = tabs.some((t) => t.key === asked) ? (asked as Tab) : "groups";
   const pinned = student.notes.find((n) => n.pinned);
   const allTags = allow.manage ? await db.tag.findMany({ orderBy: { name: "asc" } }) : [];
@@ -368,6 +370,14 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
             </div>
           )}
 
+          {tab === "documents" && allow.manage && (
+            <div className="card">
+              <DocumentsPanel
+                studentId={student.id}
+                docs={await db.studentDocument.findMany({ where: { studentId: student.id }, omit: { data: true }, include: { user: { select: { name: true } } }, orderBy: { createdAt: "desc" } })}
+              />
+            </div>
+          )}
           {tab === "notes" && (
             <div className="card">
               <NotesPanel studentId={student.id} notes={student.notes} canWrite={allow.manage} me={{ id: user.id, isAdmin: user.isAdmin }} />

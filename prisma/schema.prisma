@@ -61,6 +61,7 @@ model User {
   lessonChanges LessonChange[] @relation("LessonChangeAuthor")
   telegramMessages TelegramMessage[]
   makeups          LessonChange[] @relation("Makeups")
+  studentDocuments StudentDocument[]
   riskContacts RiskContact[]
 }
 
@@ -215,6 +216,7 @@ model Student {
   tags      StudentTag[]
   notes     StudentNote[]
   riskContacts RiskContact[]
+  documents StudentDocument[]
   auditLogs AuditLog[]
   groups    GroupStudent[]
   attendance Attendance[]
@@ -659,4 +661,20 @@ model Section {
   groups    Group[]
 
   @@unique([courseId, name])
+}
+
+// a scanned file on the student (contract, ID copy): PDF / PNG / JPG up to 2 MB, base64 (src/lib/documents.ts)
+model StudentDocument {
+  id        Int      @id @default(autoincrement())
+  studentId Int
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  name      String
+  mime      String
+  size      Int
+  data      String
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([studentId])
 }

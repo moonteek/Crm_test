@@ -44,6 +44,7 @@ import { check, parseForm, v } from "@/lib/validation";
 import { errorText, tryAction, type ActionState } from "@/lib/action-result";
 import { structureProblem, type LineShape } from "@/lib/curriculum-convert";
 import { emailField, telegramField } from "@/lib/student-contacts";
+import { decodeDocument, documentProblem } from "@/lib/documents";
 import { assertMarkAccess } from "@/lib/cover-db";
 import { CONTACT_RESULTS, riskSettingsSchema } from "@/lib/risk";
 import { storeRiskSettings } from "@/lib/risk-db";
@@ -2061,5 +2062,33 @@ export async function recordRiskContact(studentId: number, _: ActionState, f: Fo
     await db.riskContact.create({ data: { studentId, userId: user.id, result: d.result, comment: d.comment } });
     await logAction(user, "risk.contact", `Bog'lanildi (xavfli o'quvchi): ${CONTACT_RESULTS[d.result]}${d.comment ? ` — ${d.comment}` : ""}`, { studentId });
     revalidatePath("/risk");
+  });
+}
+
+// ---------- Student documents ("Hujjatlar") ----------
+/** Uploads a named PDF / PNG / JPG (≤ 2 MB, ≤ 30 per student), checked by its first bytes. */
+export async function uploadDocument(studentId: number, _: ActionState, f: FormData): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("students.manage");
+    await assertStudentAccess(user, studentId);
+    const name = check(v.text("Hujjat nomi", 80), f.get("name"));
+    const file = String(f.get("file") ?? "");
+    const problem = documentProblem(file, await db.studentDocument.count({ where: { studentId } }));
+    if (problem) throw new Error(problem);
+    const doc = decodeDocument(file);
+    await db.studentDocument.create({ data: { studentId, name, mime: doc.mime, size: doc.bytes.length, data: doc.bytes.toString("base64"), userId: user.id } });
+    await logAction(user, "student.document", `Hujjat qo'shildi: ${name}`, { studentId });
+    revalidatePath(`/students/${studentId}`);
+  });
+}
+
+export async function deleteDocument(id: number): Promise<ActionState> {
+  return tryAction(async () => {
+    const user = await requirePermission("students.manage");
+    const doc = await db.studentDocument.findUniqueOrThrow({ where: { id }, select: { studentId: true, name: true } });
+    await assertStudentAccess(user, doc.studentId);
+    await db.studentDocument.delete({ where: { id } });
+    await logAction(user, "student.document", `Hujjat o'chirildi: ${doc.name}`, { studentId: doc.studentId });
+    revalidatePath(`/students/${doc.studentId}`);
   });
 }
