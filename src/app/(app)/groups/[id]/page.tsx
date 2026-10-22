@@ -55,7 +55,7 @@ export default async function GroupPage({
   const group = await db.group.findFirst({
     where: { id, ...groupScope(user) },
     include: {
-      course: { include: { _count: { select: { sections: true } } } }, section: { include: { subjects: { orderBy: { position: "asc" } } } }, teacher: true, assistant: true, room: true, prices: true,
+      course: { include: { _count: { select: { sections: true } } } }, section: { include: { subjects: { orderBy: { position: "asc" } } } }, teacher: true, assistant: true, room: true, prices: true, schedules: true,
       students: {
         where: { leftAt: null },
         include: { events: membershipInclude.events, discounts: membershipInclude.discounts, student: { include: { payments: { select: { amount: true } }, groups: { include: membershipInclude } } } },
@@ -85,7 +85,7 @@ export default async function GroupPage({
     db.room.findMany({ orderBy: { name: "asc" } }),
     db.student.findMany({ where: { groups: { none: { groupId: id, leftAt: null } } }, orderBy: { name: "asc" } }),
     db.reason.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    db.group.findMany({ where: { status: "ACTIVE", NOT: { id }, ...groupScope(user) }, select: { id: true, name: true, days: true, price: true, course: { select: { name: true, price: true } }, prices: { select: { price: true, from: true } } }, orderBy: { name: "asc" } }),
+    db.group.findMany({ where: { status: "ACTIVE", NOT: { id }, ...groupScope(user) }, select: { id: true, name: true, days: true, price: true, course: { select: { name: true, price: true } }, prices: { select: { price: true, from: true } }, schedules: { select: { from: true, days: true } } }, orderBy: { name: "asc" } }),
     db.lessonChange.findMany({ where: { groupId: id, date: range }, include: { substitute: { select: { name: true } } } }),
     db.absenceReason.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
     holidayDays(),
@@ -93,7 +93,7 @@ export default async function GroupPage({
   // this month's lesson changes: cancelled days (with reason) and substitutes by day
   const cancelledOn = new Map(changes.filter((c) => c.kind === "CANCEL").map((c) => [isoDate(c.date), c.reason ?? ""]));
   const subsOn = (day: string) => changes.filter((c) => c.kind === "SUBSTITUTE" && isoDate(c.date) === day).map((c) => ({ role: c.role ?? "TEACHER", name: c.substitute?.name ?? "—" }));
-  const thisGroup = { id: group.id, name: group.name, days: group.days, price: group.price, course: group.course, prices: group.prices };
+  const thisGroup = { id: group.id, name: group.name, days: group.days, price: group.price, course: group.course, prices: group.prices, schedules: group.schedules };
   const upcoming = upcomingPrice(group.prices, now);
   // this group's closed days: the centre's holidays and its own cancelled lessons
   const closed = await closedDaysOf();

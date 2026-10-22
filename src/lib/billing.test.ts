@@ -10,7 +10,7 @@ const nov = (day: number) => d(2026, 11, day);
 const NOW = nov(15);
 
 function member(days: string, price: number, ...events: [EventType, Date][]): BillableMembership {
-  return { groupId: 1, group: { name: "G", days, course: { price } }, events: events.map(([type, date]) => ({ type, date })), holidays: [] };
+  return { groupId: 1, group: { name: "G", days, schedules: [], course: { price } }, events: events.map(([type, date]) => ({ type, date })), holidays: [] };
 }
 const even = (...e: [EventType, Date][]) => member("EVEN", 600_000, ...e);
 const odd = (...e: [EventType, Date][]) => member("ODD", 650_000, ...e);
@@ -150,11 +150,11 @@ test("a group's own price overrides the course price", () => {
 });
 
 test("a transfer made in the new screens in October is split per lesson in both groups", () => {
-  const old: BillableMembership = { groupId: 1, holidays: [], group: { name: "ROBO-3", days: "EVEN", course: { price: 450_000 } }, events: [
+  const old: BillableMembership = { groupId: 1, holidays: [], group: { name: "ROBO-3", days: "EVEN", schedules: [], course: { price: 450_000 } }, events: [
     { type: "ACTIVATE", date: d(2026, 9, 1), migrated: true },
     { type: "LEAVE", date: oct(20), migrated: false },
   ] };
-  const next: BillableMembership = { groupId: 2, holidays: [], group: { name: "FE-14", days: "ODD", course: { price: 600_000 } }, events: [
+  const next: BillableMembership = { groupId: 2, holidays: [], group: { name: "FE-14", days: "ODD", schedules: [], course: { price: 600_000 } }, events: [
     { type: "ACTIVATE", date: oct(20), migrated: false },
   ] };
   const now = d(2026, 11, 15);
@@ -163,7 +163,7 @@ test("a transfer made in the new screens in October is split per lesson in both 
 });
 
 test("months with only migrated history keep the full-month rule", () => {
-  const m: BillableMembership = { groupId: 1, holidays: [], group: { name: "G", days: "EVEN", course: { price: 450_000 } }, events: [
+  const m: BillableMembership = { groupId: 1, holidays: [], group: { name: "G", days: "EVEN", schedules: [], course: { price: 450_000 } }, events: [
     { type: "ACTIVATE", date: d(2026, 9, 1), migrated: true },
     { type: "LEAVE", date: oct(20), migrated: true },
   ] };
@@ -171,7 +171,7 @@ test("months with only migrated history keep the full-month rule", () => {
 });
 
 test("previewing an action in October shows the per-lesson amount", () => {
-  const m: BillableMembership = { groupId: 1, holidays: [], group: { name: "G", days: "EVEN", course: { price: 450_000 } }, events: [
+  const m: BillableMembership = { groupId: 1, holidays: [], group: { name: "G", days: "EVEN", schedules: [], course: { price: 450_000 } }, events: [
     { type: "ACTIVATE", date: d(2026, 9, 1), migrated: true },
   ] };
   const p = previewCharge(m, { type: "FREEZE", date: oct(20) });
@@ -269,7 +269,7 @@ test("legacy October ignores holidays", () => {
 });
 
 test("an October changed in the app (per-lesson) still ignores holidays", () => {
-  const m: BillableMembership = { groupId: 2, holidays: ["2026-10-23"], group: { name: "FE-14", days: "ODD", course: { price: 600_000 } }, events: [
+  const m: BillableMembership = { groupId: 2, holidays: ["2026-10-23"], group: { name: "FE-14", days: "ODD", schedules: [], course: { price: 600_000 } }, events: [
     { type: "ACTIVATE", date: oct(20), migrated: false },
   ] };
   assert.equal(chargeLines(m, d(2026, 11, 15)).find((l) => l.month === 9)?.amount, 230_769);
@@ -283,4 +283,21 @@ test("a moved or charged cancel is billed like a held lesson; a plain cancel is 
   assert.equal(charge({ charged: false, makeupDate: nov(16) }), full); // moved to Monday 16th
   assert.equal(charge({ charged: true, makeupDate: null }), full); // toggle OFF
   assert.equal(charge({ charged: false, makeupDate: null }), Math.round((full * 11) / 12)); // like a holiday
+});
+
+// A schedule change from the 16th: ODD (2,4,6,9,11,13) until then, Mon/Wed (16,18,23,25,30) after = 11 lessons.
+// Mon/Wed alone would be 9, ODD alone 13.
+const split = (price: number, ...events: [EventType, Date][]): BillableMembership => ({
+  groupId: 1, holidays: [], events: events.map(([type, date]) => ({ type, date })),
+  group: { name: "G", days: "1,3", course: { price }, schedules: [{ from: nov(1), days: "ODD" }, { from: nov(16), days: "1,3" }] },
+});
+
+test("billing: a month split by a schedule change counts each day by the schedule of that day", () => {
+  const line = chargeLines(split(1_100_000, ["ACTIVATE", d(2026, 10, 20)]), d(2026, 11, 30)).find((l) => l.year === 2026 && l.month === 10)!;
+  assert.equal(line.lessons, 11);
+  assert.equal(line.billable, 11);
+  assert.equal(line.amount, 1_100_000);
+  const left = chargeLines(split(1_100_000, ["ACTIVATE", d(2026, 10, 20)], ["LEAVE", nov(14)]), d(2026, 11, 30)).find((l) => l.year === 2026 && l.month === 10)!;
+  assert.equal(left.billable, 6);
+  assert.equal(left.amount, 600_000);
 });

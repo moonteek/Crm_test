@@ -95,7 +95,7 @@ async function oldRuleStudents(userId: number, month: string) {
   const { from, to } = monthBounds(month);
   const memberships = await db.groupStudent.findMany({
     where: { group: taughtBy(userId), joinedAt: { lt: to }, OR: [{ leftAt: null }, { leftAt: { gte: from } }] },
-    include: { ...membershipInclude, student: true, group: { include: { course: true, prices: true, teachers: true } } },
+    include: { ...membershipInclude, student: true, group: { include: { course: true, prices: true, teachers: true, schedules: true } } },
   });
   const [y, m] = month.split("-").map(Number);
   const first = new Date(Date.UTC(y, m - 1, 1));
@@ -118,7 +118,7 @@ async function earningsFor(userId: number, salary: { type: "PERCENT" | "PER_STUD
       joinedAt: { lt: to },
       OR: [{ leftAt: null }, { leftAt: { gte: from } }],
     },
-    include: { ...membershipInclude, student: { select: { id: true, name: true } }, group: { include: { course: true, prices: true, teachers: true } } },
+    include: { ...membershipInclude, student: { select: { id: true, name: true } }, group: { include: { course: true, prices: true, teachers: true, schedules: true } } },
   });
   const [y, m] = month.split("-").map(Number);
   const [substitutes, moved] = await Promise.all([

@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 // Prisma includes that load exactly what src/lib/billing.ts needs, so every balance is computed the same way.
 export const membershipInclude = {
   events: { orderBy: [{ date: "asc" }, { id: "asc" }] },
-  group: { include: { course: true, prices: true } },
+  group: { include: { course: true, prices: true, schedules: true } },
   discounts: { select: { from: true, to: true, amount: true } },
 } satisfies Prisma.GroupStudentInclude;
 

@@ -61,7 +61,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
         groups: {
           include: {
             events: { ...membershipInclude.events, include: { reason: true, user: { select: { name: true } } } },
-            group: { include: { course: true, teacher: true, prices: true } },
+            group: { include: { course: true, teacher: true, prices: true, schedules: true } },
             discounts: { include: { user: { select: { name: true } } }, orderBy: { from: "desc" } },
           },
           orderBy: { joinedAt: "desc" },
@@ -75,7 +75,7 @@ export default async function StudentPage({ params, searchParams }: { params: Pr
         notes: { include: { user: { select: { name: true } } }, orderBy: [{ pinned: "desc" }, { createdAt: "desc" }] },
       },
     }),
-    db.group.findMany({ where: { status: "ACTIVE", ...groupScope(user) }, include: { course: true, prices: true }, orderBy: { name: "asc" } }),
+    db.group.findMany({ where: { status: "ACTIVE", ...groupScope(user) }, include: { course: true, prices: true, schedules: true }, orderBy: { name: "asc" } }),
   ]);
   const reasons = await db.reason.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } });
   if (!student) notFound();

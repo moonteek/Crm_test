@@ -9,22 +9,33 @@ export type ScheduleRow = { from: Date; days: string; time: string; endTime: str
 export type Schedule = { days: string; time: string; endTime: string | null };
 /** `schedules` is required on purpose: a query that forgot to load them is a type error, not a silent fallback. */
 export type Scheduled = Schedule & { schedules: ScheduleRow[] };
+/** What lesson dates need: the days and when they changed (billing, curriculum, the grid). */
+export type DaysScheduled = { days: string; schedules: { from: Date; days: string }[] };
+
+/** The row in force on `day`: the latest one from on or before it (null before the first row / with no rows). */
+function rowOn<R extends { from: Date }>(rows: R[], day: Date): R | null {
+  let best: R | null = null;
+  for (const r of rows) if (r.from.getTime() <= day.getTime() && (!best || r.from > best.from)) best = r;
+  return best;
+}
 
 const own = (g: Schedule): Schedule => ({ days: g.days, time: g.time, endTime: g.endTime });
 const pick = (r: ScheduleRow): Schedule => ({ days: r.days, time: r.time, endTime: r.endTime });
 
 /** The schedule that applied on `day`: the latest row from on or before it, else the group's own fields. */
 export function scheduleOn(g: Scheduled, day: Date): Schedule {
-  let best: ScheduleRow | null = null;
-  for (const r of g.schedules) if (r.from.getTime() <= day.getTime() && (!best || r.from > best.from)) best = r;
+  const best = rowOn(g.schedules, day);
   return best ? pick(best) : own(g);
 }
 
+/** The lesson days in force on `day`. */
+export const daysOn = (g: DaysScheduled, day: Date) => rowOn(g.schedules, day)?.days ?? g.days;
+
 /** Whether the group had (or will have) a lesson on `day` by its schedule (holidays and cancels aside). */
-export const isLessonDay = (g: Scheduled, day: Date) => weekdaysOf(scheduleOn(g, day).days).includes(day.getUTCDay());
+export const isLessonDay = (g: DaysScheduled, day: Date) => weekdaysOf(daysOn(g, day)).includes(day.getUTCDay());
 
 /** The group's lesson dates in a month (0-based), each day judged by the schedule of that day. */
-export function lessonDatesOf(g: Scheduled, year: number, month: number): Date[] {
+export function lessonDatesOf(g: DaysScheduled, year: number, month: number): Date[] {
   const out: Date[] = [];
   for (const d = new Date(Date.UTC(year, month, 1)); d.getUTCMonth() === month; d.setUTCDate(d.getUTCDate() + 1)) {
     if (isLessonDay(g, d)) out.push(new Date(d));
@@ -33,7 +44,7 @@ export function lessonDatesOf(g: Scheduled, year: number, month: number): Date[]
 }
 
 /** Lesson dates of a month without the closed days (ISO): the lessons that actually happen. */
-export function heldLessonsOf(g: Scheduled, year: number, month: number, closed: string[]): Date[] {
+export function heldLessonsOf(g: DaysScheduled, year: number, month: number, closed: string[]): Date[] {
   const off = new Set(closed);
   return lessonDatesOf(g, year, month).filter((d) => !off.has(d.toISOString().slice(0, 10)));
 }
