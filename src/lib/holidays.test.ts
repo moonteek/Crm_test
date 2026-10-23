@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { heldLessons } from "./format";
+import { heldLessonsOf } from "./group-schedule";
+
+const heldLessons = (days: string, y: number, m: number, closed: string[]) => heldLessonsOf({ days, schedules: [] }, y, m, closed);
 import { canDeleteHoliday, expandRange, holidayProblem, holidayRefusal } from "./holidays";
 
 const d = (y: number, m: number, day: number) => new Date(Date.UTC(y, m - 1, day));

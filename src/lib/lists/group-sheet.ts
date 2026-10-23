@@ -1,7 +1,8 @@
 import "server-only";
 import { db } from "../db";
 import { groupScope, type CurrentUser } from "../access";
-import { isoDate, lessonDates, MONTHS } from "../format";
+import { isoDate, MONTHS } from "../format";
+import { lessonDatesOf } from "../group-schedule";
 import { centreDay } from "../membership-db";
 import { examColumns } from "../group-exams";
 import { closedDaysOf, makeupDaysOf, holidayDays } from "../holidays-db";
@@ -11,7 +12,7 @@ import { fmtDate, type Table } from "../export";
 export async function groupSheet(user: CurrentUser, groupId: number, params: { tab?: string; m?: string }): Promise<Table | null> {
   const group = await db.group.findFirst({
     where: { id: groupId, ...groupScope(user) },
-    include: { section: { include: { subjects: { orderBy: { position: "asc" } } } }, students: { where: { leftAt: null }, include: { student: true }, orderBy: { student: { name: "asc" } } } },
+    include: { section: { include: { subjects: { orderBy: { position: "asc" } } } }, schedules: true, students: { where: { leftAt: null }, include: { student: true }, orderBy: { student: { name: "asc" } } } },
   });
   if (!group) return null;
   const now = new Date();
@@ -30,7 +31,7 @@ export async function groupSheet(user: CurrentUser, groupId: number, params: { t
 
   // the month's lesson days plus make-up days (moved lessons) that fall in it
   const makeups = (await makeupDaysOf())(groupId).filter((x) => x.startsWith(`${year}-${String(month + 1).padStart(2, "0")}`));
-  const days = [...lessonDates(group.days, year, month), ...makeups.map((x) => new Date(x + "T00:00:00Z"))].sort((a, b) => a.getTime() - b.getTime());
+  const days = [...lessonDatesOf(group, year, month), ...makeups.map((x) => new Date(x + "T00:00:00Z"))].sort((a, b) => a.getTime() - b.getTime());
   // closed days: the centre's holidays ("Bayram") and this group's cancelled lessons ("Bekor")
   const holidays = new Set(await holidayDays());
   const off = new Set((await closedDaysOf())(groupId));

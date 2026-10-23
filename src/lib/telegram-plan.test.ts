@@ -9,7 +9,7 @@ const u = (s: string) => new Date(`${s}T00:00:00Z`);
 const at = (hhmm: string) => { const [h, m] = hhmm.split(":").map(Number); return new Date(Date.UTC(2026, 9, 15, h - 5, m)); };
 
 const group: PlanGroup = {
-  id: 6, name: "ROBO-3", time: "09:00", days: "EVEN", startDate: u("2026-05-03"), lessonMin: 90, room: "2-xona",
+  id: 6, name: "ROBO-3", time: "09:00", days: "EVEN", endTime: null, schedules: [], startDate: u("2026-05-03"), lessonMin: 90, room: "2-xona",
   teacherId: 10, assistantId: 7, teachers: [], students: 11, passed: 71,
 };
 const linked = new Map([
@@ -117,4 +117,17 @@ test("a make-up lesson today gets its reminder and nudge, even off the group's u
   assert.deepEqual(to(dueMessages([odd], ctx(at("08:30"))), "reminder:"), []);
   assert.deepEqual(to(dueMessages([{ ...odd, makeupToday: true }], ctx(at("08:30"))), "reminder:"), [7, 10]);
   assert.deepEqual(to(dueMessages([{ ...odd, makeupToday: true }], ctx(at("09:15"))), "unmarked:"), [7, 10]);
+});
+
+test("reminders follow the schedule of the day: old days and time until a change, the new ones after", () => {
+  const changed: PlanGroup = {
+    ...group, days: "EVEN", time: "16:00", endTime: "17:30", lessonMin: 120,
+    schedules: [{ from: u("2026-09-01"), days: "ODD", time: "14:00", endTime: null }, { from: u("2026-11-16"), days: "EVEN", time: "16:00", endTime: "17:30" }],
+  };
+  const on = (iso: string, hhmm: string) => { const [h, m] = hhmm.split(":").map(Number); return new Date(`${iso}T${String(h - 5).padStart(2, "0")}:${String(m).padStart(2, "0")}:00Z`); };
+  const before = dueMessages([changed], ctx(on("2026-11-09", "13:30"))).filter((m) => m.key.startsWith("reminder:"));
+  assert.ok(before.length > 0 && before.every((m) => m.text.includes("14:00–16:00")));
+  assert.deepEqual(dueMessages([changed], ctx(on("2026-11-23", "13:30"))), []);
+  const after = dueMessages([changed], ctx(on("2026-11-17", "15:30"))).filter((m) => m.key.startsWith("reminder:"));
+  assert.ok(after.length > 0 && after.every((m) => m.text.includes("16:00–17:30")));
 });

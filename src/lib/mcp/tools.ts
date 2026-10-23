@@ -10,13 +10,14 @@ import {
   assertGroupAccess, assertLeadAccess, assertStudentAccess, can, canSeeBalances, groupScope, leadScope, studentScope, type CurrentUser,
 } from "@/lib/access";
 import { OPEN_STATUSES, pickAssignee, salesStats } from "@/lib/sales";
-import { EXPENSE_CATEGORIES, GROUP_DAYS, isoDate, LEAD_STATUSES, PAYMENT_METHODS } from "@/lib/format";
+import { EXPENSE_CATEGORIES, isoDate, LEAD_STATUSES, PAYMENT_METHODS } from "@/lib/format";
 import type { Permission } from "@/lib/permissions";
 import { logAction } from "@/lib/audit";
 import { getAnalytics, resolvePeriod } from "@/lib/analytics";
 import { currentMonth, salariesForMonth, SALARY_TYPES } from "@/lib/salary";
 import { CALL_RESULTS, KPI_METRICS, LOST_REASONS, PRODUCT_CATEGORIES } from "@/lib/format";
 import { money } from "@/lib/format";
+import { daysLabel } from "../group-days";
 
 const json = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
 
@@ -141,7 +142,7 @@ export function buildServer(user: CurrentUser) {
     });
     return groups.map((g) => ({
       id: g.id, name: g.name, course: g.course.name, teacher: g.teacher?.name ?? null, room: g.room?.name ?? null,
-      days: GROUP_DAYS[g.days], time: g.time, status: g.status, students: g._count.students, start_date: isoDate(g.startDate),
+      days: daysLabel(g.days), time: g.time, status: g.status, students: g._count.students, start_date: isoDate(g.startDate),
     }));
   });
 

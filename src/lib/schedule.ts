@@ -1,4 +1,3 @@
-import { GROUP_DAYS, lessonWeekdays } from "./format";
 
 /** Teaching days, Monday (1) to Saturday (6); JS `Date.getDay()` numbering. */
 export const WEEKDAYS = [
@@ -10,9 +9,13 @@ export const WEEKDAYS = [
   { day: 6, label: "Shanba", short: "Sha" },
 ];
 
-/** The group `days` values that have a lesson on this weekday (none on Sunday). */
-export function scheduleKeysOn(weekday: number) {
-  return Object.keys(GROUP_DAYS).filter((k) => lessonWeekdays(k).includes(weekday));
+/**
+ * The date of `weekday` in the week the timetable shows (Monday first; on Sunday, the coming week). `today` is the
+ * centre's date (UTC midnight); its weekday decides the week.
+ */
+export function dateThisWeek(weekday: number, today: Date) {
+  const t = today.getUTCDay();
+  return new Date(today.getTime() + (((weekday + 6) % 7) - ((t + 6) % 7) + (t === 0 ? 7 : 0)) * 86_400_000);
 }
 
 const CENTRE_TZ = "Asia/Tashkent";

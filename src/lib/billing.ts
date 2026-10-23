@@ -1,7 +1,7 @@
-import { lessonDates } from "./format";
 import type { EventType } from "./membership";
 import { eventsFromLegacy } from "./membership-legacy";
 import { priceAt, type PriceRow } from "./prices";
+import { lessonDatesOf, type DaysScheduled } from "./group-schedule";
 
 /**
  * What a student is charged for being in a group, worked out by replaying the membership's events.
@@ -24,7 +24,8 @@ export type BillableMembership = {
   /** migrated: true for history copied from before statuses existed; absent counts as migrated */
   events: { type: EventType | string; date: Date; migrated?: boolean }[];
   /** price: the group's own monthly price; when empty the course price applies */
-  group: { name: string; days: string; price?: number | null; course: { price: number }; prices?: PriceRow[] };
+  /** schedules: the group's schedule changes (src/lib/group-schedule.ts) — each lesson day follows the schedule of that day */
+  group: { name: string; price?: number | null; course: { price: number }; prices?: PriceRow[] } & DaysScheduled;
   /** used only when the membership has no events yet (database not migrated) */
   joinedAt?: Date;
   leftAt?: Date | null;
@@ -103,7 +104,7 @@ export function discountIn(discounts: { from: Date; to: Date; amount: number }[]
 /** The month as charged: `full` is the undiscounted amount that teacher pay is built on. */
 function lineFor(m: BillableMembership, events: Ev[], y: number, mo: number): ChargeLine & { days: Date[]; full: number } {
   const price = priceAt(m.group.prices ?? [], groupPrice(m.group), y, mo);
-  const lessons = lessonDates(m.group.days, y, mo);
+  const lessons = lessonDatesOf(m.group, y, mo);
   const first = Date.UTC(y, mo, 1);
   const next = Date.UTC(y, mo + 1, 1);
   const touchedInApp = events.some((e) => e.migrated === false && time(e.date) >= first && time(e.date) < next);

@@ -1,6 +1,7 @@
-import { GROUP_DAYS, GROUP_LEVELS, isoDate } from "@/lib/format";
+import { GROUP_LEVELS, isoDate } from "@/lib/format";
 import { Field } from "./ui";
 import { CourseStartFields, type CourseOption } from "./CourseStartFields";
+import { ScheduleFields } from "./ScheduleFields";
 
 type Opt = { id: number; name: string };
 
@@ -8,7 +9,7 @@ export function GroupFields({
   courses, teachers, rooms, g,
 }: {
   courses: CourseOption[]; teachers: Opt[]; rooms: Opt[];
-  g?: { name: string; level: string | null; price: number | null; courseId: number; sectionId: number | null; startSubjectId: number | null; startLevel: number; teacherId: number | null; assistantId: number | null; roomId: number | null; days: string; time: string; status: string; startDate: Date };
+  g?: { name: string; level: string | null; price: number | null; courseId: number; sectionId: number | null; startSubjectId: number | null; startLevel: number; teacherId: number | null; assistantId: number | null; roomId: number | null; days: string; time: string; endTime: string | null; status: string; startDate: Date };
 }) {
   return (
     <>
@@ -44,14 +45,7 @@ export function GroupFields({
           {teachers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Dars kunlari">
-          <select name="days" className="input" defaultValue={g?.days}>
-            {Object.entries(GROUP_DAYS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </Field>
-        <Field label="Vaqti"><input name="time" type="time" className="input" required defaultValue={g?.time ?? "14:00"} /></Field>
-      </div>
+      <ScheduleFields courses={courses} courseId={g?.courseId} saved={g ? { days: g.days, time: g.time, endTime: g.endTime } : undefined} />
       <div className="grid grid-cols-2 gap-3">
         <Field label="Xona">
           <select name="roomId" className="input" defaultValue={g?.roomId ?? ""}>

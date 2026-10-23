@@ -18,7 +18,7 @@ export async function loadStudents(user: CurrentUser, f: StudentFilters) {
         include: {
           events: { orderBy: [{ date: "asc" }, { id: "asc" }] },
           discounts: { select: { from: true, to: true, amount: true } },
-          group: { include: { course: true, prices: true, teacher: { select: { name: true } }, assistant: { select: { name: true } } } },
+          group: { include: { course: true, prices: true, schedules: true, teacher: { select: { name: true } }, assistant: { select: { name: true } } } },
         },
       },
       tags: { include: { tag: true }, orderBy: { tag: { name: "asc" } } },

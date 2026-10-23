@@ -3,6 +3,7 @@ import { db } from "./db";
 import { ForbiddenError, groupScope, type CurrentUser } from "./access";
 import { coverAllowed } from "./lesson-changes";
 import { centreDay } from "./membership-db";
+import { scheduleOn } from "./group-schedule";
 
 /** Whether the user covers that group's lesson on `day` (a substitute or the make-up teacher) — only on the day itself. */
 export async function canCover(user: CurrentUser, groupId: number, day: string) {
@@ -33,11 +34,11 @@ export async function assertMarkAccess(user: CurrentUser, groupId: number, day: 
 export async function coveredToday(user: CurrentUser) {
   const date = centreDay();
   const [subs, makeups] = await Promise.all([
-    db.lessonChange.findMany({ where: { kind: "SUBSTITUTE", date, substituteId: user.id }, include: { group: { include: { room: true } } } }),
-    db.lessonChange.findMany({ where: { kind: "CANCEL", makeupDate: date, makeupTeacherId: user.id }, include: { group: true, makeupRoom: true } }),
+    db.lessonChange.findMany({ where: { kind: "SUBSTITUTE", date, substituteId: user.id }, include: { group: { include: { room: true, schedules: true } } } }),
+    db.lessonChange.findMany({ where: { kind: "CANCEL", makeupDate: date, makeupTeacherId: user.id }, include: { group: { include: { schedules: true } }, makeupRoom: true } }),
   ]);
   return [
-    ...subs.map((s) => ({ groupId: s.groupId, name: s.group.name, time: s.group.time, room: s.group.room?.name ?? null, makeup: false })),
-    ...makeups.map((m) => ({ groupId: m.groupId, name: m.group.name, time: m.makeupTime ?? m.group.time, room: m.makeupRoom?.name ?? null, makeup: true })),
+    ...subs.map((s) => ({ groupId: s.groupId, name: s.group.name, time: scheduleOn(s.group, date).time, room: s.group.room?.name ?? null, makeup: false })),
+    ...makeups.map((m) => ({ groupId: m.groupId, name: m.group.name, time: m.makeupTime ?? scheduleOn(m.group, m.date).time, room: m.makeupRoom?.name ?? null, makeup: true })),
   ].sort((a, b) => a.time.localeCompare(b.time));
 }

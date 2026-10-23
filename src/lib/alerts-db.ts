@@ -10,7 +10,7 @@ export async function alertsFor(user: CurrentUser) {
   if (!can(user, "groups.view")) return [];
   const groups = await db.group.findMany({
     where: { status: "ACTIVE", ...groupScope(user), section: { subjects: { some: {} } } },
-    select: { id: true, name: true, status: true, startDate: true, days: true, startSubjectId: true, startLevel: true, section: { select: { subjects: true } } },
+    select: { id: true, name: true, status: true, startDate: true, days: true, schedules: { select: { from: true, days: true } }, startSubjectId: true, startLevel: true, section: { select: { subjects: true } } },
   });
   const closed = await closedDaysOf();
   const makeups = await makeupDaysOf();

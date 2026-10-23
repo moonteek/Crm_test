@@ -1,4 +1,6 @@
 import { lessonWeekdays, money, MONTHS } from "./format";
+import { lessonMinutes } from "./group-days";
+import { scheduleOn, type ScheduleRow } from "./group-schedule";
 import { centreToday, fromMinutes, toMinutes } from "./schedule";
 import { teacherOn, type TeacherRow } from "./teachers-history";
 import { whoTaught } from "./lesson-changes";
@@ -9,7 +11,10 @@ import { phoneKey } from "./phone";
 export type Outgoing = { key: string; userId: number; text: string };
 
 export type PlanGroup = {
-  id: number; name: string; time: string; days: string; startDate: Date; lessonMin: number; room: string | null;
+  /** time: the make-up's time when `makeupToday`; else the newest schedule (each day uses scheduleOn) */
+  id: number; name: string; time: string; days: string; endTime: string | null; schedules: ScheduleRow[]; startDate: Date;
+  /** the course's lesson length, for a group without an end time */
+  lessonMin: number; room: string | null;
   teacherId: number | null; assistantId: number | null; teachers: TeacherRow[];
   /** active students */
   students: number;
@@ -53,20 +58,24 @@ export function dueMessages(groups: PlanGroup[], ctx: PlanContext): Outgoing[] {
   const now = t.hour * 60 + t.minute;
   const inWindow = (at: number) => now >= at && now < at + WINDOW;
   const out: Outgoing[] = [];
-  const unmarked: PlanGroup[] = [];
+  const unmarked: { name: string; time: string }[] = [];
 
   for (const g of groups) {
-    if (!(g.makeupToday || lessonWeekdays(g.days).includes(t.weekday)) || g.startDate.getTime() > day.getTime() || g.students === 0) continue;
+    // today's schedule: a change dated later doesn't apply yet; a make-up keeps its own time and the day's length
+    const s = scheduleOn(g, day);
+    const time = g.makeupToday ? g.time : s.time;
+    const length = lessonMinutes({ time: s.time, endTime: s.endTime, course: { lessonMin: g.lessonMin } });
+    if (!(g.makeupToday || lessonWeekdays(s.days).includes(t.weekday)) || g.startDate.getTime() > day.getTime() || g.students === 0) continue;
     if (!g.makeupToday && ctx.closed(g.id).includes(iso)) continue;
-    const start = toMinutes(g.time);
+    const start = toMinutes(time);
     const people = teachersOn(g, day, ctx.subs).filter((id) => ctx.linked.has(id));
     if (inWindow(start - REMIND_BEFORE)) {
-      const text = `⏰ 30 daqiqadan keyin dars: ${g.name}, ${g.time}–${fromMinutes(start + g.lessonMin)}${g.room ? `, ${g.room}` : ""}. Bugun ${g.passed}-dars.`;
+      const text = `⏰ 30 daqiqadan keyin dars: ${g.name}, ${time}–${fromMinutes(start + length)}${g.room ? `, ${g.room}` : ""}. Bugun ${g.passed}-dars.`;
       for (const id of people) out.push({ key: `reminder:${g.id}:${iso}:${id}`, userId: id, text });
     }
     if (inWindow(start + NUDGE_AFTER) && !ctx.markedGroups.has(g.id)) {
-      unmarked.push(g);
-      for (const id of people) out.push({ key: `unmarked:${g.id}:${iso}:${id}`, userId: id, text: `📋 ${g.name} (${g.time}) davomati hali belgilanmagan.` });
+      unmarked.push({ name: g.name, time });
+      for (const id of people) out.push({ key: `unmarked:${g.id}:${iso}:${id}`, userId: id, text: `📋 ${g.name} (${time}) davomati hali belgilanmagan.` });
     }
   }
 

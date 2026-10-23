@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { DEFAULT_ROLES } from "../src/lib/permissions";
-import { lessonDates } from "../src/lib/format";
+import { lessonDatesOf } from "../src/lib/group-schedule";
 import { salariesForMonth } from "../src/lib/salary";
 import { migrateStatuses } from "./migrate-statuses";
 
@@ -131,7 +131,7 @@ async function main() {
       // attendance & grades on every lesson day while enrolled
       for (let m = 0; m < months; m++) {
         const d = new Date(joinedAt.getFullYear(), joinedAt.getMonth() + m, 1);
-        for (const day of lessonDates(g.group.days, d.getFullYear(), d.getMonth())) {
+        for (const day of lessonDatesOf({ days: g.group.days, schedules: [] }, d.getFullYear(), d.getMonth())) {
           if (day < joinedAt || day > end || day > now) continue;
           const present = rand() < 0.55 + skill * 0.43;
           attendance.push({ groupId: g.group.id, studentId: student.id, date: day, present });

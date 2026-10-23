@@ -9,7 +9,8 @@ import { balance, priceNow, withHolidays } from "@/lib/billing";
 import { closedDaysOf, holidayDays, makeupDaysOf, unchargedDaysOf } from "@/lib/holidays-db";
 import { upcomingPrice } from "@/lib/prices";
 import { membershipInclude } from "@/lib/billing-include";
-import { date, GROUP_DAYS, isoDate, lessonDates, lessonWeekdays, money, MONTHS } from "@/lib/format";
+import { date, isoDate, money, MONTHS } from "@/lib/format";
+import { lessonDatesOf } from "@/lib/group-schedule";
 import { Modal } from "@/components/Modal";
 import { EditGroupDialog } from "@/components/EditGroupDialog";
 import { BalanceBadge, Empty, Field } from "@/components/ui";
@@ -31,6 +32,11 @@ import { StatusBadge, StatusLegend } from "@/components/members/StatusBadge";
 import { toMemberData, toMemberGroup } from "@/components/members/types";
 import { addStudentToGroup, createExam, deleteExam, deleteGroup } from "../../actions";
 import { ActionButton, ActionForm } from "@/components/ActionForm";
+import { daysLabel } from "@/lib/group-days";
+import { endOf, lessonMinutes } from "@/lib/group-days";
+import { isLessonDay, scheduleOn } from "@/lib/group-schedule";
+
+const ddmm = (d: Date) => `${String(d.getUTCDate()).padStart(2, "0")}.${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 
 export default async function GroupPage({
   params, searchParams,
@@ -54,7 +60,7 @@ export default async function GroupPage({
   const group = await db.group.findFirst({
     where: { id, ...groupScope(user) },
     include: {
-      course: { include: { _count: { select: { sections: true } } } }, section: { include: { subjects: { orderBy: { position: "asc" } } } }, teacher: true, assistant: true, room: true, prices: true,
+      course: { include: { _count: { select: { sections: true } } } }, section: { include: { subjects: { orderBy: { position: "asc" } } } }, teacher: true, assistant: true, room: true, prices: true, schedules: true,
       students: {
         where: { leftAt: null },
         include: { events: membershipInclude.events, discounts: membershipInclude.discounts, student: { include: { payments: { select: { amount: true } }, groups: { include: membershipInclude } } } },
@@ -73,7 +79,7 @@ export default async function GroupPage({
   ]);
   const makeupOn = new Map(monthMakeups.map((c) => [isoDate(c.makeupDate!), { original: isoDate(c.date), date: isoDate(c.makeupDate!), time: c.makeupTime ?? group.time, roomId: c.makeupRoomId, teacherId: c.makeupTeacherId }]));
   const cancelOn = new Map(cancelInfo.map((c) => [isoDate(c.date), { makeupDate: c.makeupDate ? isoDate(c.makeupDate) : null, charged: c.charged }]));
-  const days = [...lessonDates(group.days, year, month), ...monthMakeups.map((c) => c.makeupDate!)].sort((a, b) => a.getTime() - b.getTime());
+  const days = [...lessonDatesOf(group, year, month), ...monthMakeups.map((c) => c.makeupDate!)].sort((a, b) => a.getTime() - b.getTime());
   const range = { gte: days[0] ?? new Date(), lte: days.at(-1) ?? new Date() };
   const [attendance, grades, exams, courses, teachers, rooms, others, reasons, transferGroups, changes, absenceReasons, centreHolidays] = await Promise.all([
     db.attendance.findMany({ where: { groupId: id, date: range }, include: { reason: true } }),
@@ -84,7 +90,7 @@ export default async function GroupPage({
     db.room.findMany({ orderBy: { name: "asc" } }),
     db.student.findMany({ where: { groups: { none: { groupId: id, leftAt: null } } }, orderBy: { name: "asc" } }),
     db.reason.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    db.group.findMany({ where: { status: "ACTIVE", NOT: { id }, ...groupScope(user) }, select: { id: true, name: true, days: true, price: true, course: { select: { name: true, price: true } }, prices: { select: { price: true, from: true } } }, orderBy: { name: "asc" } }),
+    db.group.findMany({ where: { status: "ACTIVE", NOT: { id }, ...groupScope(user) }, select: { id: true, name: true, days: true, price: true, course: { select: { name: true, price: true } }, prices: { select: { price: true, from: true } }, schedules: { select: { from: true, days: true } } }, orderBy: { name: "asc" } }),
     db.lessonChange.findMany({ where: { groupId: id, date: range }, include: { substitute: { select: { name: true } } } }),
     db.absenceReason.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
     holidayDays(),
@@ -92,7 +98,7 @@ export default async function GroupPage({
   // this month's lesson changes: cancelled days (with reason) and substitutes by day
   const cancelledOn = new Map(changes.filter((c) => c.kind === "CANCEL").map((c) => [isoDate(c.date), c.reason ?? ""]));
   const subsOn = (day: string) => changes.filter((c) => c.kind === "SUBSTITUTE" && isoDate(c.date) === day).map((c) => ({ role: c.role ?? "TEACHER", name: c.substitute?.name ?? "—" }));
-  const thisGroup = { id: group.id, name: group.name, days: group.days, price: group.price, course: group.course, prices: group.prices };
+  const thisGroup = { id: group.id, name: group.name, days: group.days, price: group.price, course: group.course, prices: group.prices, schedules: group.schedules };
   const upcoming = upcomingPrice(group.prices, now);
   // this group's closed days: the centre's holidays and its own cancelled lessons
   const closed = await closedDaysOf();
@@ -109,7 +115,7 @@ export default async function GroupPage({
   const people = [group.teacher, group.assistant].filter((p): p is NonNullable<typeof p> => p !== null);
   const busyWarnings = warn && people.length
     ? busyMarkMessages(
-        { ...group, minutes: group.course.lessonMin },
+        { ...group, ...scheduleOn(group, centreDay()), minutes: lessonMinutes({ ...scheduleOn(group, centreDay()), course: group.course }) },
         await db.teacherSlot.findMany({ where: { userId: { in: people.map((p) => p.id) } } }),
         new Map(people.map((p) => [p.id, p.name])),
       )
@@ -118,7 +124,11 @@ export default async function GroupPage({
   const examCols = examColumns(planGroup, lines, exams, centreDay());
   // "Bugungi dars": on the group's lesson day (not a holiday) its current students with today's mark
   const todayIso = isoDate(centreDay());
-  const lessonToday = (lessonWeekdays(group.days).includes(centreDay().getUTCDay()) && !holidays.includes(todayIso)) || planGroup.extraDays.includes(todayIso);
+  const lessonToday = (isLessonDay(group, centreDay()) && !holidays.includes(todayIso)) || planGroup.extraDays.includes(todayIso);
+  // "Jadval": today's schedule, and the next change when one is dated later
+  const nowSchedule = scheduleOn(group, centreDay());
+  const nextSchedule = group.schedules.filter((r) => r.from.getTime() > centreDay().getTime()).sort((a, b) => a.from.getTime() - b.from.getTime())[0];
+  const scheduleText = (s: { days: string; time: string; endTime: string | null }) => `${daysLabel(s.days)} · ${s.time}–${endOf({ ...s, course: group.course })}`;
   const todayRows = group.status === "ACTIVE" && group.startDate.getTime() <= Date.now() && lessonToday
     ? await todayMarks(id, group.students.filter((gs) => gs.status === "ACTIVE" || gs.status === "TRIAL").map((gs) => ({ id: gs.student.id, name: gs.student.name })))
     : null;
@@ -151,7 +161,7 @@ export default async function GroupPage({
         <div className={`mt-5 grid grid-cols-2 gap-2.5 text-sm ${group.assistant ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
           <Info k="O'qituvchi" v={group.teacher?.name ?? "—"} />
           {group.assistant && <Info k="Yordamchi o'qituvchi" v={group.assistant.name} />}
-          <Info k="Jadval" v={`${GROUP_DAYS[group.days]} · ${group.time}`} />
+          <Info k="Jadval" v={scheduleText(nowSchedule)} sub={nextSchedule ? `${ddmm(nextSchedule.from)} dan: ${scheduleText(nextSchedule)}` : undefined} />
           <Info k="Xona" v={group.room?.name ?? "—"} />
           <Info k="Boshlangan" v={date(group.startDate)} />
         </div>
@@ -250,7 +260,7 @@ export default async function GroupPage({
             reasons: absenceReasons.map((r) => ({ id: r.id, name: r.name, color: r.color })),
             allTeachers: teachers.map((t) => ({ id: t.id, name: t.name })),
             rooms: rooms.map((r) => ({ id: r.id, name: r.name })),
-            groupTime: group.time, groupRoomId: group.roomId,
+            groupTime: nowSchedule.time, groupRoomId: group.roomId,
           }}>
           <div className="overflow-x-auto pt-2">
             <table className="table">
@@ -420,11 +430,12 @@ function ScoreBadge({ pct }: { pct: number }) {
   return <span className={`badge ${cls}`}>{pct}%</span>;
 }
 
-function Info({ k, v }: { k: string; v: string }) {
+function Info({ k, v, sub }: { k: string; v: string; sub?: string }) {
   return (
     <div className="min-w-0 rounded-xl border border-line bg-raised p-3">
       <p className="label-mono">{k}</p>
       <p className="mt-1 truncate font-medium">{v}</p>
+      {sub && <p className="mt-0.5 truncate text-xs text-warning" title={sub}>{sub}</p>}
     </div>
   );
 }

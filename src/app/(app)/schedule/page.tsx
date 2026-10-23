@@ -3,7 +3,9 @@ import { AlertTriangle, DoorOpen, User, Users } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePage } from "@/lib/auth";
 import { can, groupScope } from "@/lib/access";
-import { centreToday, centreWeekday, findClashes, fromMinutes, scheduleKeysOn, toMinutes, WEEKDAYS } from "@/lib/schedule";
+import { centreToday, centreWeekday, dateThisWeek, findClashes, fromMinutes, toMinutes, WEEKDAYS } from "@/lib/schedule";
+import { lessonMinutes } from "@/lib/group-days";
+import { isLessonDay, movedLesson, scheduleOn } from "@/lib/group-schedule";
 import { DotMeter, Empty, PageHeader } from "@/components/ui";
 import { ExportButtons } from "@/components/ExportButtons";
 import { CurriculumBadge } from "@/components/CurriculumBar";
@@ -29,26 +31,29 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const [groups, centreGroups, allRooms] = await Promise.all([
     db.group.findMany({
       where: { status: "ACTIVE", ...groupScope(user) },
-      include: { course: true, section: { include: { subjects: { orderBy: { position: "asc" } } } }, teacher: true, assistant: true, room: true, _count: { select: { students: { where: { leftAt: null } } } } },
+      include: { course: true, section: { include: { subjects: { orderBy: { position: "asc" } } } }, teacher: true, assistant: true, room: true, schedules: true, _count: { select: { students: { where: { leftAt: null } } } } },
       orderBy: { time: "asc" },
     }),
     // clashes are checked against every group, including ones this user can't see
     seesAll
       ? null
       : db.group.findMany({
-          where: { status: "ACTIVE", days: { in: scheduleKeysOn(day) } },
-          select: { id: true, time: true, roomId: true, teacherId: true, assistantId: true, course: { select: { lessonMin: true } } },
+          where: { status: "ACTIVE" },
+          select: { id: true, days: true, time: true, endTime: true, schedules: true, roomId: true, teacherId: true, assistantId: true, course: { select: { lessonMin: true } } },
         }),
     db.room.findMany({ orderBy: { name: "asc" } }),
   ]);
 
-  const perDay = new Map(WEEKDAYS.map((w) => [w.day, groups.filter((g) => scheduleKeysOn(w.day).includes(g.days))]));
-  const withTimes = <G extends { time: string; course: { lessonMin: number } }>(g: G) => {
+  // each weekday of the shown week, with every group's schedule of that date (a change dated later doesn't apply yet)
+  const onDate = <G extends Parameters<typeof scheduleOn>[0]>(list: G[], date: Date) =>
+    list.filter((g) => isLessonDay(g, date)).map((g) => ({ ...g, ...scheduleOn(g, date) }));
+  const perDay = new Map(WEEKDAYS.map((w) => [w.day, onDate(groups, dateThisWeek(w.day, centreDay()))]));
+  const withTimes = <G extends { time: string; endTime: string | null; course: { lessonMin: number } }>(g: G) => {
     const start = toMinutes(g.time);
-    return { ...g, start, end: start + g.course.lessonMin };
+    return { ...g, start, end: start + lessonMinutes(g) };
   };
-  // the shown weekday's date in this week (Monday first; on Sunday, the coming week): where each group is in its course that day, and exam days
-  const shown = new Date(centreDay().getTime() + (((day + 6) % 7) - ((today + 6) % 7) + (today === 0 ? 7 : 0)) * 86_400_000);
+  // the shown weekday's date in this week: where each group is in its course that day, and exam days
+  const shown = dateThisWeek(day, centreDay());
   const holidays = await holidayDays();
   const closedFor = await closedDaysOf();
   const makeupsFor = await makeupDaysOf();
@@ -70,11 +75,12 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
     where: { kind: "CANCEL", makeupDate: shown, group: { status: "ACTIVE", ...groupScope(user) } },
     include: {
       makeupTeacher: true, makeupRoom: true,
-      group: { include: { course: true, section: { include: { subjects: { orderBy: { position: "asc" } } } }, assistant: true, _count: { select: { students: { where: { leftAt: null } } } } } },
+      group: { include: { course: true, section: { include: { subjects: { orderBy: { position: "asc" } } } }, assistant: true, schedules: true, _count: { select: { students: { where: { leftAt: null } } } } } },
     },
   });
   const makeups = moved.map((c) => {
-    const l = withTimes({ ...c.group, time: c.makeupTime ?? c.group.time });
+    // as long as the cancelled lesson was, at the make-up's own time
+    const l = withTimes({ ...c.group, ...movedLesson(c.group, c.date, c.makeupTime ?? scheduleOn(c.group, c.date).time) });
     const cur = curriculumOn({ ...c.group, holidays: closedFor(c.groupId), extraDays: makeupsFor(c.groupId) }, c.group.section?.subjects ?? [], shown);
     return {
       ...l, roomId: c.makeupRoomId, room: c.makeupRoom, teacherId: c.makeupTeacherId, teacher: c.makeupTeacher,
@@ -85,7 +91,7 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
   const lessons = [...regular, ...makeups].sort((a, b) => a.start - b.start);
   // a cancelled lesson doesn't hold its room or teacher
   const clashes = findClashes(
-    (centreGroups?.map(withTimes) ?? lessons).filter((l) => !closedFor(l.id).includes(shownIso)).map((l) => ({
+    (centreGroups ? onDate(centreGroups, shown).map(withTimes) : lessons).filter((l) => !closedFor(l.id).includes(shownIso)).map((l) => ({
       id: l.id, start: l.start, end: l.end, roomId: l.roomId,
       teacherIds: [l.teacherId, l.assistantId].filter((t): t is number => t !== null),
     })),

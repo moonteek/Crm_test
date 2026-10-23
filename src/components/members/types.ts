@@ -3,6 +3,8 @@ import type { BillableMembership } from "@/lib/billing";
 // Plain-data shapes passed from server pages to the member menu (dates as ISO strings).
 export type MemberGroup = {
   id: number; name: string; days: string; price: number | null; course: { name: string; price: number }; prices: { price: number; from: string }[];
+  /** schedule changes (src/lib/group-schedule.ts), so a preview counts each lesson day by the schedule of that day */
+  schedules: { from: string; days: string }[];
   /** a transfer target's own closed days (holidays + its cancelled lessons), for the cost preview */
   holidays?: string[];
 };
@@ -22,7 +24,7 @@ type MembershipRow = {
   id: number;
   status: string;
   events: { type: string; date: Date; migrated: boolean }[];
-  group: { id: number; name: string; days: string; price: number | null; course: { name: string; price: number }; prices: { price: number; from: Date }[] };
+  group: { id: number; name: string; days: string; price: number | null; course: { name: string; price: number }; prices: { price: number; from: Date }[]; schedules: { from: Date; days: string }[] };
   discounts?: { from: Date; to: Date; amount: number }[];
 };
 
@@ -45,11 +47,16 @@ export function toMemberGroup(g: MembershipRow["group"], holidays?: string[]): M
     id: g.id, name: g.name, days: g.days, price: g.price, holidays,
     course: { name: g.course.name, price: g.course.price },
     prices: g.prices.map((p) => ({ price: p.price, from: p.from.toISOString() })),
+    schedules: g.schedules.map((r) => ({ from: r.from.toISOString(), days: r.days })),
   };
 }
 
 export function toBillable(m: Pick<MemberData, "events" | "group" | "discounts" | "holidays">): BillableMembership {
-  const group = { ...m.group, prices: m.group.prices.map((p) => ({ price: p.price, from: new Date(p.from) })) };
+  const group = {
+    ...m.group,
+    prices: m.group.prices.map((p) => ({ price: p.price, from: new Date(p.from) })),
+    schedules: m.group.schedules.map((r) => ({ from: new Date(r.from), days: r.days })),
+  };
   return {
     groupId: m.group.id, group,
     events: m.events.map((e) => ({ type: e.type, date: new Date(e.date), migrated: e.migrated })),

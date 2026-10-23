@@ -1,5 +1,5 @@
 import { lessonValues, type BillableMembership } from "./billing";
-import { lessonDates } from "./format";
+import { lessonDatesOf } from "./group-schedule";
 import { teacherOn, type TeacherRow } from "./teachers-history";
 import { whoTaught } from "./lesson-changes";
 
@@ -53,7 +53,7 @@ export function teacherEarnings(
         || whoTaught(l.day, "ASSISTANT", teacherOn(history, current, l.day, "ASSISTANT"), subs) === teacherId,
     );
     if (!taught.length) continue;
-    const lessonsInMonth = lessonDates(m.group.days, year, month).length;
+    const lessonsInMonth = lessonDatesOf(m.group, year, month).length;
     const value = taught.reduce((s, l) => s + l.value, 0);
     const share = salary.type === "PERCENT" ? (value * salary.amount) / 100 : (salary.amount * taught.length) / lessonsInMonth;
     rows.push({ studentId: m.student.id, studentName: m.student.name, groupId: m.group.id, groupName: m.group.name, lessons: taught.length, lessonsInMonth, value, share, rounded: Math.floor(share) });

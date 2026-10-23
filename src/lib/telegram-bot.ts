@@ -8,6 +8,7 @@ import { dueMessages, linkReply, type Outgoing } from "./telegram-plan";
 import { enqueue, flush } from "./telegram-queue";
 import { TelegramError, telegramClient, type TelegramClient, type Update } from "./telegram-client";
 import { linkChat, prismaStore } from "./telegram-store";
+import { scheduleOn } from "./group-schedule";
 
 // The centre's Telegram bot, inside the CRM server: long-polls for Start / shared contacts, and every minute queues
 // due reminders and nudges and sends what's waiting. Runs only when TELEGRAM_BOT_TOKEN is set (see instrumentation.ts).
@@ -34,7 +35,7 @@ export async function dueNow(now: Date): Promise<Outgoing[]> {
   const [groups, closed, subs, marked, linked, makeups] = await Promise.all([
     db.group.findMany({
       where: { status: "ACTIVE" },
-      include: { room: true, course: { select: { lessonMin: true } }, teachers: true, _count: { select: { students: { where: { leftAt: null } } } } },
+      include: { room: true, course: { select: { lessonMin: true } }, teachers: true, schedules: true, _count: { select: { students: { where: { leftAt: null } } } } },
     }),
     closedDaysOf(),
     db.lessonChange.findMany({ where: { kind: "SUBSTITUTE", date: day } }),
@@ -43,15 +44,16 @@ export async function dueNow(now: Date): Promise<Outgoing[]> {
     // lessons moved to today: reminded at their own time, to the make-up teacher (and the group's assistant)
     db.lessonChange.findMany({
       where: { kind: "CANCEL", makeupDate: day, group: { status: "ACTIVE" } },
-      include: { makeupRoom: true, group: { include: { course: { select: { lessonMin: true } }, _count: { select: { students: { where: { leftAt: null } } } } } } },
+      include: { makeupRoom: true, group: { include: { course: { select: { lessonMin: true } }, schedules: true, _count: { select: { students: { where: { leftAt: null } } } } } } },
     }),
   ]);
   return dueMessages(
     groups.map((g) => ({
-      id: g.id, name: g.name, time: g.time, days: g.days, startDate: g.startDate, lessonMin: g.course.lessonMin, room: g.room?.name ?? null,
+      id: g.id, name: g.name, time: g.time, days: g.days, endTime: g.endTime, schedules: g.schedules, startDate: g.startDate, lessonMin: g.course.lessonMin, room: g.room?.name ?? null,
       teacherId: g.teacherId, assistantId: g.assistantId, teachers: g.teachers, students: g._count.students, passed: lessonsPassed(g, closed(g.id), day),
     })).concat(makeups.map((c) => ({
-      id: c.groupId, name: c.group.name, time: c.makeupTime ?? c.group.time, days: c.group.days, startDate: c.group.startDate, lessonMin: c.group.course.lessonMin,
+      id: c.groupId, name: c.group.name, time: c.makeupTime ?? scheduleOn(c.group, c.date).time, days: c.group.days, endTime: c.group.endTime, schedules: c.group.schedules,
+      startDate: c.group.startDate, lessonMin: c.group.course.lessonMin,
       room: c.makeupRoom?.name ?? null, teacherId: c.makeupTeacherId ?? c.group.teacherId, assistantId: c.group.assistantId, teachers: [],
       students: c.group._count.students, passed: lessonsPassed(c.group, closed(c.groupId), day), makeupToday: true,
     }))),

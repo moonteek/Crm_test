@@ -1,4 +1,4 @@
-import { lessonWeekdays } from "./format";
+import { isLessonDay, type DaysScheduled } from "./group-schedule";
 
 // The horizontal timetable: rooms down, the day's hours across, each lesson a card at its time.
 
@@ -46,12 +46,11 @@ export function lanes(lessons: { id: number; start: number; end: number }[]) {
 }
 
 /** Lessons held from the group's start up to `day` (inclusive), not counting closed days (ISO). */
-export function lessonsPassed(group: { startDate: Date; days: string }, closed: string[], day: Date) {
-  const weekdays = lessonWeekdays(group.days);
+export function lessonsPassed(group: DaysScheduled & { startDate: Date }, closed: string[], day: Date) {
   const off = new Set(closed);
   let n = 0;
   for (const d = new Date(group.startDate); d.getTime() <= day.getTime(); d.setUTCDate(d.getUTCDate() + 1)) {
-    if (weekdays.includes(d.getUTCDay()) && !off.has(d.toISOString().slice(0, 10))) n++;
+    if (isLessonDay(group, d) && !off.has(d.toISOString().slice(0, 10))) n++;
   }
   return n;
 }

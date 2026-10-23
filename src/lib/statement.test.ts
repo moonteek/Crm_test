@@ -7,7 +7,7 @@ const nov = (day: number) => new Date(Date.UTC(2026, 10, day));
 const NOW = nov(15);
 
 const member = (events: StatementMembership["events"]): StatementMembership => ({
-  groupId: 1, group: { name: "ROBO-3", days: "EVEN", course: { price: 600_000 } }, events, holidays: [],
+  groupId: 1, group: { name: "ROBO-3", days: "EVEN", schedules: [], course: { price: 600_000 } }, events, holidays: [],
 });
 const pay = (id: number, amount: number, date: Date) => ({ id, amount, method: "CASH", date, note: null, groupId: 1 });
 
@@ -71,7 +71,7 @@ test("ledger rows say what they are, who recorded them and when; the note sits o
 
 test("a transfer reads as one: left for another group, joined by transfer", () => {
   const a: StatementMembership = { ...member([{ type: "ACTIVATE", date: nov(1) }, { type: "LEAVE", date: nov(10) }]), groupId: 1 };
-  const b: StatementMembership = { ...member([{ type: "ACTIVATE", date: nov(10) }]), groupId: 2, group: { name: "PY-07", days: "ODD", course: { price: 650_000 } } };
+  const b: StatementMembership = { ...member([{ type: "ACTIVATE", date: nov(10) }]), groupId: 2, group: { name: "PY-07", days: "ODD", schedules: [], course: { price: 650_000 } } };
   const types = statement([a, b], [], NOW).filter((r) => r.kind === "event").map((r) => [r.groupName, r.type]);
   assert.deepEqual(types, [["PY-07", "O'tkazma bilan qo'shildi"], ["ROBO-3", "Boshqa guruhga o'tkazildi"], ["ROBO-3", "Faollashtirildi"]]);
 });
@@ -93,8 +93,8 @@ test("the ledger filter keeps each row's own running balance", async () => {
 
 test("a join on the day of someone else's transfer is not a transfer", () => {
   const a: StatementMembership = { ...member([{ type: "ACTIVATE", date: nov(1) }, { type: "LEAVE", date: nov(10), comment: "PY-07 guruhiga o'tkazildi" }]), groupId: 1 };
-  const b: StatementMembership = { ...member([{ type: "ACTIVATE", date: nov(10) }]), groupId: 2, group: { name: "PY-07", days: "ODD", course: { price: 650_000 } } };
-  const c: StatementMembership = { ...member([{ type: "ACTIVATE", date: nov(10) }]), groupId: 3, group: { name: "KS-21", days: "ODD", course: { price: 350_000 } } };
+  const b: StatementMembership = { ...member([{ type: "ACTIVATE", date: nov(10) }]), groupId: 2, group: { name: "PY-07", days: "ODD", schedules: [], course: { price: 650_000 } } };
+  const c: StatementMembership = { ...member([{ type: "ACTIVATE", date: nov(10) }]), groupId: 3, group: { name: "KS-21", days: "ODD", schedules: [], course: { price: 350_000 } } };
   const types = Object.fromEntries(statement([a, b, c], [], NOW).filter((r) => r.kind === "event" && r.date.getTime() === nov(10).getTime()).map((r) => [r.groupName, r.type]));
   assert.deepEqual(types, { "ROBO-3": "Boshqa guruhga o'tkazildi", "PY-07": "O'tkazma bilan qo'shildi", "KS-21": "Faollashtirildi" });
 });

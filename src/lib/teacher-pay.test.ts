@@ -18,7 +18,7 @@ function member(
   return {
     groupId: group.id,
     student: { id: nextStudent, name: `S${nextStudent++}` },
-    group: { ...group, assistantId: group.assistantId ?? null, course: { price: group.price } },
+    group: { ...group, assistantId: group.assistantId ?? null, course: { price: group.price }, schedules: [] },
     events: events.map(([type, date, migrated]) => ({ type, date, migrated: migrated ?? false })),
     holidays: [],
   };
@@ -126,4 +126,13 @@ test("a different make-up teacher earns the moved lesson; the regular teacher lo
   const lesson = lessonValues(m, 2026, 10, NOW).find((v) => v.day.getTime() === nov(11).getTime())!.value;
   assert.equal(teacherEarnings(SUB, { type: "PERCENT", amount: 30 }, [m], 2026, 10, NOW).total, Math.round(lesson * 0.3));
   assert.equal(teacherEarnings(B, { type: "PERCENT", amount: 40 }, [m], 2026, 10, NOW).total, Math.round((600_000 - lesson) * 0.4));
+});
+
+test("teacher pay: a month split by a schedule change counts the lessons of both schedules", () => {
+  const m = member({ ...FE, days: "1,3", price: 1_100_000, teacherId: A }, ["ACTIVATE", oct(20)]);
+  m.group.schedules = [{ from: nov(1), days: "ODD" }, { from: nov(16), days: "1,3" }];
+  const r = teacherEarnings(A, { type: "PER_STUDENT", amount: 110_000 }, [m], 2026, 10, d(2026, 12, 1));
+  assert.equal(r.rows[0].lessonsInMonth, 11);
+  assert.equal(r.rows[0].lessons, 11);
+  assert.equal(r.total, 110_000);
 });

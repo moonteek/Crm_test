@@ -42,8 +42,13 @@ test("lessons overlapping in one room stack in lanes; back-to-back ones share a 
 
 test("lessons passed: lesson days from the start up to the day, without holidays or cancelled lessons", () => {
   // Mon/Wed/Fri from Mon 5 Oct 2026: 5, 7, 9, 12, 14 → 5 lessons up to Wed 14 Oct
-  const g = { startDate: u("2026-10-05"), days: "ODD" };
+  const g = { startDate: u("2026-10-05"), days: "ODD", schedules: [] };
   assert.equal(lessonsPassed(g, [], u("2026-10-14")), 5);
   assert.equal(lessonsPassed(g, ["2026-10-07", "2026-10-12"], u("2026-10-14")), 3);
   assert.equal(lessonsPassed(g, [], u("2026-10-04")), 0); // not started yet
+});
+
+test("lessons passed follow a schedule change", () => {
+  const g = { startDate: u("2026-11-02"), days: "1,3", schedules: [{ from: u("2026-11-02"), days: "ODD" }, { from: u("2026-11-16"), days: "1,3" }] };
+  assert.equal(lessonsPassed(g, [], u("2026-11-18")), 8);
 });

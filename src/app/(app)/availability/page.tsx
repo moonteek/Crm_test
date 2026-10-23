@@ -6,6 +6,8 @@ import { can } from "@/lib/access";
 import { DAY_TYPE_SHORT, DAY_TYPES, HOURS, teacherGrid, todayDayType, type DayType } from "@/lib/availability";
 import { AvailabilityGrid } from "@/components/AvailabilityGrid";
 import { PageHeader, Segmented } from "@/components/ui";
+import { lessonsFrom } from "@/lib/availability";
+import { centreDay } from "@/lib/membership-db";
 
 export default async function AvailabilityPage({ searchParams }: { searchParams: Promise<{ teacher?: string; d?: string }> }) {
   const user = await requireUser();
@@ -20,10 +22,11 @@ export default async function AvailabilityPage({ searchParams }: { searchParams:
   const day: DayType = DAY_TYPES.includes(params.d as DayType) ? (params.d as DayType) : todayDayType();
 
   const [groups, slots] = await Promise.all([
-    db.group.findMany({ where: { status: "ACTIVE", OR: [{ teacherId: asked }, { assistantId: asked }] }, include: { course: { select: { lessonMin: true } } } }),
+    db.group.findMany({ where: { status: "ACTIVE", OR: [{ teacherId: asked }, { assistantId: asked }] }, include: { course: { select: { lessonMin: true } }, schedules: true } }),
     db.teacherSlot.findMany({ where: { userId: asked } }),
   ]);
-  const grid = teacherGrid(asked, groups.map((g) => ({ ...g, minutes: g.course.lessonMin })), slots)[day];
+  // this week's lessons and any schedule change still to come
+  const grid = teacherGrid(asked, groups.flatMap((g) => lessonsFrom(g, centreDay())), slots)[day];
   const cells = HOURS.map((h) => ({ hour: h, cell: grid.get(h)! }));
   const count = (s: string) => cells.filter((c) => c.cell.state === s).length;
   const href = (d: DayType) => `/availability?d=${d}${own ? "" : `&teacher=${asked}`}`;
